@@ -1,4 +1,4 @@
-﻿import { config } from "@config";
+import { config } from "@config";
 import { cn, Logo } from "@virn/ui";
 import type { PropsWithChildren } from "react";
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { authClient } from "@virn/auth/client";
 import { Progress } from "@virn/ui/components/progress";
 import { useRouter } from "@shared/hooks/router";

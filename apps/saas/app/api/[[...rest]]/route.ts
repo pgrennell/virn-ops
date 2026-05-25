@@ -1,4 +1,4 @@
-﻿import { app } from "@virn/api";
+import { app } from "@virn/api";
 import { handle } from "hono/vercel";
 
 const handler = handle(app);

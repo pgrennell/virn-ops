@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useOrganizationMemberRoleOptions } from "@organizations/hooks/member-roles";
 import { Alert, AlertDescription, AlertTitle } from "@virn/ui/components/alert";

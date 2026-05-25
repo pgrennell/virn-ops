@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useAuthErrorMessages } from "@auth/hooks/errors-messages";
 import { useSession } from "@auth/hooks/use-session";

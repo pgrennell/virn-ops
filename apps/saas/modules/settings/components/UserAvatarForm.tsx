@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useTranslations } from "next-intl";

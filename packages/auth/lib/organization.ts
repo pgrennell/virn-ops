@@ -1,4 +1,4 @@
-﻿import { getOrganizationWithPurchasesAndMembersCount } from "@virn/database";
+import { getOrganizationWithPurchasesAndMembersCount } from "@virn/database";
 import { logger } from "@virn/logs";
 import { setSubscriptionSeats } from "@virn/payments";
 

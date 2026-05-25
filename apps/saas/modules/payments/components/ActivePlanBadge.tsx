@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { usePlanData } from "@payments/hooks/plan-data";
 import { usePurchases } from "@payments/hooks/purchases";

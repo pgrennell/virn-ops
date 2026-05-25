@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { cn } from "@virn/ui";
 import { CloudIcon, ComputerIcon, SmartphoneIcon, StarIcon, WandIcon } from "lucide-react";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@virn/ui/components/tabs";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useTranslations } from "next-intl";

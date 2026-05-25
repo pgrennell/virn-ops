@@ -1,4 +1,4 @@
-﻿import { cn } from "@virn/ui";
+import { cn } from "@virn/ui";
 import {
 	Card,
 	CardContent,

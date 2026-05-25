@@ -1,4 +1,4 @@
-﻿import {
+import {
 	getUserEmailLocaleForNotifications,
 	insertNotification,
 	isNotificationDisabled,

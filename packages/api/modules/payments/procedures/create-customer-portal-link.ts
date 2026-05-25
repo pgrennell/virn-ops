@@ -1,4 +1,4 @@
-﻿import { ORPCError } from "@orpc/client";
+import { ORPCError } from "@orpc/client";
 import { getOrganizationMembership, getPurchaseById } from "@virn/database";
 import { logger } from "@virn/logs";
 import { createCustomerPortalLink as createCustomerPortalLinkFn } from "@virn/payments";

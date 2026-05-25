@@ -1,4 +1,4 @@
-﻿import { ORPCError } from "@orpc/client";
+import { ORPCError } from "@orpc/client";
 import { getOrganizationById as getOrganizationByIdFn } from "@virn/database";
 import { z } from "zod";
 

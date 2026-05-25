@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { authClient } from "@virn/auth/client";
 import { Button } from "@virn/ui/components/button";

@@ -1,4 +1,4 @@
-﻿import { getSession } from "@auth/lib/server";
+import { getSession } from "@auth/lib/server";
 import { OnboardingForm } from "@onboarding/components/OnboardingForm";
 import { config } from "@virn/auth/config";
 import { AuthWrapper } from "@shared/components/AuthWrapper";

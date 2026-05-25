@@ -1,4 +1,4 @@
-﻿import { streamToEventIterator } from "@orpc/client";
+import { streamToEventIterator } from "@orpc/client";
 import { convertToModelMessages, streamText, textModel, type UIMessage } from "@virn/ai";
 import z from "zod";
 

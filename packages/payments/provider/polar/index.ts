@@ -1,4 +1,4 @@
-﻿import { Polar } from "@polar-sh/sdk";
+import { Polar } from "@polar-sh/sdk";
 import { validateEvent, WebhookVerificationError } from "@polar-sh/sdk/webhooks.js";
 import {
 	createPurchase,

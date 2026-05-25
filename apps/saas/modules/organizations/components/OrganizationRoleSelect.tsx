@@ -1,4 +1,4 @@
-﻿import { useOrganizationMemberRoleOptions } from "@organizations/hooks/member-roles";
+import { useOrganizationMemberRoleOptions } from "@organizations/hooks/member-roles";
 import type { OrganizationMemberRole } from "@virn/auth";
 import {
 	Select,

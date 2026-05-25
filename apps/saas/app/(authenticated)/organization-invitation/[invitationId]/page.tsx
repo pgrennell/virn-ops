@@ -1,4 +1,4 @@
-﻿import { OrganizationInvitationModal } from "@organizations/components/OrganizationInvitationModal";
+import { OrganizationInvitationModal } from "@organizations/components/OrganizationInvitationModal";
 import { auth } from "@virn/auth";
 import { getOrganizationById } from "@virn/database";
 import { AuthWrapper } from "@shared/components/AuthWrapper";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { usePlanData } from "@payments/hooks/plan-data";
 import type { PlanId } from "@payments/types";

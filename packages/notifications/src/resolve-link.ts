@@ -1,4 +1,4 @@
-﻿import { getBaseUrl } from "@virn/utils";
+import { getBaseUrl } from "@virn/utils";
 
 /**
  * Turns relative app paths into absolute SaaS URLs for emails and clients.

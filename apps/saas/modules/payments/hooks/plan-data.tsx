@@ -1,4 +1,4 @@
-﻿import { config } from "@virn/payments/config";
+import { config } from "@virn/payments/config";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 

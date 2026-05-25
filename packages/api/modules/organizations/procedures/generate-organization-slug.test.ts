@@ -1,4 +1,4 @@
-﻿import { ORPCError } from "@orpc/client";
+import { ORPCError } from "@orpc/client";
 import { call } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
 

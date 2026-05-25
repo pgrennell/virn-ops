@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { getAdminPath } from "@admin/lib/links";
 import { OrganizationLogo } from "@organizations/components/OrganizationLogo";

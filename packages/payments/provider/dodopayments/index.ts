@@ -1,4 +1,4 @@
-﻿import {
+import {
 	createPurchase,
 	deletePurchaseBySubscriptionId,
 	getPurchaseBySubscriptionId,

@@ -1,4 +1,4 @@
-﻿import type { NotificationTarget, NotificationType } from "@virn/notifications";
+import type { NotificationTarget, NotificationType } from "@virn/notifications";
 import { setNotificationDisabled } from "@virn/notifications";
 import { z } from "zod";
 

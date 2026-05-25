@@ -1,4 +1,4 @@
-﻿import { os } from "@orpc/server";
+import { os } from "@orpc/server";
 import { getCookie } from "@orpc/server/helpers";
 import { config, type Locale } from "@virn/i18n";
 

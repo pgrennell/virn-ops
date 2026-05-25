@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { Card } from "@virn/ui/components/card";
 import type { ChartConfig } from "@virn/ui/components/chart";
 import { StatsTile } from "@shared/components/StatsTile";

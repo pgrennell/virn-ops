@@ -1,4 +1,4 @@
-﻿import { markNotificationsAsRead } from "@virn/notifications";
+import { markNotificationsAsRead } from "@virn/notifications";
 import { z } from "zod";
 
 import { protectedProcedure } from "../../../orpc/procedures";

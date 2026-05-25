@@ -1,4 +1,4 @@
-﻿import { getActiveOrganization, getSession } from "@auth/lib/server";
+import { getActiveOrganization, getSession } from "@auth/lib/server";
 import { ChangeOrganizationNameForm } from "@organizations/components/ChangeOrganizationNameForm";
 import { DeleteOrganizationForm } from "@organizations/components/DeleteOrganizationForm";
 import { OrganizationLogoForm } from "@organizations/components/OrganizationLogoForm";

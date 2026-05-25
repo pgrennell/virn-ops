@@ -1,4 +1,4 @@
-﻿import type { Locale } from "@virn/i18n";
+import type { Locale } from "@virn/i18n";
 import { config as i18nConfig } from "@virn/i18n";
 
 import type { MarketingI18nConfig } from "./types";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { config } from "@config";
 import { authClient } from "@virn/auth/client";

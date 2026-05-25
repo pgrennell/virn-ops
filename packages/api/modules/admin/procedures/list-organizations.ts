@@ -1,4 +1,4 @@
-﻿import { ORPCError } from "@orpc/client";
+import { ORPCError } from "@orpc/client";
 import {
 	countAllOrganizations,
 	getOrganizationById as getOrganizationByIdFn,

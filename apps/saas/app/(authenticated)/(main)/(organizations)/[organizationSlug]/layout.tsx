@@ -1,4 +1,4 @@
-﻿import { getActiveOrganization } from "@auth/lib/server";
+import { getActiveOrganization } from "@auth/lib/server";
 import { activeOrganizationQueryKey } from "@organizations/lib/api";
 import { listPurchases } from "@payments/lib/server";
 import { config as paymentsConfig } from "@virn/payments/config";

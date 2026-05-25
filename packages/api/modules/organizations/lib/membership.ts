@@ -1,4 +1,4 @@
-﻿import { getOrganizationMembership } from "@virn/database";
+import { getOrganizationMembership } from "@virn/database";
 
 export async function verifyOrganizationMembership(organizationId: string, userId: string) {
 	const membership = await getOrganizationMembership(organizationId, userId);

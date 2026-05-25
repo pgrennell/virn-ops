@@ -1,4 +1,4 @@
-﻿import { SessionProvider } from "@auth/components/SessionProvider";
+import { SessionProvider } from "@auth/components/SessionProvider";
 import { sessionQueryKey } from "@auth/lib/api";
 import { getOrganizationList, getSession } from "@auth/lib/server";
 import { ActiveOrganizationProvider } from "@organizations/components/ActiveOrganizationProvider";

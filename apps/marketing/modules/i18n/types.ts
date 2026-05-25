@@ -1,4 +1,4 @@
-﻿import type { I18nConfig } from "@virn/i18n/types";
+import type { I18nConfig } from "@virn/i18n/types";
 
 /**
  * Marketing app locale configuration, shared from the central i18n package.

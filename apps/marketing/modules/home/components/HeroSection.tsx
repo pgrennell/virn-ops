@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { config } from "@config";
 import { Button } from "@virn/ui/components/button";

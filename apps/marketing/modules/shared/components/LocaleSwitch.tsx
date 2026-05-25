@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useLocalePathname, useLocaleRouter } from "@i18n/routing";
 import { config as i18nConfig } from "@virn/i18n";

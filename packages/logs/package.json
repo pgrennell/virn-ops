@@ -1,4 +1,4 @@
-﻿{
+{
 	"name": "@virn/logs",
 	"version": "0.0.0",
 	"main": "./index.ts",

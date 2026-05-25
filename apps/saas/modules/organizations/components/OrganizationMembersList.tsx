@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useSession } from "@auth/hooks/use-session";
 import { useOrganizationMemberRoles } from "@organizations/hooks/member-roles";
 import { fullOrganizationQueryKey, useFullOrganizationQuery } from "@organizations/lib/api";

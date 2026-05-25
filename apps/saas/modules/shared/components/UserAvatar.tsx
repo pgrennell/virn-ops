@@ -1,4 +1,4 @@
-﻿import { config as storageConfig } from "@virn/storage/config";
+import { config as storageConfig } from "@virn/storage/config";
 import { cn } from "@virn/ui";
 import { Avatar, AvatarFallback, AvatarImage } from "@virn/ui/components/avatar";
 import { useMemo } from "react";

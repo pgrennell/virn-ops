@@ -1,4 +1,4 @@
-﻿import { config } from "@config";
+import { config } from "@config";
 import { LocaleLink } from "@i18n/routing";
 import { Logo } from "@virn/ui";
 import { useTranslations } from "next-intl";

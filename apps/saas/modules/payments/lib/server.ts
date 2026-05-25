@@ -1,4 +1,4 @@
-﻿import { listPurchases as listPurchasesProcedure } from "@virn/api/modules/payments/procedures/list-purchases";
+import { listPurchases as listPurchasesProcedure } from "@virn/api/modules/payments/procedures/list-purchases";
 import { headers } from "next/headers";
 import { cache } from "react";
 

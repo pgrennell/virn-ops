@@ -1,4 +1,4 @@
-﻿import { SignupForm } from "@auth/components/SignupForm";
+import { SignupForm } from "@auth/components/SignupForm";
 import { getInvitation } from "@auth/lib/server";
 import { config } from "@virn/auth/config";
 import { getTranslations } from "next-intl/server";

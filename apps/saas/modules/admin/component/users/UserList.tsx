@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { authClient } from "@virn/auth/client";
 import { Spinner } from "@virn/ui";

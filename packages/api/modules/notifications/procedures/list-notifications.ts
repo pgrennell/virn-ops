@@ -1,4 +1,4 @@
-﻿import { resolveNotificationLink, listNotificationRowsForUser } from "@virn/notifications";
+import { resolveNotificationLink, listNotificationRowsForUser } from "@virn/notifications";
 import { z } from "zod";
 
 import { protectedProcedure } from "../../../orpc/procedures";

@@ -1,4 +1,4 @@
-﻿export const NOTIFICATION_TYPES = {
+export const NOTIFICATION_TYPES = {
 	WELCOME: "WELCOME",
 	APP_UPDATE: "APP_UPDATE",
 } as const;

@@ -1,4 +1,4 @@
-﻿# supastarter for Next.js — Code Review
+# supastarter for Next.js — Code Review
 
 > Date: 2026-04-24
 > Reviewer: AI code-review pass

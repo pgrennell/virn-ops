@@ -1,4 +1,4 @@
-﻿import { auth } from "@virn/auth";
+import { auth } from "@virn/auth";
 import { logger } from "@virn/logs";
 import { webhookHandler as paymentsWebhookHandler } from "@virn/payments";
 import { getBaseUrl } from "@virn/utils";

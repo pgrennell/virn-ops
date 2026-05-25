@@ -1,4 +1,4 @@
-﻿import { getPurchasesByOrganizationId, getPurchasesByUserId } from "@virn/database";
+import { getPurchasesByOrganizationId, getPurchasesByUserId } from "@virn/database";
 import { getPlanIdByProviderPriceId, getPlanPriceByProviderPriceId } from "@virn/payments";
 import { z } from "zod";
 

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 import { auth } from "@virn/auth";
 import { getInvitationById } from "@virn/database";
 import { headers } from "next/headers";

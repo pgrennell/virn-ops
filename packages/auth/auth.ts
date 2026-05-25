@@ -1,4 +1,4 @@
-﻿import { passkey } from "@better-auth/passkey";
+import { passkey } from "@better-auth/passkey";
 import {
 	db,
 	getInvitationById,

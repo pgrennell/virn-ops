@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { createPurchasesHelper } from "@virn/payments/lib/helper";
 import { Spinner } from "@virn/ui/components/spinner";

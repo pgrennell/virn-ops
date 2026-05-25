@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useSession } from "@auth/hooks/use-session";
 import { authClient } from "@virn/auth/client";
 import { Button } from "@virn/ui/components/button";

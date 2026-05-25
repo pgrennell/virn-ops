@@ -1,4 +1,4 @@
-﻿import { userAccountQueryKey, userPasskeyQueryKey } from "@auth/lib/api";
+import { userAccountQueryKey, userPasskeyQueryKey } from "@auth/lib/api";
 import { getSession, getUserAccounts, getUserPasskeys } from "@auth/lib/server";
 import { config } from "@virn/auth/config";
 import { ActiveSessionsBlock } from "@settings/components/ActiveSessionsBlock";

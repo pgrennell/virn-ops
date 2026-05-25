@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { listUserPasskeys, userPasskeyQueryKey, useUserPasskeysQuery } from "@auth/lib/api";
 import { authClient } from "@virn/auth/client";
 import { Button } from "@virn/ui/components/button";

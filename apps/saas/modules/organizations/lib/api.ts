@@ -1,4 +1,4 @@
-﻿import type { OrganizationMetadata } from "@virn/auth";
+import type { OrganizationMetadata } from "@virn/auth";
 import { authClient } from "@virn/auth/client";
 import { orpcClient } from "@shared/lib/orpc-client";
 import { useMutation, useQuery } from "@tanstack/react-query";

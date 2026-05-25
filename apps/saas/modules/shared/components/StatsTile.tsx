@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Badge } from "@virn/ui/components/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@virn/ui/components/card";

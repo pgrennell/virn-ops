@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { config as storageConfig } from "@virn/storage/config";
 import { Avatar, AvatarFallback, AvatarImage } from "@virn/ui/components/avatar";

@@ -1,4 +1,4 @@
-﻿import { auth } from "@virn/auth";
+import { auth } from "@virn/auth";
 import { createUser, createUserAccount, getUserByEmail } from "@virn/database";
 import { logger } from "@virn/logs";
 import { nanoid } from "nanoid";

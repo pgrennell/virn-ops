@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { cn, Input } from "@virn/ui";
 import { CircleCheckIcon, CircleXIcon, EyeIcon, EyeOffIcon, RefreshCw } from "lucide-react";

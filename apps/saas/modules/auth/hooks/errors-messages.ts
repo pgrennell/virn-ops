@@ -1,4 +1,4 @@
-﻿import type { AuthClientErrorCodes } from "@virn/auth/client";
+import type { AuthClientErrorCodes } from "@virn/auth/client";
 import { useTranslations } from "next-intl";
 
 export function useAuthErrorMessages() {

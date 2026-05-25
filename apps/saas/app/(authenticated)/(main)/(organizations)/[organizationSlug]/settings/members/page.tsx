@@ -1,4 +1,4 @@
-﻿import { getActiveOrganization, getSession } from "@auth/lib/server";
+import { getActiveOrganization, getSession } from "@auth/lib/server";
 import { InviteMemberForm } from "@organizations/components/InviteMemberForm";
 import { OrganizationMembersBlock } from "@organizations/components/OrganizationMembersBlock";
 import { isOrganizationAdmin } from "@virn/auth/lib/helper";

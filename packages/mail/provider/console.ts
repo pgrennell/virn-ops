@@ -1,4 +1,4 @@
-﻿import { logger } from "@virn/logs";
+import { logger } from "@virn/logs";
 
 import type { SendEmailHandler } from "../types";
 

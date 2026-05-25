@@ -1,4 +1,4 @@
-﻿import { authClient } from "@virn/auth/client";
+import { authClient } from "@virn/auth/client";
 import { useQuery } from "@tanstack/react-query";
 
 export const sessionQueryKey = ["user", "session"] as const;

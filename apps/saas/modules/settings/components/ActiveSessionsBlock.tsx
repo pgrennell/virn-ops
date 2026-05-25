@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useSession } from "@auth/hooks/use-session";
 import { sessionQueryKey } from "@auth/lib/api";
 import { config } from "@config";

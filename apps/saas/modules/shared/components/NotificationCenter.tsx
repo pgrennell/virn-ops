@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { Button, cn, Popover, PopoverContent, PopoverTrigger } from "@virn/ui";

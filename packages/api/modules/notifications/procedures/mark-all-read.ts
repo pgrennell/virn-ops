@@ -1,4 +1,4 @@
-﻿import { markAllNotificationsAsReadForUser } from "@virn/notifications";
+import { markAllNotificationsAsReadForUser } from "@virn/notifications";
 
 import { protectedProcedure } from "../../../orpc/procedures";
 

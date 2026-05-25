@@ -1,4 +1,4 @@
-﻿import { getOrganizationList, getSession } from "@auth/lib/server";
+import { getOrganizationList, getSession } from "@auth/lib/server";
 import { OrganizationsGrid } from "@organizations/components/OrganizationsGrid";
 import { config } from "@virn/auth/config";
 import { Card } from "@virn/ui";

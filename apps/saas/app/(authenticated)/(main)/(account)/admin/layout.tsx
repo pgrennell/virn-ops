@@ -1,4 +1,4 @@
-﻿import { getSession } from "@auth/lib/server";
+import { getSession } from "@auth/lib/server";
 import { config } from "@virn/auth/config";
 import { Logo } from "@virn/ui";
 import { SettingsMenu } from "@settings/components/SettingsMenu";

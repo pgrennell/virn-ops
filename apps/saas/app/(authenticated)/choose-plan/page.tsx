@@ -1,4 +1,4 @@
-﻿import { getOrganizationList, getSession } from "@auth/lib/server";
+import { getOrganizationList, getSession } from "@auth/lib/server";
 import { PricingTable } from "@payments/components/PricingTable";
 import { listPurchases } from "@payments/lib/server";
 import { config as authConfig } from "@virn/auth/config";

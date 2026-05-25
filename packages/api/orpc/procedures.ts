@@ -1,4 +1,4 @@
-﻿import { ORPCError, os } from "@orpc/server";
+import { ORPCError, os } from "@orpc/server";
 import { auth } from "@virn/auth";
 
 export const publicProcedure = os.$context<{

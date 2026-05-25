@@ -1,4 +1,4 @@
-﻿import type { OrganizationMemberRole } from "@virn/auth";
+import type { OrganizationMemberRole } from "@virn/auth";
 import { organizationMemberRoleOrder } from "@virn/auth/lib/organization-member-role-order";
 import { useTranslations } from "next-intl";
 

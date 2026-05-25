@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useChat } from "@ai-sdk/react";
 import { eventIteratorToStream } from "@orpc/client";

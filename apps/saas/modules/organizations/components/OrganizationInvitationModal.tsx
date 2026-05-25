@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { OrganizationLogo } from "@organizations/components/OrganizationLogo";
 import { organizationListQueryKey } from "@organizations/lib/api";

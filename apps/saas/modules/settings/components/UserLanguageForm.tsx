@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { updateLocale } from "@i18n/lib/update-locale";
 import { authClient } from "@virn/auth/client";

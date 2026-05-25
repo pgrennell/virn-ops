@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { NOTIFICATION_GROUPS } from "@virn/notifications/catalog";
 import { Card, Switch } from "@virn/ui";

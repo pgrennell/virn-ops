@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";
 import { useOrganizationListQuery } from "@organizations/lib/api";

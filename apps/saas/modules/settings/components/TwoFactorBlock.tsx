@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useSession } from "@auth/hooks/use-session";
 import { useUserAccountsQuery } from "@auth/lib/api";
 import { authClient } from "@virn/auth/client";

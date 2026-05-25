@@ -1,4 +1,4 @@
-﻿import { getActiveOrganization } from "@auth/lib/server";
+import { getActiveOrganization } from "@auth/lib/server";
 import { ActivePlan } from "@payments/components/ActivePlan";
 import { ChangePlan } from "@payments/components/ChangePlan";
 import { listPurchases } from "@payments/lib/server";

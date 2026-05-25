@@ -1,4 +1,4 @@
-﻿import type { Locale } from "@virn/i18n";
+import type { Locale } from "@virn/i18n";
 
 export interface MailConfig {
 	/**

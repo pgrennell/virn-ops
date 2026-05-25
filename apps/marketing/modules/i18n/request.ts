@@ -1,4 +1,4 @@
-﻿import { routing } from "@i18n/routing";
+import { routing } from "@i18n/routing";
 import { config as i18nConfig } from "@virn/i18n";
 import { getRequestConfig } from "next-intl/server";
 import { cookies } from "next/headers";

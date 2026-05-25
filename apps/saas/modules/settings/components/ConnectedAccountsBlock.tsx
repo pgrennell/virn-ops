@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { type OAuthProvider, oAuthProviders } from "@auth/constants/oauth-providers";
 import { useUserAccountsQuery } from "@auth/lib/api";
 import { authClient } from "@virn/auth/client";

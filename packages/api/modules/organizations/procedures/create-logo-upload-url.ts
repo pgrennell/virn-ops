@@ -1,4 +1,4 @@
-﻿import { ORPCError } from "@orpc/server";
+import { ORPCError } from "@orpc/server";
 import { getOrganizationById } from "@virn/database";
 import { getSignedUploadUrl } from "@virn/storage";
 import z from "zod";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type { BadgeProps } from "@virn/ui/components/badge";
 import { Badge } from "@virn/ui/components/badge";

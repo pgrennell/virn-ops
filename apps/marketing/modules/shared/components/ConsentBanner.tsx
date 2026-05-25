@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Button } from "@virn/ui/components/button";
 import { useCookieConsent } from "@shared/hooks/cookie-consent";

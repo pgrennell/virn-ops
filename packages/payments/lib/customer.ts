@@ -1,4 +1,4 @@
-﻿import { getOrganizationById, getUserById, updateOrganization, updateUser } from "@virn/database";
+import { getOrganizationById, getUserById, updateOrganization, updateUser } from "@virn/database";
 
 export async function setCustomerIdToEntity(
 	customerId: string,

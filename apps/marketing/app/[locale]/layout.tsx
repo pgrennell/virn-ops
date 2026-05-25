@@ -1,4 +1,4 @@
-﻿import { AnalyticsScript } from "@analytics";
+import { AnalyticsScript } from "@analytics";
 import { config } from "@config";
 import { config as i18nConfig } from "@i18n/config";
 import { cn } from "@virn/ui";

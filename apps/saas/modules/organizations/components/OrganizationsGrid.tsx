@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { OrganizationLogo } from "@organizations/components/OrganizationLogo";
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";

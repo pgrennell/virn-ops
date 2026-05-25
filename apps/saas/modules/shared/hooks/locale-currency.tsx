@@ -1,4 +1,4 @@
-﻿import { config as i18nConfig } from "@virn/i18n";
+import { config as i18nConfig } from "@virn/i18n";
 import { useLocale } from "next-intl";
 
 export function useLocaleCurrency() {
