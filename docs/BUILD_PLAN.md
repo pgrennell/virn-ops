@@ -102,8 +102,8 @@ a separate app on the shared foundation; see `docs/ARCHITECTURE.md` §1.)
 
 ## Propvana graft (parallel, woven into Phases 2 & 4)
 
-Port the KEEP list from the sibling repo `C:\Projects\Propvana\propvana-app` (see its
-`docs/reuse-review-for-new-app.md`): auth customizations (invitation-only plugin,
+Port the KEEP list from the sibling repo `C:\Projects\Virn\virn-pm` (formerly `propvana-app`
+before the Propvana → Virn PM rename): auth customizations (invitation-only plugin,
 `requireOrganization`, `ActiveOrganizationProvider`), the org-config resolver/procedures/admin UI,
 the oRPC procedures + middleware, shared packages, and the cross-cutting conventions. A dedicated
 graft prompt will be provided when you reach Phase 2.

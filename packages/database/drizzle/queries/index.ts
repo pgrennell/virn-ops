@@ -1,3 +1,4 @@
+export * from "./config";
 export * from "./notifications";
 export * from "./organizations";
 export * from "./purchases";

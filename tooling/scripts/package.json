@@ -5,6 +5,9 @@
 	"scripts": {
 		"clean": "git clean -xdf .cache .turbo dist node_modules",
 		"create:user": "dotenv -c -e ../../.env -- tsx ./src/create-user.ts",
+		"seed:capabilities": "dotenv -c -e ../../.env -- tsx ./src/seed-capabilities.ts",
+		"seed:settings": "dotenv -c -e ../../.env -- tsx ./src/seed-settings.ts",
+		"seed:config": "pnpm seed:capabilities && pnpm seed:settings",
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
