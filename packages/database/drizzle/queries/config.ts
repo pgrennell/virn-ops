@@ -384,6 +384,190 @@ export async function findMissingProfileCapabilityKeys(): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Single-capability gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a single capability's effective state for an org. Returns `false` if the
+ * capability key doesn't exist or is not `active`. Use this in feature gates / middleware
+ * where you only need one answer; use `getEffectiveCapabilities` for the full set.
+ */
+export async function isCapabilityEnabledForOrg(orgId: string, key: string): Promise<boolean> {
+	const rows = await db
+		.select({
+			defaultEnabled: capability.defaultEnabled,
+			overrideEnabled: organizationCapability.enabled,
+			overrideMarker: organizationCapability.organizationId,
+		})
+		.from(capability)
+		.leftJoin(
+			organizationCapability,
+			and(
+				eq(organizationCapability.capabilityId, capability.id),
+				eq(organizationCapability.organizationId, orgId),
+			),
+		)
+		.where(and(eq(capability.key, key), eq(capability.status, "active")))
+		.limit(1);
+
+	const row = rows[0];
+	if (!row) return false;
+	return row.overrideMarker !== null
+		? (row.overrideEnabled ?? row.defaultEnabled)
+		: row.defaultEnabled;
+}
+
+// ---------------------------------------------------------------------------
+// Per-org override mutators (called from the oRPC config procedures)
+// ---------------------------------------------------------------------------
+
+/** Upsert a per-org capability override matched by capability key. Throws if the key is
+ * not a known capability. */
+export async function setOrganizationCapabilityOverride(
+	organizationId: string,
+	capabilityKey: string,
+	enabled: boolean,
+): Promise<void> {
+	const found = await db
+		.select({ id: capability.id })
+		.from(capability)
+		.where(eq(capability.key, capabilityKey))
+		.limit(1);
+	if (found.length === 0) {
+		throw new Error(`Unknown capability key: ${capabilityKey}`);
+	}
+	await db
+		.insert(organizationCapability)
+		.values({ organizationId, capabilityId: found[0].id, enabled })
+		.onConflictDoUpdate({
+			target: [organizationCapability.organizationId, organizationCapability.capabilityId],
+			set: { enabled, updatedAt: new Date() },
+		});
+}
+
+/** Upsert a per-org setting override matched by setting key. Validates `value` against the
+ * setting's stored `validationSchema` before writing; throws on validation failure or
+ * unknown setting key.
+ *
+ * Defense in depth: refuses to write if the setting is gated by a capability that
+ * currently resolves to disabled for this org. The UI should not surface such settings,
+ * but the API enforces it too (per docs/CONFIGURATION.md §4). */
+export async function setOrganizationSettingOverride(
+	organizationId: string,
+	settingKey: string,
+	value: unknown,
+): Promise<void> {
+	const found = await db
+		.select({
+			id: settingDefinition.id,
+			dataType: settingDefinition.dataType,
+			validationSchema: settingDefinition.validationSchema,
+			capabilityId: settingDefinition.capabilityId,
+		})
+		.from(settingDefinition)
+		.where(eq(settingDefinition.key, settingKey))
+		.limit(1);
+	if (found.length === 0) {
+		throw new Error(`Unknown setting key: ${settingKey}`);
+	}
+	const def = found[0];
+
+	if (def.capabilityId) {
+		const capRows = await db
+			.select({
+				key: capability.key,
+				defaultEnabled: capability.defaultEnabled,
+				overrideEnabled: organizationCapability.enabled,
+				overrideMarker: organizationCapability.organizationId,
+			})
+			.from(capability)
+			.leftJoin(
+				organizationCapability,
+				and(
+					eq(organizationCapability.capabilityId, capability.id),
+					eq(organizationCapability.organizationId, organizationId),
+				),
+			)
+			.where(and(eq(capability.id, def.capabilityId), eq(capability.status, "active")))
+			.limit(1);
+		const capRow = capRows[0];
+		const capEnabled = capRow
+			? capRow.overrideMarker !== null
+				? (capRow.overrideEnabled ?? capRow.defaultEnabled)
+				: capRow.defaultEnabled
+			: false;
+		if (!capEnabled) {
+			throw new Error(
+				`setOrganizationSettingOverride: setting "${settingKey}" is gated by capability "${capRow?.key ?? def.capabilityId}", which is currently disabled for this org.`,
+			);
+		}
+	}
+
+	const validated = validateSettingValue(
+		{
+			dataType: def.dataType as SettingDataType,
+			validationSchema: def.validationSchema as Record<string, unknown> | null,
+		},
+		value,
+	);
+	await db
+		.insert(organizationSetting)
+		.values({ organizationId, settingDefinitionId: def.id, value: validated })
+		.onConflictDoUpdate({
+			target: [organizationSetting.organizationId, organizationSetting.settingDefinitionId],
+			set: { value: validated, updatedAt: new Date() },
+		});
+}
+
+/** Remove a per-org capability override matched by capability key. The org will inherit
+ * the capability's default after this. No-op if the override doesn't exist. */
+export async function clearOrganizationCapabilityOverride(
+	organizationId: string,
+	capabilityKey: string,
+): Promise<void> {
+	const found = await db
+		.select({ id: capability.id })
+		.from(capability)
+		.where(eq(capability.key, capabilityKey))
+		.limit(1);
+	if (found.length === 0) {
+		throw new Error(`Unknown capability key: ${capabilityKey}`);
+	}
+	await db
+		.delete(organizationCapability)
+		.where(
+			and(
+				eq(organizationCapability.organizationId, organizationId),
+				eq(organizationCapability.capabilityId, found[0].id),
+			),
+		);
+}
+
+/** Remove a per-org setting override matched by setting key. The org will inherit the
+ * setting's default after this. No-op if the override doesn't exist. */
+export async function clearOrganizationSettingOverride(
+	organizationId: string,
+	settingKey: string,
+): Promise<void> {
+	const found = await db
+		.select({ id: settingDefinition.id })
+		.from(settingDefinition)
+		.where(eq(settingDefinition.key, settingKey))
+		.limit(1);
+	if (found.length === 0) {
+		throw new Error(`Unknown setting key: ${settingKey}`);
+	}
+	await db
+		.delete(organizationSetting)
+		.where(
+			and(
+				eq(organizationSetting.organizationId, organizationId),
+				eq(organizationSetting.settingDefinitionId, found[0].id),
+			),
+		);
+}
+
+// ---------------------------------------------------------------------------
 // Profile application
 // ---------------------------------------------------------------------------
 

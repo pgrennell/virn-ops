@@ -66,6 +66,10 @@ Seed `capability` + `setting_definition` rows. Define the three enablement profi
 (`getEffectiveCapabilities`, `getEffectiveSettings`, `isCapabilityEnabledForOrg`,
 `applyEnablementProfile`) and the org-config admin UI. **Port from Propvana** (see graft below).
 
+> See [CONFIGURATION.md](CONFIGURATION.md) for the resolver contract, the three levels
+> (platform defaults / profile preset / per-org override), and the gotchas. Write helpers
+> (`setOrgCapabilityEnabled`, `setOrgSetting`, etc.) are still to be implemented.
+
 ## Phase 3 — run engine
 
 The run-creation service: snapshot a published `workflow_version` into `run` + `run_step` rows,

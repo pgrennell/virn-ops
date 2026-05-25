@@ -55,6 +55,8 @@ on a shared foundation**, not a single app. Even within one industry the line ho
 Four layers, top configures down, each rests on the one below.
 
 - **Tenant configuration** — per-org capability + setting overrides on top of installed packs.
+  See [CONFIGURATION.md](CONFIGURATION.md) for the three-level resolver, profile bulk-setter, and
+  per-org override mechanics.
 - **Solution packs — the process-shaped products** — installable, versioned config bundles that
   turn Ops into a process vertical (marketing ops, STR turnover, …). ERP-class apps like Virn PM
   are *not* packs; they sit alongside as separate apps on the same kernel/foundation.
