@@ -37,7 +37,8 @@ gesture.
 
 - **`capability`** — boolean feature toggles, keyed by stable namespaced strings
   (`workflows.recurring_runs`, `governance.approvals`, `automation.rules`, …).
-  Fields: `key`, `name`, `description`, `defaultEnabled`, `status` (`active|deprecated`),
+  Fields: `key`, `name`, `description`, `defaultEnabled`,
+  `status` (`active|inactive|archived` — only `active` rows are returned by the resolver),
   `sortOrder`.
 - **`setting_definition`** — typed config keys with validation.
   Fields: `key`, `dataType` (`string|number|boolean|json|select|multiselect`),
@@ -243,10 +244,10 @@ different table.
    genuinely apply regardless of features (branding, default-assignee strategy, digest
    timing).
 
-5. **`status='deprecated'` is a tombstone, not a filter shortcut.** The resolver filters
-   on `status='active'`. Setting a capability or setting definition to deprecated hides
-   it from the resolver immediately, but `organization_*` rows persist. Cleanup is a
-   separate operation.
+5. **`status != 'active'` is a tombstone, not a filter shortcut.** The resolver filters
+   on `status='active'`. Setting a capability or setting definition to `inactive` /
+   `archived` hides it from the resolver immediately, but `organization_*` rows persist.
+   Cleanup is a separate operation.
 
 6. **Profile keys must exist in L1 or the seed fails.** The capability seed validates
    the canonical set is a superset of `ALL_PROFILE_CAPABILITY_KEYS`. Adding a key to

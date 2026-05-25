@@ -8,12 +8,14 @@
 		"seed:capabilities": "dotenv -c -e ../../.env -- tsx ./src/seed-capabilities.ts",
 		"seed:settings": "dotenv -c -e ../../.env -- tsx ./src/seed-settings.ts",
 		"seed:config": "pnpm seed:capabilities && pnpm seed:settings",
+		"test:config": "dotenv -c -e ../../.env -- tsx ./src/test-config-resolution.ts",
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@virn/auth": "workspace:*",
 		"@virn/database": "workspace:*",
-		"@virn/logs": "workspace:*"
+		"@virn/logs": "workspace:*",
+		"drizzle-orm": "catalog:"
 	},
 	"devDependencies": {
 		"@virn/tsconfig": "workspace:*",
