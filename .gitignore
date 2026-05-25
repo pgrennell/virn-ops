@@ -39,7 +39,16 @@ dist/
 # typescript
 *.tsbuildinfo
 
-# other 
+# other
 .react-email/
 .content-collections/
 .prisma-zod-generator-manifest.json
+
+# local debug / session artifacts (do not commit)
+/session-token.json
+/inspect.js
+
+# playwright
+test-results/
+playwright-report/
+.playwright/
