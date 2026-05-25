@@ -617,6 +617,7 @@
 				"billing": "Billing",
 				"general": "General",
 				"members": "Members",
+				"configuration": "Configuration",
 				"title": "Organization",
 				"dangerZone": "Danger zone"
 			}

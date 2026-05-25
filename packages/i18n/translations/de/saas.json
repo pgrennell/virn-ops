@@ -619,6 +619,7 @@
 				"billing": "Abrechnung",
 				"general": "Allgemein",
 				"members": "Mitglieder",
+				"configuration": "Konfiguration",
 				"title": "Organisation",
 				"dangerZone": "Gefahrenzone"
 			}

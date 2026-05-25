@@ -298,6 +298,10 @@ export function NavBar() {
 							label: t("settings.menu.organization.members"),
 							href: `${orgSettingsPrefix}/members`,
 						},
+						{
+							label: t("settings.menu.organization.configuration"),
+							href: `${orgSettingsPrefix}/configuration`,
+						},
 						...(paymentsConfig.billingAttachedTo === "organization" && isOrganizationAdmin
 							? [
 									{
