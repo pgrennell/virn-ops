@@ -1,5 +1,5 @@
-import { streamToEventIterator } from "@orpc/client";
-import { convertToModelMessages, streamText, textModel, type UIMessage } from "@repo/ai";
+﻿import { streamToEventIterator } from "@orpc/client";
+import { convertToModelMessages, streamText, textModel, type UIMessage } from "@virn/ai";
 import z from "zod";
 
 import { protectedProcedure } from "../../../orpc/procedures";

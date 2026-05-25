@@ -1,6 +1,6 @@
-import { getOrganizationList } from "@auth/lib/server";
+﻿import { getOrganizationList } from "@auth/lib/server";
 import { CreateOrganizationForm } from "@organizations/components/CreateOrganizationForm";
-import { config } from "@repo/auth/config";
+import { config } from "@virn/auth/config";
 import { AuthWrapper } from "@shared/components/AuthWrapper";
 import { redirect } from "next/navigation";
 

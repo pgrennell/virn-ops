@@ -1,4 +1,4 @@
-# supastarter for Next.js — Code Review
+﻿# supastarter for Next.js — Code Review
 
 > Date: 2026-04-24
 > Reviewer: AI code-review pass
@@ -43,11 +43,11 @@ All commands executed from the workspace root with a `.env.local` seeded from `.
 | Step       | Command                                 | Result                                                                                  |
 | ---------- | --------------------------------------- | --------------------------------------------------------------------------------------- |
 | Install    | `pnpm install --frozen-lockfile`        | OK (~12s)                                                                               |
-| Generate   | `pnpm --filter @repo/database generate` | OK (Prisma 7.7 + prisma-zod-generator)                                                  |
+| Generate   | `pnpm --filter @virn/database generate` | OK (Prisma 7.7 + prisma-zod-generator)                                                  |
 | Lint       | `pnpm lint` (`oxlint .`)                | 0 errors / 0 warnings, 390 files, 145 rules                                             |
 | Format     | `pnpm format:check` (`oxfmt --check .`) | All 477 files formatted                                                                 |
 | Type-check | `pnpm type-check`                       | 18/18 packages pass                                                                     |
-| Tests      | `pnpm test` (vitest)                    | 41 tests / 3 files pass (`@repo/api` 14, `marketing` 22, `saas` 5)                      |
+| Tests      | `pnpm test` (vitest)                    | 41 tests / 3 files pass (`@virn/api` 14, `marketing` 22, `saas` 5)                      |
 | Build      | `pnpm build`                            | 4/4 apps build under Turbopack                                                          |
 | Runtime    | `pnpm --filter saas start`              | Boots < 1s, `/login` 200, `/api/health` 500 (expected — DB unreachable in this sandbox) |
 
@@ -259,7 +259,7 @@ Better Auth uses sameSite cookies + trusted origins — fine. oRPC routes under 
 
 ### 5.1 Invalid `"types"` glob in several package.json
 
-`@repo/auth`, `@repo/ai`, `@repo/database`, `@repo/payments` declare:
+`@virn/auth`, `@virn/ai`, `@virn/database`, `@virn/payments` declare:
 
 ```json
 "types": "./**/.tsx"
@@ -308,7 +308,7 @@ export const env = createEnv({
 });
 ```
 
-Then every provider becomes `import { env } from "@repo/env"` and no more `as string`.
+Then every provider becomes `import { env } from "@virn/env"` and no more `as string`.
 
 ### 5.5 `as any` smells
 
@@ -405,7 +405,7 @@ Called from every authenticated layout + page. This means every request hits the
 `apps/saas/next.config.ts`:
 
 ```ts
-transpilePackages: ["@repo/api", "@repo/auth", "@repo/database", "@repo/ui"],
+transpilePackages: ["@virn/api", "@virn/auth", "@virn/database", "@virn/ui"],
 ```
 
 Next.js 13.1+ transpiles local workspace packages implicitly when `main` points to `.ts`. Usually no longer needed and slows down cold build. Try removing and see if type-check + build still pass (they likely will).
@@ -468,7 +468,7 @@ A starter kit should resolve providers from env. Something like:
 
 ```ts
 // packages/mail/provider/index.ts
-import { env } from "@repo/env";
+import { env } from "@virn/env";
 
 const provider = await import(`./${env.MAIL_PROVIDER ?? "console"}`);
 export const send = provider.send;
@@ -503,7 +503,7 @@ No Sentry / Bugsnag / Rollbar integration. For a commercial SaaS starter this is
 
 ### 7.8 No outbound webhooks for customers
 
-B2B SaaS users frequently need `Organization.webhooks[]`. Not present. Good starter kit candidate for a `@repo/webhooks` package.
+B2B SaaS users frequently need `Organization.webhooks[]`. Not present. Good starter kit candidate for a `@virn/webhooks` package.
 
 ### 7.9 oRPC pattern is consistent, reusable
 
@@ -550,14 +550,14 @@ Add `@next/bundle-analyzer` in both `apps/saas/next.config.ts` and `apps/marketi
 
 ### 8.5 Test coverage is thin
 
-Only `@repo/api` and the two app smoke tests. Nothing for:
+Only `@virn/api` and the two app smoke tests. Nothing for:
 
-- `@repo/payments` (price-id matching, plan helpers, webhook reducers)
-- `@repo/mail` (template rendering per locale)
-- `@repo/storage` (path validation once added)
-- `@repo/notifications` (disabled preferences → in-app only)
-- `@repo/auth/plugins/invitation-only`
-- `@repo/api` admin/payments procedures
+- `@virn/payments` (price-id matching, plan helpers, webhook reducers)
+- `@virn/mail` (template rendering per locale)
+- `@virn/storage` (path validation once added)
+- `@virn/notifications` (disabled preferences → in-app only)
+- `@virn/auth/plugins/invitation-only`
+- `@virn/api` admin/payments procedures
 
 ### 8.6 CI workflow gaps
 
@@ -701,7 +701,7 @@ Impact (I): ⭐ low · ⭐⭐ medium · ⭐⭐⭐ high
 - [ ] **E🟢 I⭐⭐** Restore `session.freshAge` in `packages/auth/auth.ts` to e.g. `60 * 15`. Catch `SESSION_NOT_FRESH` in delete-account + change-password flows.
 - [ ] **E🟢 I⭐⭐** Rename `apps/saas/modules/admin/component/` → `components/` and update the three import sites.
 - [ ] **E🟢 I⭐** Delete dead `apps/saas/modules/lib/sidebar-context.tsx`.
-- [ ] **E🟢 I⭐⭐** Fix `"types": "./**/.tsx"` in `@repo/auth`, `@repo/ai`, `@repo/database`, `@repo/payments` to `"./index.ts"`.
+- [ ] **E🟢 I⭐⭐** Fix `"types": "./**/.tsx"` in `@virn/auth`, `@virn/ai`, `@virn/database`, `@virn/payments` to `"./index.ts"`.
 - [ ] **E🟢 I⭐⭐** Gate Scalar OpenAPI docs (`packages/api/orpc/handler.ts`) behind `NODE_ENV !== "production"` or `ENABLE_API_DOCS` env.
 - [ ] **E🟢 I⭐⭐** Validate `filePath` in `apps/saas/app/image-proxy/[...path]/route.ts` against an image-extension allow-list.
 - [ ] **E🟢 I⭐⭐** Replace hard-coded `ContentType: "image/jpeg"` in `packages/storage/provider/s3/index.ts` with a caller-supplied MIME that is validated against an allow-list per bucket.
@@ -810,7 +810,7 @@ Categorized by how much they would move the needle for a generic SaaS team.
 38. **CLI user-impersonation helper** for ops.
 39. **Database seeding script** — sample org, sample plans, sample user.
 40. **Storybook for `packages/ui`** so contributors can iterate on the design system without running the SaaS.
-41. **Mobile app scaffold (Expo)** sharing `@repo/auth` + `@repo/api` — often requested.
+41. **Mobile app scaffold (Expo)** sharing `@virn/auth` + `@virn/api` — often requested.
 42. **Chrome extension scaffold** sharing the auth & API — for products that have one.
 43. **OpenAPI → typed client generator** for customers of your API.
 44. **Self-hosted deployment recipe** (Docker Compose production-ready, Kamal / Dokploy).
@@ -825,7 +825,7 @@ Categorized by how much they would move the needle for a generic SaaS team.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter @repo/database generate
+pnpm --filter @virn/database generate
 pnpm lint
 pnpm format:check
 pnpm type-check

@@ -1,5 +1,5 @@
-import { config } from "@config";
-import { cn, Toaster } from "@repo/ui";
+﻿import { config } from "@config";
+import { cn, Toaster } from "@virn/ui";
 import { ApiClientProvider } from "@shared/components/ApiClientProvider";
 import { ClientProviders } from "@shared/components/ClientProviders";
 import type { Metadata } from "next";

@@ -1,8 +1,8 @@
-import { OrganizationForm } from "@admin/component/organizations/OrganizationForm";
+﻿import { OrganizationForm } from "@admin/component/organizations/OrganizationForm";
 import { getAdminPath } from "@admin/lib/links";
 import { fullOrganizationQueryKey } from "@organizations/lib/api";
-import { auth } from "@repo/auth";
-import { Button } from "@repo/ui";
+import { auth } from "@virn/auth";
+import { Button } from "@virn/ui";
 import { getServerQueryClient } from "@shared/lib/server";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { ArrowLeftIcon } from "lucide-react";

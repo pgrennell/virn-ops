@@ -1,6 +1,6 @@
-import { getOrganizationWithPurchasesAndMembersCount } from "@repo/database";
-import { logger } from "@repo/logs";
-import { setSubscriptionSeats } from "@repo/payments";
+﻿import { getOrganizationWithPurchasesAndMembersCount } from "@virn/database";
+import { logger } from "@virn/logs";
+import { setSubscriptionSeats } from "@virn/payments";
 
 export async function updateSeatsInOrganizationSubscription(organizationId: string) {
 	const organization = await getOrganizationWithPurchasesAndMembersCount(organizationId);

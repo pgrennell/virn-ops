@@ -1,4 +1,4 @@
-import { getDisabledNotificationPreferences } from "@repo/notifications";
+﻿import { getDisabledNotificationPreferences } from "@virn/notifications";
 
 import { protectedProcedure } from "../../../orpc/procedures";
 

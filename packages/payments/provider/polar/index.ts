@@ -1,11 +1,11 @@
-import { Polar } from "@polar-sh/sdk";
+﻿import { Polar } from "@polar-sh/sdk";
 import { validateEvent, WebhookVerificationError } from "@polar-sh/sdk/webhooks.js";
 import {
 	createPurchase,
 	deletePurchaseBySubscriptionId,
 	getPurchaseBySubscriptionId,
 	updatePurchase,
-} from "@repo/database";
+} from "@virn/database";
 
 import { setCustomerIdToEntity } from "../../lib/customer";
 import { getPlanIdByProviderPriceId } from "../../lib/provider-price-ids";

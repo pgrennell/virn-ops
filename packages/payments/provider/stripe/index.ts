@@ -1,10 +1,10 @@
-import {
+﻿import {
 	createPurchase,
 	deletePurchaseBySubscriptionId,
 	getPurchaseBySubscriptionId,
 	updatePurchase,
-} from "@repo/database";
-import { logger } from "@repo/logs";
+} from "@virn/database";
+import { logger } from "@virn/logs";
 import Stripe from "stripe";
 
 import { setCustomerIdToEntity } from "../../lib/customer";

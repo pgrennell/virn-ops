@@ -1,5 +1,5 @@
-{
-	"name": "@repo/mail",
+﻿{
+	"name": "@virn/mail",
 	"version": "0.0.0",
 	"main": "./index.ts",
 	"types": "./index.ts",
@@ -8,9 +8,9 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@repo/i18n": "workspace:*",
-		"@repo/logs": "workspace:*",
-		"@repo/ui": "workspace:*",
+		"@virn/i18n": "workspace:*",
+		"@virn/logs": "workspace:*",
+		"@virn/ui": "workspace:*",
 		"nodemailer": "^8.0.7",
 		"react": "catalog:",
 		"react-dom": "catalog:",
@@ -19,7 +19,7 @@
 		"use-intl": "catalog:"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
 		"@types/nodemailer": "catalog:",
 		"@types/react": "catalog:",

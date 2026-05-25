@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { Button } from "@repo/ui/components/button";
+import { Button } from "@virn/ui/components/button";
 import { useCookieConsent } from "@shared/hooks/cookie-consent";
 import { CookieIcon } from "lucide-react";
 import { useEffect, useState } from "react";

@@ -1,4 +1,4 @@
-import { getSignedUrl } from "@repo/storage";
+﻿import { getSignedUrl } from "@virn/storage";
 import { NextResponse } from "next/server";
 
 export const GET = async (_req: Request, { params }: { params: Promise<{ path: string[] }> }) => {

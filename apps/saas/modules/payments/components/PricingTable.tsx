@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import { usePlanData } from "@payments/hooks/plan-data";
 import type { PlanId } from "@payments/types";
-import { config as paymentsConfig } from "@repo/payments/config";
-import type { PaidPlan } from "@repo/payments/types";
-import { cn } from "@repo/ui";
-import { Button } from "@repo/ui/components/button";
-import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+import { config as paymentsConfig } from "@virn/payments/config";
+import type { PaidPlan } from "@virn/payments/types";
+import { cn } from "@virn/ui";
+import { Button } from "@virn/ui/components/button";
+import { Tabs, TabsList, TabsTrigger } from "@virn/ui/components/tabs";
 import { useLocaleCurrency } from "@shared/hooks/locale-currency";
 import { useRouter } from "@shared/hooks/router";
 import { orpc } from "@shared/lib/orpc-query-utils";

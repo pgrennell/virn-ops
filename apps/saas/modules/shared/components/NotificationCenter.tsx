@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
-import { Button, cn, Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
+import { Button, cn, Popover, PopoverContent, PopoverTrigger } from "@virn/ui";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellIcon, InfoIcon, PartyPopperIcon, SparklesIcon } from "lucide-react";

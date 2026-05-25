@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import { Button } from "@repo/ui/components/button";
-import { toastError } from "@repo/ui/components/toast";
+import { Button } from "@virn/ui/components/button";
+import { toastError } from "@virn/ui/components/toast";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation } from "@tanstack/react-query";
 import { CreditCardIcon } from "lucide-react";

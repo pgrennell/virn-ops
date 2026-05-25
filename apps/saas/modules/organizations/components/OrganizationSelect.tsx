@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 import { useSession } from "@auth/hooks/use-session";
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";
 import { useOrganizationListQuery } from "@organizations/lib/api";
 import { usePlanData } from "@payments/hooks/plan-data";
 import { usePurchases } from "@payments/hooks/purchases";
-import { config as authConfig } from "@repo/auth/config";
-import { config as paymentsConfig } from "@repo/payments/config";
-import { cn } from "@repo/ui";
+import { config as authConfig } from "@virn/auth/config";
+import { config as paymentsConfig } from "@virn/payments/config";
+import { cn } from "@virn/ui";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -17,13 +17,13 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
+} from "@virn/ui/components/dropdown-menu";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/tooltip";
+} from "@virn/ui/components/tooltip";
 import { UserAvatar } from "@shared/components/UserAvatar";
 import { useRouter } from "@shared/hooks/router";
 import { clearCache } from "@shared/lib/cache";

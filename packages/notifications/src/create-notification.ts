@@ -1,12 +1,12 @@
-import {
+﻿import {
 	getUserEmailLocaleForNotifications,
 	insertNotification,
 	isNotificationDisabled,
 	NotificationTarget,
 	type NotificationType,
-} from "@repo/database";
-import type { Locale } from "@repo/i18n";
-import { sendEmail } from "@repo/mail";
+} from "@virn/database";
+import type { Locale } from "@virn/i18n";
+import { sendEmail } from "@virn/mail";
 
 import { resolveNotificationLink } from "./resolve-link";
 

@@ -1,6 +1,6 @@
-import { auth } from "@repo/auth";
-import { createUser, createUserAccount, getUserByEmail } from "@repo/database";
-import { logger } from "@repo/logs";
+﻿import { auth } from "@virn/auth";
+import { createUser, createUserAccount, getUserByEmail } from "@virn/database";
+import { logger } from "@virn/logs";
 import { nanoid } from "nanoid";
 
 async function main() {

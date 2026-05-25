@@ -1,5 +1,5 @@
-import { ORPCError } from "@orpc/client";
-import { getOrganizationBySlug } from "@repo/database";
+﻿import { ORPCError } from "@orpc/client";
+import { getOrganizationBySlug } from "@virn/database";
 import slugify from "@sindresorhus/slugify";
 import { nanoid } from "nanoid";
 import { z } from "zod";

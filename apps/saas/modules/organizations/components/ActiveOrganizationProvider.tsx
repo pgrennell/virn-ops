@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { sessionQueryKey } from "@auth/lib/api";
 import { activeOrganizationQueryKey, useActiveOrganizationQuery } from "@organizations/lib/api";
-import { authClient } from "@repo/auth/client";
-import { isOrganizationAdmin } from "@repo/auth/lib/helper";
-import { config as paymentsConfig } from "@repo/payments/config";
+import { authClient } from "@virn/auth/client";
+import { isOrganizationAdmin } from "@virn/auth/lib/helper";
+import { config as paymentsConfig } from "@virn/payments/config";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";

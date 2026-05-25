@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { cn } from "@repo/ui";
+import { cn } from "@virn/ui";
 import type { PropsWithChildren } from "react";
 
 import { SidebarProvider, useSidebar } from "../lib/sidebar-context";

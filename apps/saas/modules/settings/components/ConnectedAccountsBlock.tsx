@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 import { type OAuthProvider, oAuthProviders } from "@auth/constants/oauth-providers";
 import { useUserAccountsQuery } from "@auth/lib/api";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
-import { Skeleton } from "@repo/ui/components/skeleton";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
+import { Skeleton } from "@virn/ui/components/skeleton";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { CheckCircle2Icon, LinkIcon } from "lucide-react";
 import { useTranslations } from "next-intl";

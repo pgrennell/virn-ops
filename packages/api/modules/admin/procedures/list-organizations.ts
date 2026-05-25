@@ -1,9 +1,9 @@
-import { ORPCError } from "@orpc/client";
+﻿import { ORPCError } from "@orpc/client";
 import {
 	countAllOrganizations,
 	getOrganizationById as getOrganizationByIdFn,
 	getOrganizations,
-} from "@repo/database";
+} from "@virn/database";
 import { z } from "zod";
 
 import { adminProcedure } from "../../../orpc/procedures";

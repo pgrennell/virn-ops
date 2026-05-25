@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { config } from "@config";
-import { authClient } from "@repo/auth/client";
+import { authClient } from "@virn/auth/client";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -10,7 +10,7 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@repo/ui";
+} from "@virn/ui";
 import { UserAvatar } from "@shared/components/UserAvatar";
 import { BookIcon, HomeIcon, LogOutIcon, MoreVerticalIcon, SettingsIcon } from "lucide-react";
 import { useTranslations } from "next-intl";

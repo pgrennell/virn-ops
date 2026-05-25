@@ -1,17 +1,17 @@
-"use client";
+﻿"use client";
 
 import { updateLocale } from "@i18n/lib/update-locale";
-import { authClient } from "@repo/auth/client";
-import type { Locale } from "@repo/i18n";
-import { config as i18nConfig } from "@repo/i18n";
+import { authClient } from "@virn/auth/client";
+import type { Locale } from "@virn/i18n";
+import { config as i18nConfig } from "@virn/i18n";
 import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@repo/ui/components/select";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+} from "@virn/ui/components/select";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useMutation } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";

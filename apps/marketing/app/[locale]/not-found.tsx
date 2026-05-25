@@ -1,5 +1,5 @@
-import { LocaleLink } from "@i18n/routing";
-import { Button } from "@repo/ui";
+﻿import { LocaleLink } from "@i18n/routing";
+import { Button } from "@virn/ui";
 import { ArrowLeftIcon } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 

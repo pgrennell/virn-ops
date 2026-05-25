@@ -1,13 +1,13 @@
-import { ORPCError } from "@orpc/client";
-import { getOrganizationById } from "@repo/database";
-import { logger } from "@repo/logs";
+﻿import { ORPCError } from "@orpc/client";
+import { getOrganizationById } from "@virn/database";
+import { logger } from "@virn/logs";
 import {
 	createCheckoutLink as createCheckoutLinkFn,
 	findPriceByPlanId,
 	getCustomerIdFromEntity,
 	getProviderPriceIdByPlanId,
 	type PlanId,
-} from "@repo/payments";
+} from "@virn/payments";
 import { z } from "zod";
 
 import { localeMiddleware } from "../../../orpc/middleware/locale-middleware";

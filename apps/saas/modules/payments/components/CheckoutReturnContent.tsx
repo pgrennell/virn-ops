@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import { createPurchasesHelper } from "@repo/payments/lib/helper";
-import { Spinner } from "@repo/ui/components/spinner";
+import { createPurchasesHelper } from "@virn/payments/lib/helper";
+import { Spinner } from "@virn/ui/components/spinner";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";

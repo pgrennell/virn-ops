@@ -1,14 +1,81 @@
-# Coding Agent Guidelines
+# Coding Agent Guidelines — Virn
 
-> Comprehensive guide for AI coding agents working with this supastarter Next.js codebase.
-
-## Purpose
-
-Use this document whenever generating or updating code in this repository. Mirror existing project conventions; do not invent new patterns without a strong reason.
+Project context and coding conventions for AI agents working on the Virn Ops codebase. Read this
+first, every session. The "Virn orientation" half (top) is project-specific and authoritative;
+the "Framework conventions" half (bottom) covers cross-cutting Next.js / oRPC / Better Auth /
+UI / forms / i18n patterns inherited from the supastarter base.
 
 ---
 
-## Technology Stack
+# Part 1 — Virn orientation
+
+## What this is
+
+**Virn Ops** is an enterprise, multi-tenant SaaS platform for recurring checklists, living
+SOP/policy knowledge bases, and no-code workflow automation — configured into **process-shaped
+products** (marketing-agency ops, STR turnover & housekeeping, compliance SOPs, …) via
+**solution packs**, not code forks. A ServiceNow-style platform-of-products: ambitious data model,
+narrow first build.
+
+ERP-class apps like **Virn PM** (property management, formerly Propvana) are *separate apps on the
+shared foundation*, not packs on Ops. See `docs/ARCHITECTURE.md` §1 and `docs/BRANDING.md` for the
+product family layout.
+
+## Read before working (in order)
+
+1. `docs/ARCHITECTURE.md` — the foundation. **§3 (Invariants) are non-negotiable.** §5/§6 define
+   the domain model and conventions; §7 is the MVP scope matrix.
+2. `docs/BUILD_PLAN.md` — the phased roadmap and what to build next.
+3. `packages/database/drizzle/schema/*.ts` — the existing schema. Match its style **exactly**
+   when adding tables.
+
+## Stack
+
+Next.js (App Router) · Better Auth (organization plugin) · Drizzle ORM on Postgres (Neon) ·
+oRPC + Hono · Inngest · TanStack Query/Table · next-intl · Tailwind + shadcn/ui · Zod.
+Turborepo + pnpm monorepo. Workspace scope: `@virn/*`.
+
+## Conventions (full detail in ARCHITECTURE.md §6)
+
+- cuid text PKs via the `id()` helper in `_shared.ts`; `timestamps`, `softDelete`, `orgId()`
+  helpers live there too — use them, don't reinvent.
+- One file per domain group; each file exports its `pgTable`(s) **and** `relations()`, all
+  re-exported from `schema/postgres.ts`.
+- `pgEnum` for closed sets; a lookup table (+ a `_translations` side table) for growable sets.
+- Polymorphic tables: the shared `entityType` enum + a plain `entity_id` text column + a CHECK —
+  never a bare FK.
+- Three-bucket deletes: `deletedAt` (user-deletable), `lifecycleStatus` (lifecycle entities),
+  append-only (audit/governance).
+
+## Invariants (do not violate — see ARCHITECTURE.md §3)
+
+1. Every tenant-owned row carries `organizationId NOT NULL`. The only cross-tenant exceptions are
+   `template_listing(_version)` and platform-owned `solution_pack(_version)`.
+2. Definition (workflow / version / step / field) and execution (run / run_step / field_value)
+   stay separate; a run is created by **snapshotting** a published version.
+3. Fields are referenced by stable `key`, never by label.
+4. Audit and governance tables are append-only.
+
+## House rules
+
+- Match the existing schema files' style; do not invent new conventions.
+- **Never write real secrets into files** — reference env var names only.
+- **Never run `migrate`/`push` against Neon without explicit confirmation in chat.** Migrations
+  use the DIRECT (unpooled) Neon URL (`DIRECT_URL`); the app runtime uses the pooled URL
+  (`DATABASE_URL`). DDL cannot pass through Neon's PgBouncer in transaction mode — running
+  `drizzle-kit` against the pooled URL in production will fail. See `.env.local.example`.
+- After any schema change, run `pnpm --filter database generate` and show the generated SQL.
+- Work in small, reviewable increments. Append notable decisions to `docs/DECISIONS.md`.
+- Ask before assuming on anything ambiguous.
+
+---
+
+# Part 2 — Framework conventions
+
+> Cross-cutting Next.js / oRPC / Better Auth / UI / forms / i18n conventions. Where these
+> conflict with Part 1 or `docs/ARCHITECTURE.md`, Virn-specific guidance wins.
+
+## Technology stack
 
 You are an expert in:
 
@@ -20,15 +87,13 @@ You are an expert in:
 - **Tailwind CSS** – Utility-first styling
 - **oRPC** – Type-safe RPC layer
 - **Better Auth** – Authentication with passkeys, magic links, organizations
-- **Drizzle/Prisma** – Database ORM
+- **Drizzle** – Database ORM (Postgres via Neon)
 - **React Hook Form + Zod** – Forms and validation
 - **TanStack Query** – Client-side data fetching and caching
 
----
+## Architecture overview
 
-## Architecture Overview
-
-### Monorepo Structure
+### Monorepo structure
 
 ```
 /
@@ -61,7 +126,7 @@ You are an expert in:
 ├── packages/                    # Shared backend packages
 │   ├── api/                     # oRPC procedures and HTTP handlers
 │   ├── auth/                    # Better Auth configuration
-│   ├── database/                # Prisma/Drizzle schema and queries
+│   ├── database/                # Drizzle schema and queries
 │   ├── ai/                      # AI integrations
 │   ├── i18n/                    # Translations and locale utilities
 │   ├── logs/                    # Logging configuration
@@ -73,16 +138,16 @@ You are an expert in:
 └── tooling/                     # Build tooling and shared configs
 ```
 
-### Import Conventions
+### Import conventions
 
 Use package exports instead of deep relative imports:
 
 ```typescript
 // ✅ Good
-import { auth } from "@repo/auth";
-import { db } from "@repo/database";
-import { Button } from "@repo/ui/components/button";
-import { cn } from "@repo/ui";
+import { auth } from "@virn/auth";
+import { db } from "@virn/database";
+import { Button } from "@virn/ui/components/button";
+import { cn } from "@virn/ui";
 import { orpcClient } from "@shared/lib/orpc-client";
 import { config } from "@config";
 
@@ -90,14 +155,14 @@ import { config } from "@config";
 import { auth } from "../../../packages/auth/auth";
 ```
 
-### Path Aliases
+### Path aliases
 
 Path aliases are configured per app. Shared package aliases apply across the monorepo:
 
 | Alias        | Path            |
 | ------------ | --------------- |
-| `@repo/*`    | `packages/*`    |
-| `@repo/ui/*` | `packages/ui/*` |
+| `@virn/*`    | `packages/*`    |
+| `@virn/ui/*` | `packages/ui/*` |
 
 **apps/saas** – SaaS application:
 
@@ -128,9 +193,7 @@ Path aliases are configured per app. Shared package aliases apply across the mon
 | `@i18n/*`             | `apps/marketing/modules/i18n/*`                 |
 | `content-collections` | `apps/marketing/.content-collections/generated` |
 
----
-
-## Core Coding Principles
+## Core coding principles
 
 ### TypeScript
 
@@ -162,7 +225,7 @@ enum UserRole {
 }
 ```
 
-### Functions & Components
+### Functions & components
 
 - Export React components as named functions; avoid default exports and classes
 - Prefer pure functions declared with the `function` keyword
@@ -184,7 +247,7 @@ function formatUserName(user: User): string {
 export default class UserCard extends Component {}
 ```
 
-### Naming Conventions
+### Naming conventions
 
 | Type                | Convention            | Example                     |
 | ------------------- | --------------------- | --------------------------- |
@@ -194,11 +257,9 @@ export default class UserCard extends Component {}
 | Constants           | SCREAMING_SNAKE_CASE  | `MAX_RETRIES`               |
 | Types/Interfaces    | PascalCase            | `UserProps`, `AuthConfig`   |
 
----
+## React & Next.js patterns
 
-## React & Next.js Patterns
-
-### Server vs Client Components
+### Server vs client components
 
 - **Default to React Server Components** – Only add `"use client"` when interactivity or browser APIs are required
 - Keep client components small and focused
@@ -220,13 +281,13 @@ export function InteractiveCounter() {
 }
 ```
 
-### Minimize Client-Side State
+### Minimize client-side state
 
 - Minimize `useEffect` and `useState`; favor React Server Components
 - Use `nuqs` for URL search parameter state management
 - Avoid client components for data fetching or state management
 
-### Data Fetching
+### Data fetching
 
 - Use Next.js data-fetching primitives (Route Handlers, Server Actions, `fetch` with caching tags)
 - Colocate route-specific helpers under the route directory
@@ -246,7 +307,7 @@ export default async function Layout({ children }: PropsWithChildren) {
 }
 ```
 
-### Error Handling
+### Error handling
 
 - Use `notFound()`, `redirect()`, or custom error boundaries
 - Don't throw raw errors; handle them gracefully
@@ -269,11 +330,9 @@ export default async function Page({ params }: PageProps) {
 }
 ```
 
----
+## API & data layer
 
-## API & Data Layer
-
-### oRPC Procedures
+### oRPC procedures
 
 API logic lives in `packages/api/modules`. Structure procedures with:
 
@@ -305,17 +364,20 @@ export const createItem = protectedProcedure
 	});
 ```
 
-### Procedure Types
+### Procedure types
 
 - `publicProcedure` – No authentication required
 - `protectedProcedure` – Requires authenticated session
+- `protectedOrgProcedure` / `adminOrgProcedure` – Require an active organization (enforces
+  Invariant #1; resolves the active org from the URL slug and reconciles to the session)
 - `adminProcedure` – Requires admin role
 
-### Database Queries
+### Database queries
 
-- Use the generated database clients from `@repo/database`
-- Never instantiate Prisma or Drizzle directly in app code
-- Keep queries in `packages/database/[orm]/queries/`
+- Use the generated database client from `@virn/database`
+- Never instantiate Drizzle directly in app code
+- Keep queries in `packages/database/drizzle/queries/`
+- All tenant-scoped reads/writes go through the `withOrg(orgId)` query helper
 
 ```typescript
 // packages/database/drizzle/queries/users.ts
@@ -326,7 +388,7 @@ export async function getUserById(id: string) {
 }
 ```
 
-### Client-Side Data Fetching
+### Client-side data fetching
 
 Use TanStack Query with oRPC utilities:
 
@@ -347,17 +409,24 @@ export function ItemsList() {
 
 ### Notifications
 
-- **Server:** Create notifications with `createNotification` from `@repo/notifications` (`userId`, `type`, optional JSON `data`, optional `link`). User preferences control whether a row is stored (in-app) and whether email is sent (`notification` mail template; `data.headline` / `data.title` / `data.message` drive copy when present).
-- **Types:** New notification kinds require updating the `NotificationType` enum in the database schema and keeping `packages/notifications/src/types.ts` and `packages/notifications/src/catalog.ts` (`NOTIFICATION_GROUPS`, labels via `settings.notificationsPage` i18n) aligned.
-- **API & UI:** oRPC lives in `packages/api/modules/notifications` (list, unread count, mark read, preferences). The SaaS app consumes these via TanStack Query (`orpc.notifications.*`); the notification center UI is under `apps/saas/modules/shared`.
+- **Server:** Create notifications with `createNotification` from `@virn/notifications`
+  (`userId`, `type`, optional JSON `data`, optional `link`). User preferences control whether a
+  row is stored (in-app) and whether email is sent (`notification` mail template; `data.headline`
+  / `data.title` / `data.message` drive copy when present).
+- **Types:** New notification kinds require updating the `NotificationType` enum in the
+  database schema (`drizzle/schema/auth.ts`) and keeping `packages/notifications/src/types.ts`
+  and `packages/notifications/src/catalog.ts` (`NOTIFICATION_GROUPS`, labels via
+  `settings.notificationsPage` i18n) aligned. The Virn-specific types (`run_assigned`,
+  `step_completed`, etc.) live in that enum — do not introduce a parallel notifications table.
+- **API & UI:** oRPC lives in `packages/api/modules/notifications` (list, unread count, mark
+  read, preferences). The SaaS app consumes these via TanStack Query (`orpc.notifications.*`);
+  the notification center UI is under `apps/saas/modules/shared`.
 
----
+## Authentication & authorization
 
-## Authentication & Authorization
+### Session handling
 
-### Session Handling
-
-- Use helpers from `@repo/auth` for session handling
+- Use helpers from `@virn/auth` for session handling
 - Server-side: `getSession()` from `@auth/lib/server`
 - Client-side: `useSession()` hook from `@auth/hooks/use-session`
 
@@ -380,9 +449,9 @@ export function UserInfo() {
 }
 ```
 
-### Organization Scoping
+### Organization scoping
 
-- Respect organization scoping for multi-tenant features
+- Respect organization scoping for multi-tenant features (Invariant #1)
 - Access control helpers live in `apps/saas/modules/*/lib`
 - Use `useActiveOrganization()` hook for organization context
 
@@ -401,7 +470,7 @@ export function OrgSettings() {
 }
 ```
 
-### Auth Flow Consistency
+### Auth flow consistency
 
 When updating auth flows, ensure:
 
@@ -409,19 +478,17 @@ When updating auth flows, ensure:
 - Audit hooks remain consistent
 - Locale detection works correctly
 
----
+## UI & styling
 
-## UI & Styling
+### Component library
 
-### Component Library
-
-- Use Shadcn UI components from `@repo/ui/components`
+- Use Shadcn UI components from `@virn/ui/components`
 - Compose with Radix primitives when customization is needed
 - Import the `cn` helper for conditional class names
 
 ```typescript
-import { Button } from "@repo/ui/components/button";
-import { cn } from "@repo/ui";
+import { Button } from "@virn/ui/components/button";
+import { cn } from "@virn/ui";
 
 export function CustomButton({ variant, className }: Props) {
   return (
@@ -439,13 +506,12 @@ export function CustomButton({ variant, className }: Props) {
 - Use consistent spacing and color variables
 
 ```typescript
-// Mobile-first responsive design
 <div className="flex flex-col gap-4 md:flex-row md:gap-6 lg:gap-8">
   {/* Content */}
 </div>
 ```
 
-### Image Optimization
+### Image optimization
 
 - Use `next/image` with explicit `width`/`height`
 - Prefer WebP format when possible
@@ -464,11 +530,9 @@ import Image from "next/image";
 />
 ```
 
----
+## Forms & validation
 
-## Forms & Validation
-
-### Form Implementation
+### Form implementation
 
 - Use `react-hook-form` for form state management
 - Use `zod` for schema validation
@@ -487,7 +551,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@repo/ui/components/form";
+} from "@virn/ui/components/form";
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -529,10 +593,10 @@ export function ContactForm() {
 }
 ```
 
-### Shared Validation Schemas
+### Shared validation schemas
 
 - Define validation schemas in API module types for reuse
-- Import schemas from `@repo/api/modules/[feature]/types`
+- Import schemas from `@virn/api/modules/[feature]/types`
 
 ```typescript
 // packages/api/modules/contact/types.ts
@@ -547,11 +611,9 @@ export const contactFormSchema = z.object({
 export type ContactFormValues = z.infer<typeof contactFormSchema>;
 ```
 
----
-
 ## Internationalization
 
-### Translation Strings
+### Translation strings
 
 - Source strings via i18n utilities in `packages/i18n`
 - Keep translations scoped by surface: `marketing`, `saas`, `mail`, and `shared`
@@ -570,7 +632,7 @@ export function WelcomeMessage() {
 }
 ```
 
-### Locale Handling
+### Locale handling
 
 - Honor locale detection from `packages/i18n/config.ts`
 - Use correct cookie naming conventions (`NEXT_LOCALE`)
@@ -591,8 +653,6 @@ export default async function Page({
 }
 ```
 
----
-
 ## Configuration
 
 ### Config files
@@ -603,38 +663,38 @@ If you need to access the config from a package, you can import it directly from
 
 ```typescript
 import { config } from "@config";
-import { config as i18nConfig } from "@repo/i18n";
+import { config as i18nConfig } from "@virn/i18n";
 
 // Access configuration
 config.appName; // Application name
 i18nConfig.defaultLocale; // Default locale
 ```
 
-### Environment Variables
+### Environment variables
 
 - Server-only variables: No prefix
 - Client-accessible variables: `NEXT_PUBLIC_` prefix
 - With the split apps, prefer SaaS-specific public URLs such as `NEXT_PUBLIC_SAAS_URL` for auth and app redirects
 - Payment provider identifiers should stay server-only where possible; avoid exposing provider `priceId` values to the client unless the existing implementation already does
 - Never commit secrets; use `.env.local`
+- **Neon Postgres:** the runtime uses the **pooled** URL; Drizzle Kit migrations use the **direct** (unpooled) URL — keep both env vars distinct
 
----
+## Tooling & quality
 
-## Tooling & Quality
-
-### Package Manager
+### Package manager
 
 - Use **pnpm** for package management
 - Run workspace-wide commands via **Turbo**
 
 ```bash
-pnpm dev      # Start development server
-pnpm build    # Build all packages
-pnpm lint     # Run linting
-pnpm format   # Format code
+pnpm dev                          # Start development server
+pnpm build                        # Build all packages
+pnpm lint                         # Run linting
+pnpm format                       # Format code
+pnpm --filter database generate   # Generate Drizzle migrations from schema
 ```
 
-### Code Quality
+### Code quality
 
 - Linting and formatting use **Oxlint** and **Oxfmt**
 - Lint all files before committing and fix all errors and warnings
@@ -646,16 +706,14 @@ pnpm format   # Format code
 - E2E tests use **Playwright** in `apps/marketing/tests` and `apps/saas/tests`
 - Run tests with `pnpm test` from the app directory or workspace root
 
-### Adding Dependencies
+### Adding dependencies
 
 - Add dependencies at the correct workspace package
 - Prefer the workspace `catalog:` versions in `pnpm-workspace.yaml` when the dependency is already managed there
 - Wire up exports through the relevant `index.ts`
 - Use the latest stable versions
 
----
-
-## Performance Optimization
+## Performance optimization
 
 ### Core Web Vitals
 
@@ -676,7 +734,7 @@ const HeavyChart = dynamic(() => import("./HeavyChart"), {
 });
 ```
 
-### Client Component Guidelines
+### Client component guidelines
 
 Limit `"use client"` to:
 
@@ -690,14 +748,13 @@ Avoid `"use client"` for:
 - Complex state management
 - Layout components
 
----
+## Documentation & change management
 
-## Documentation & Change Management
-
-### Documentation Updates
+### Documentation updates
 
 - Update relevant MDX docs under `apps/marketing/content` when altering user-facing behavior
 - Update `agents.md` when architectural conventions, app boundaries, aliases, or shared workflows change
+- Append notable architecture/scope decisions to `docs/DECISIONS.md`
 - Keep README files current with setup instructions
 
 ### Changelog
@@ -705,18 +762,16 @@ Avoid `"use client"` for:
 - Log noteworthy changes in `CHANGELOG.md` for consumer-impacting changes
 - Follow conventional commit format: `feat:`, `fix:`, `docs:`, `refactor:`
 
----
+## Best practices summary
 
-## Best Practices Summary
-
-### When Adding Features
+### When adding features
 
 1. Inspect neighboring files for patterns before writing new code
 2. Prefer incremental, well-scoped changes over sweeping rewrites
 3. Ensure new features have corresponding server and client stories (UI, API, data layer, emails if needed)
 4. Test the feature locally before considering it complete
 
-### Code Review Checklist
+### Code review checklist
 
 - [ ] TypeScript types are accurate and complete
 - [ ] No `any` types without justification
@@ -728,10 +783,12 @@ Avoid `"use client"` for:
 - [ ] Accessibility considered (Radix primitives)
 - [ ] No console.log statements in production code
 - [ ] Oxlint linting passes
+- [ ] Virn invariants honored (org-scoping, definition/execution split, stable field keys,
+      append-only audit/governance)
 
-### When in Doubt
+### When in doubt
 
 - Inspect neighboring files for patterns before writing new code
 - Ask for clarification on product requirements rather than guessing
 - Prefer incremental, well-scoped changes over sweeping rewrites
-- Follow the official documentation at [supastarter.dev/docs/nextjs](https://supastarter.dev/docs/nextjs)
+- Reference `docs/ARCHITECTURE.md` and `docs/BUILD_PLAN.md` for project context

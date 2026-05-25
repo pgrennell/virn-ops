@@ -1,5 +1,5 @@
-{
-	"name": "@repo/storage",
+﻿{
+	"name": "@virn/storage",
 	"version": "0.0.0",
 	"main": "./index.ts",
 	"types": "./**/.ts",
@@ -10,10 +10,10 @@
 	"dependencies": {
 		"@aws-sdk/client-s3": "catalog:",
 		"@aws-sdk/s3-request-presigner": "catalog:",
-		"@repo/logs": "workspace:*"
+		"@virn/logs": "workspace:*"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
 		"typescript": "catalog:"
 	}

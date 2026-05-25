@@ -1,7 +1,7 @@
 import type { SaasConfig } from "./types";
 
 export const config = {
-	appName: "supastarter for Next.js Demo",
+	appName: "Virn Ops",
 	docsUrl: process.env.NEXT_PUBLIC_DOCS_URL as string | undefined,
 	marketingUrl: process.env.NEXT_PUBLIC_MARKETING_URL as string | undefined,
 	enabledThemes: ["light", "dark"],

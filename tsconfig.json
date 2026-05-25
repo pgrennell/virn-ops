@@ -1,5 +1,5 @@
-{
-	"extends": "@repo/tsconfig/base.json",
+﻿{
+	"extends": "@virn/tsconfig/base.json",
 	"compilerOptions": {
 		"noEmit": true
 	}

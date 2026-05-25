@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import { config } from "@config";
 import { LocaleLink } from "@i18n/routing";
-import { config as paymentsConfig } from "@repo/payments/config";
-import type { PaidPlan } from "@repo/payments/types";
-import { cn } from "@repo/ui";
-import { Button } from "@repo/ui/components/button";
-import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+import { config as paymentsConfig } from "@virn/payments/config";
+import type { PaidPlan } from "@virn/payments/types";
+import { cn } from "@virn/ui";
+import { Button } from "@virn/ui/components/button";
+import { Tabs, TabsList, TabsTrigger } from "@virn/ui/components/tabs";
 import { ArrowRightIcon, BadgePercentIcon, CheckIcon, StarIcon } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";

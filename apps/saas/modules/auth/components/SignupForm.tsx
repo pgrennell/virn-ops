@@ -1,14 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useAuthErrorMessages } from "@auth/hooks/errors-messages";
 import { useSession } from "@auth/hooks/use-session";
 import { config } from "@config";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { OrganizationInvitationAlert } from "@organizations/components/OrganizationInvitationAlert";
-import { authClient } from "@repo/auth/client";
-import { config as authConfig } from "@repo/auth/config";
-import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
-import { Button } from "@repo/ui/components/button";
+import { authClient } from "@virn/auth/client";
+import { config as authConfig } from "@virn/auth/config";
+import { Alert, AlertDescription, AlertTitle } from "@virn/ui/components/alert";
+import { Button } from "@virn/ui/components/button";
 import {
 	Form,
 	FormControl,
@@ -16,9 +16,9 @@ import {
 	FormItem,
 	FormLabel,
 	FormMessage,
-} from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
-import { passwordSchema } from "@repo/utils";
+} from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
+import { passwordSchema } from "@virn/utils";
 import { PasswordInput } from "@shared/components/PasswordInput";
 import { AlertTriangleIcon, ArrowRightIcon, MailboxIcon } from "lucide-react";
 import { useTranslations } from "next-intl";

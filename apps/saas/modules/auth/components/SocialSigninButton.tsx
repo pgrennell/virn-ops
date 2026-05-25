@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { config } from "@config";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
 import { parseAsString, useQueryState } from "nuqs";
 
 import { oAuthProviders } from "../constants/oauth-providers";

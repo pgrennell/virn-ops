@@ -1,7 +1,7 @@
-import { getOrganizationList, getSession } from "@auth/lib/server";
+﻿import { getOrganizationList, getSession } from "@auth/lib/server";
 import { OrganizationsGrid } from "@organizations/components/OrganizationsGrid";
-import { config } from "@repo/auth/config";
-import { Card } from "@repo/ui";
+import { config } from "@virn/auth/config";
+import { Card } from "@virn/ui";
 import { PageHeader } from "@shared/components/PageHeader";
 import { getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";

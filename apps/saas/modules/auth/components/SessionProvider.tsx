@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 import { sessionQueryKey, useSessionQuery } from "@auth/lib/api";
-import { authClient } from "@repo/auth/client";
+import { authClient } from "@virn/auth/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useState } from "react";
 

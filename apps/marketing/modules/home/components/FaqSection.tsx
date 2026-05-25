@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
-import { cn } from "@repo/ui";
+import { cn } from "@virn/ui";
 import {
 	Accordion,
 	AccordionContent,
 	AccordionItem,
 	AccordionTrigger,
-} from "@repo/ui/components/accordion";
+} from "@virn/ui/components/accordion";
 import { useTranslations } from "next-intl";
 
 const FAQ_ITEM_KEYS = ["refundPolicy", "cancelSubscription", "changePlan", "freeTrial"] as const;

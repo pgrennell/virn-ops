@@ -1,5 +1,5 @@
-{
-	"extends": "@repo/tsconfig/base.json",
+﻿{
+	"extends": "@virn/tsconfig/base.json",
 	"include": ["**/*.ts", "**/*.json"],
 	"exclude": ["dist", "build", "node_modules"]
 }

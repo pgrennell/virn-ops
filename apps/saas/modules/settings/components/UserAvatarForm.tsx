@@ -1,5 +1,5 @@
-"use client";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+﻿"use client";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useTranslations } from "next-intl";
 

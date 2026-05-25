@@ -1,20 +1,20 @@
-"use client";
+﻿"use client";
 
 import { getAdminPath } from "@admin/lib/links";
 import { OrganizationLogo } from "@organizations/components/OrganizationLogo";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
-import { Card } from "@repo/ui/components/card";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
+import { Card } from "@virn/ui/components/card";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
-import { Input } from "@repo/ui/components/input";
-import { Skeleton } from "@repo/ui/components/skeleton";
-import { Table, TableBody, TableCell, TableRow } from "@repo/ui/components/table";
-import { toastPromise } from "@repo/ui/components/toast";
+} from "@virn/ui/components/dropdown-menu";
+import { Input } from "@virn/ui/components/input";
+import { Skeleton } from "@virn/ui/components/skeleton";
+import { Table, TableBody, TableCell, TableRow } from "@virn/ui/components/table";
+import { toastPromise } from "@virn/ui/components/toast";
 import { useConfirmationAlert } from "@shared/components/ConfirmationAlertProvider";
 import { Pagination } from "@shared/components/Pagination";
 import { orpc } from "@shared/lib/orpc-query-utils";

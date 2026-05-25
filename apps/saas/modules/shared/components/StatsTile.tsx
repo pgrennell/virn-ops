@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import { Badge } from "@repo/ui/components/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Badge } from "@virn/ui/components/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@virn/ui/components/card";
 import { useLocaleCurrency } from "@shared/hooks/locale-currency";
 import { useFormatter } from "next-intl";
 import { type PropsWithChildren, useMemo } from "react";

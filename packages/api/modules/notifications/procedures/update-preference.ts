@@ -1,5 +1,5 @@
-import type { NotificationTarget, NotificationType } from "@repo/notifications";
-import { setNotificationDisabled } from "@repo/notifications";
+﻿import type { NotificationTarget, NotificationType } from "@virn/notifications";
+import { setNotificationDisabled } from "@virn/notifications";
 import { z } from "zod";
 
 import { protectedProcedure } from "../../../orpc/procedures";

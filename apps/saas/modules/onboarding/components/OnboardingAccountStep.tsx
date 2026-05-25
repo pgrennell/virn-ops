@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
 import {
 	Form,
 	FormControl,
@@ -11,8 +11,8 @@ import {
 	FormField,
 	FormItem,
 	FormLabel,
-} from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
+} from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
 import { UserAvatarUpload } from "@settings/components/UserAvatarUpload";
 import { ArrowRightIcon } from "lucide-react";
 import { useTranslations } from "next-intl";

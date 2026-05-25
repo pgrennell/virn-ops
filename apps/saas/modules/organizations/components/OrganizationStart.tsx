@@ -1,6 +1,6 @@
-"use client";
-import { Card } from "@repo/ui/components/card";
-import type { ChartConfig } from "@repo/ui/components/chart";
+﻿"use client";
+import { Card } from "@virn/ui/components/card";
+import type { ChartConfig } from "@virn/ui/components/chart";
 import { StatsTile } from "@shared/components/StatsTile";
 import { StatsTileChart } from "@shared/components/StatsTileChart";
 

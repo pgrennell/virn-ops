@@ -1,7 +1,7 @@
-import { call, ORPCError } from "@orpc/server";
+﻿import { call, ORPCError } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@repo/auth", () => ({
+vi.mock("@virn/auth", () => ({
 	auth: {
 		api: {
 			getSession: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock("@repo/auth", () => ({
 	},
 }));
 
-import { auth } from "@repo/auth";
+import { auth } from "@virn/auth";
 
 import { adminProcedure, protectedProcedure, publicProcedure } from "./procedures";
 

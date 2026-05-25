@@ -1,4 +1,4 @@
-import { passkey } from "@better-auth/passkey";
+﻿import { passkey } from "@better-auth/passkey";
 import {
 	db,
 	getInvitationById,
@@ -6,15 +6,15 @@ import {
 	getPurchasesByUserId,
 	getUserByEmail,
 	getUserById,
-} from "@repo/database";
-import { config as i18nConfig, type Locale } from "@repo/i18n";
-import { logger } from "@repo/logs";
-import { sendEmail } from "@repo/mail";
-import { createWelcomeNotification } from "@repo/notifications";
-import { cancelSubscription } from "@repo/payments";
-import { getBaseUrl } from "@repo/utils";
+} from "@virn/database";
+import { config as i18nConfig, type Locale } from "@virn/i18n";
+import { logger } from "@virn/logs";
+import { sendEmail } from "@virn/mail";
+import { createWelcomeNotification } from "@virn/notifications";
+import { cancelSubscription } from "@virn/payments";
+import { getBaseUrl } from "@virn/utils";
 import { betterAuth } from "better-auth";
-import { prismaAdapter } from "better-auth/adapters/prisma";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, magicLink, openAPI, organization, twoFactor, username } from "better-auth/plugins";
 import { parse as parseCookies } from "cookie";
@@ -33,8 +33,8 @@ const appUrl = getBaseUrl(process.env.NEXT_PUBLIC_SAAS_URL, 3000);
 export const auth = betterAuth({
 	baseURL: appUrl,
 	trustedOrigins: [appUrl],
-	database: prismaAdapter(db, {
-		provider: "postgresql",
+	database: drizzleAdapter(db, {
+		provider: "pg",
 	}),
 	advanced: {
 		database: {

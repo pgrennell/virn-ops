@@ -1,20 +1,20 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { fullOrganizationQueryKey, useFullOrganizationQuery } from "@organizations/lib/api";
-import type { ActiveOrganization } from "@repo/auth";
-import { authClient } from "@repo/auth/client";
-import { isOrganizationAdmin } from "@repo/auth/lib/helper";
-import { cn } from "@repo/ui";
-import { Button } from "@repo/ui/components/button";
+import type { ActiveOrganization } from "@virn/auth";
+import { authClient } from "@virn/auth/client";
+import { isOrganizationAdmin } from "@virn/auth/lib/helper";
+import { cn } from "@virn/ui";
+import { Button } from "@virn/ui/components/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
-import { Table, TableBody, TableCell, TableRow } from "@repo/ui/components/table";
-import { toastPromise } from "@repo/ui/components/toast";
+} from "@virn/ui/components/dropdown-menu";
+import { Table, TableBody, TableCell, TableRow } from "@virn/ui/components/table";
+import { toastPromise } from "@virn/ui/components/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {

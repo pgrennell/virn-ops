@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
-import { Button } from "@repo/ui/components/button";
-import { Input } from "@repo/ui/components/input";
+import { Alert, AlertDescription, AlertTitle } from "@virn/ui/components/alert";
+import { Button } from "@virn/ui/components/button";
+import { Input } from "@virn/ui/components/input";
 import { CheckCircleIcon, KeyIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";

@@ -1,4 +1,4 @@
-export * from "./create-notification";
+﻿export * from "./create-notification";
 export * from "./types";
 export * from "./welcome";
 export * from "./resolve-link";
@@ -10,4 +10,4 @@ export {
 	markAllNotificationsAsReadForUser,
 	markNotificationsAsRead,
 	setNotificationDisabled,
-} from "@repo/database";
+} from "@virn/database";

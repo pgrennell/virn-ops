@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { OrganizationLogo } from "@organizations/components/OrganizationLogo";
 import { organizationListQueryKey } from "@organizations/lib/api";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
 import { useRouter } from "@shared/hooks/router";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, XIcon } from "lucide-react";

@@ -1,7 +1,7 @@
-import { AnalyticsScript } from "@analytics";
+﻿import { AnalyticsScript } from "@analytics";
 import { config } from "@config";
 import { config as i18nConfig } from "@i18n/config";
-import { cn } from "@repo/ui";
+import { cn } from "@virn/ui";
 import { ClientProviders } from "@shared/components/ClientProviders";
 import { ConsentBanner } from "@shared/components/ConsentBanner";
 import { ConsentProvider } from "@shared/components/ConsentProvider";

@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import { config as storageConfig } from "@repo/storage/config";
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
+import { config as storageConfig } from "@virn/storage/config";
+import { Avatar, AvatarFallback, AvatarImage } from "@virn/ui/components/avatar";
 import { Users2Icon } from "lucide-react";
 import { useMemo } from "react";
 

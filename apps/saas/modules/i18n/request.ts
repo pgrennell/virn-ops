@@ -1,4 +1,4 @@
-import { config as i18nConfig } from "@repo/i18n";
+﻿import { config as i18nConfig } from "@virn/i18n";
 import { getRequestConfig } from "next-intl/server";
 import { cookies } from "next/headers";
 

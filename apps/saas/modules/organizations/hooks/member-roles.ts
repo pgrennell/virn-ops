@@ -1,5 +1,5 @@
-import type { OrganizationMemberRole } from "@repo/auth";
-import { organizationMemberRoleOrder } from "@repo/auth/lib/organization-member-role-order";
+﻿import type { OrganizationMemberRole } from "@virn/auth";
+import { organizationMemberRoleOrder } from "@virn/auth/lib/organization-member-role-order";
 import { useTranslations } from "next-intl";
 
 export function useOrganizationMemberRoles() {

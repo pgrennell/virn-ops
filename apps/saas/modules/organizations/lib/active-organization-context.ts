@@ -1,4 +1,4 @@
-import type { ActiveOrganization } from "@repo/auth";
+﻿import type { ActiveOrganization } from "@virn/auth";
 import React from "react";
 
 export const ActiveOrganizationContext = React.createContext<

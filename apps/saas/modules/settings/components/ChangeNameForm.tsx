@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
-import { Input } from "@repo/ui/components/input";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
+import { Input } from "@virn/ui/components/input";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";

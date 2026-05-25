@@ -7,12 +7,8 @@ minimumReleaseAge: 1440
 
 allowBuilds:
   "@parcel/watcher": true
-  "@prisma/client": true
-  "@prisma/engines": true
   "@swc/core": true
   esbuild: true
-  prisma: true
-  prisma-zod-generator: true
   sharp: true
 
 catalog:
@@ -33,9 +29,6 @@ catalog:
   "@orpc/tanstack-query": 1.14.3
   "@orpc/zod": 1.14.3
   "@playwright/test": ^1.60.0
-  "@prisma/adapter-pg": ^7.8.0
-  "@prisma/client": 7.8.0
-  "@prisma/nextjs-monorepo-workaround-plugin": ^7.8.0
   "@shikijs/rehype": ^4.0.2
   "@sindresorhus/slugify": ^3.0.0
   "@tailwindcss/postcss": ^4.3.0
@@ -80,8 +73,6 @@ catalog:
   pg: ^8.20.0
   postcss: 8.5.14
   prettier: 3.8.3
-  prisma: 7.8.0
-  prisma-zod-generator: 2.1.4
   radix-ui: ^1.4.3
   react: 19.2.6
   react-cropper: ^2.3.3

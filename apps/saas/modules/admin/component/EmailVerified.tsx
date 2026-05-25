@@ -1,10 +1,10 @@
-import { cn } from "@repo/ui";
+﻿import { cn } from "@virn/ui";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/tooltip";
+} from "@virn/ui/components/tooltip";
 import { CheckIcon, ClockIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 

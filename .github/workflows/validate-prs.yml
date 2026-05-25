@@ -1,4 +1,4 @@
-name: Validate PRs
+﻿name: Validate PRs
 
 on:
   pull_request:
@@ -49,7 +49,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install
       - name: Run unit tests
-        run: pnpm --filter @repo/api --filter saas --filter marketing test
+        run: pnpm --filter @virn/api --filter saas --filter marketing test
   e2e:
     name: Run e2e tests
     timeout-minutes: 60

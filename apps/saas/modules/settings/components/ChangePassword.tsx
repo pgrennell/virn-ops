@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
 import {
 	Form,
 	FormControl,
@@ -9,9 +9,9 @@ import {
 	FormItem,
 	FormLabel,
 	FormMessage,
-} from "@repo/ui/components/form";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
-import { passwordSchema } from "@repo/utils";
+} from "@virn/ui/components/form";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
+import { passwordSchema } from "@virn/utils";
 import { PasswordInput } from "@shared/components/PasswordInput";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useRouter } from "@shared/hooks/router";

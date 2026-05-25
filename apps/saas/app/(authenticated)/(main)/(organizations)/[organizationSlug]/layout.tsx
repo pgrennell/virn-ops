@@ -1,7 +1,7 @@
-import { getActiveOrganization } from "@auth/lib/server";
+﻿import { getActiveOrganization } from "@auth/lib/server";
 import { activeOrganizationQueryKey } from "@organizations/lib/api";
 import { listPurchases } from "@payments/lib/server";
-import { config as paymentsConfig } from "@repo/payments/config";
+import { config as paymentsConfig } from "@virn/payments/config";
 import { AppWrapper } from "@shared/components/AppWrapper";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { getServerQueryClient } from "@shared/lib/server";

@@ -52,7 +52,7 @@
 			"new": "Neu:",
 			"featureBadge": "Tolle Funktion deines SaaS",
 			"title": "Dein revolutionäres SaaS mit Next.js",
-			"subtitle": "Dies ist eine Demo-Anwendung, die mit supastarter erstellt wurde. Sie spart dir viel Zeit und Aufwand beim Aufbau deiner nächsten SaaS.",
+			"subtitle": "Dies ist eine Demo-Anwendung, die mit Virn erstellt wurde. Sie spart dir viel Zeit und Aufwand beim Aufbau deiner nächsten SaaS.",
 			"getStarted": "Loslegen",
 			"documentation": "Dokumentation",
 			"imageAlt": "Unsere Anwendung",
@@ -110,7 +110,7 @@
 			}
 		},
 		"submit": "Abonnieren",
-		"subtitle": "Gehöre zu den Ersten, die Zugriff auf supastarter.nextjs erhalten.",
+		"subtitle": "Gehöre zu den Ersten, die Zugriff auf Virn Ops erhalten.",
 		"title": "Erhalte frühen Zugang"
 	},
 	"notFound": {
@@ -124,8 +124,7 @@
 			"features": "Funktionen",
 			"pricing": "Preise",
 			"privacyPolicy": "Datenschutz",
-			"termsAndConditions": "Allgemeine Geschäftsbedingungen",
-			"builtWith": "Erstellt mit supastarter"
+			"termsAndConditions": "Allgemeine Geschäftsbedingungen"
 		},
 		"menu": {
 			"blog": "Blog",

@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
-import { cn } from "@repo/ui";
+import { cn } from "@virn/ui";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/tooltip";
+} from "@virn/ui/components/tooltip";
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";

@@ -1,18 +1,18 @@
-"use client";
+﻿"use client";
 
-import { authClient } from "@repo/auth/client";
-import { Spinner } from "@repo/ui";
-import { Button } from "@repo/ui/components/button";
-import { Card } from "@repo/ui/components/card";
+import { authClient } from "@virn/auth/client";
+import { Spinner } from "@virn/ui";
+import { Button } from "@virn/ui/components/button";
+import { Card } from "@virn/ui/components/card";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
-import { Input } from "@repo/ui/components/input";
-import { Table, TableBody, TableCell, TableRow } from "@repo/ui/components/table";
-import { dismiss, toastLoading, toastPromise } from "@repo/ui/components/toast";
+} from "@virn/ui/components/dropdown-menu";
+import { Input } from "@virn/ui/components/input";
+import { Table, TableBody, TableCell, TableRow } from "@virn/ui/components/table";
+import { dismiss, toastLoading, toastPromise } from "@virn/ui/components/toast";
 import { useConfirmationAlert } from "@shared/components/ConfirmationAlertProvider";
 import { Pagination } from "@shared/components/Pagination";
 import { UserAvatar } from "@shared/components/UserAvatar";

@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";
 import { organizationListQueryKey, useCreateOrganizationMutation } from "@organizations/lib/api";
-import { Button } from "@repo/ui/components/button";
+import { Button } from "@virn/ui/components/button";
 import {
 	Form,
 	FormControl,
@@ -11,9 +11,9 @@ import {
 	FormItem,
 	FormLabel,
 	FormMessage,
-} from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
-import { toastError } from "@repo/ui/components/toast";
+} from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
+import { toastError } from "@virn/ui/components/toast";
 import { useRouter } from "@shared/hooks/router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";

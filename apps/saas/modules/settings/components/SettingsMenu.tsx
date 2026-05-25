@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { cn } from "@repo/ui";
+import { cn } from "@virn/ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";

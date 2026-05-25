@@ -1,5 +1,5 @@
-import type { MailMessages } from "@repo/i18n";
-import { getMessagesForLocale as getMessages } from "@repo/i18n";
+﻿import type { MailMessages } from "@virn/i18n";
+import { getMessagesForLocale as getMessages } from "@virn/i18n";
 
 export type Messages = MailMessages;
 

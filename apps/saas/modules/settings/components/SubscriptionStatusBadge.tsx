@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
-import type { BadgeProps } from "@repo/ui/components/badge";
-import { Badge } from "@repo/ui/components/badge";
+import type { BadgeProps } from "@virn/ui/components/badge";
+import { Badge } from "@virn/ui/components/badge";
 import { useTranslations } from "next-intl";
 
 export function SubscriptionStatusBadge({ status }: { status: string; className?: string }) {

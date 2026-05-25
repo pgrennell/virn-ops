@@ -1,4 +1,4 @@
-import type { PurchaseSchema } from "@repo/database";
+﻿import type { PurchaseSchema } from "@virn/database";
 import type { z } from "zod";
 
 import { config } from "../config";

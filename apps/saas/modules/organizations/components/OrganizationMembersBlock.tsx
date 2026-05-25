@@ -1,5 +1,5 @@
-"use client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+﻿"use client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@virn/ui/components/tabs";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useTranslations } from "next-intl";
 import { useState } from "react";

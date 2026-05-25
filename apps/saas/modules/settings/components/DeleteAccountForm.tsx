@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { useConfirmationAlert } from "@shared/components/ConfirmationAlertProvider";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useMutation } from "@tanstack/react-query";

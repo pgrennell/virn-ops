@@ -1,5 +1,5 @@
-{
-	"name": "@repo/tailwind-config",
+﻿{
+	"name": "@virn/tailwind-config",
 	"version": "0.0.0",
 	"private": true,
 	"main": "theme.css",

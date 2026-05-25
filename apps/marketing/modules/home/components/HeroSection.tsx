@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { config } from "@config";
-import { Button } from "@repo/ui/components/button";
+import { Button } from "@virn/ui/components/button";
 import { ArrowRightIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";

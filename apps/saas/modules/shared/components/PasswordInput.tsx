@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { cn, Input } from "@repo/ui";
+import { cn, Input } from "@virn/ui";
 import { CircleCheckIcon, CircleXIcon, EyeIcon, EyeOffIcon, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import React from "react";

@@ -1,6 +1,6 @@
-"use client";
-import { authClient } from "@repo/auth/client";
-import { Progress } from "@repo/ui/components/progress";
+﻿"use client";
+import { authClient } from "@virn/auth/client";
+import { Progress } from "@virn/ui/components/progress";
 import { useRouter } from "@shared/hooks/router";
 import { clearCache } from "@shared/lib/cache";
 import { useTranslations } from "next-intl";

@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { config } from "@config";
 import { LocaleLink, useLocalePathname } from "@i18n/routing";
-import { cn, Logo } from "@repo/ui";
-import { Button } from "@repo/ui/components/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@repo/ui/components/sheet";
+import { cn, Logo } from "@virn/ui";
+import { Button } from "@virn/ui/components/button";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@virn/ui/components/sheet";
 import { ColorModeToggle } from "@shared/components/ColorModeToggle";
 import { LocaleSwitch } from "@shared/components/LocaleSwitch";
 import { MenuIcon } from "lucide-react";

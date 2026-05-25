@@ -1,6 +1,6 @@
-import { config as storageConfig } from "@repo/storage/config";
-import { cn } from "@repo/ui";
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
+﻿import { config as storageConfig } from "@virn/storage/config";
+import { cn } from "@virn/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@virn/ui/components/avatar";
 import { useMemo } from "react";
 
 export const UserAvatar = ({

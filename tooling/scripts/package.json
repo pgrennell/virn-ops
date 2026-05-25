@@ -1,5 +1,5 @@
-{
-	"name": "@repo/scripts",
+﻿{
+	"name": "@virn/scripts",
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
@@ -8,12 +8,12 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@repo/auth": "workspace:*",
-		"@repo/database": "workspace:*",
-		"@repo/logs": "workspace:*"
+		"@virn/auth": "workspace:*",
+		"@virn/database": "workspace:*",
+		"@virn/logs": "workspace:*"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
 		"nanoid": "catalog:",
 		"tsx": "catalog:",

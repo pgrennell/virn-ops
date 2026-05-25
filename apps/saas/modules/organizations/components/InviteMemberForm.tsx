@@ -1,13 +1,13 @@
-"use client";
+﻿"use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { OrganizationRoleSelect } from "@organizations/components/OrganizationRoleSelect";
 import { fullOrganizationQueryKey } from "@organizations/lib/api";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";

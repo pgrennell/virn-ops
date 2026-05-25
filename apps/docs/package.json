@@ -1,4 +1,4 @@
-{
+﻿{
 	"name": "docs",
 	"version": "0.0.0",
 	"private": true,
@@ -13,8 +13,8 @@
 		"format": "oxfmt ."
 	},
 	"dependencies": {
-		"@repo/tailwind-config": "workspace:*",
-		"@repo/ui": "workspace:*",
+		"@virn/tailwind-config": "workspace:*",
+		"@virn/ui": "workspace:*",
 		"fumadocs-core": "16.8.10",
 		"fumadocs-mdx": "15.0.4",
 		"fumadocs-ui": "16.8.10",

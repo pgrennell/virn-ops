@@ -1,7 +1,7 @@
 /** Section id for i18n (`settings.notificationsPage.groups.${id}`) and ordering. */
 export type NotificationGroupId = "general";
 
-/** Mirrors Prisma `NotificationType` — keep in sync with schema. */
+/** Mirrors Drizzle `NotificationType` (drizzle/schema/auth.ts) — keep in sync. */
 export type NotificationTypeId = "WELCOME" | "APP_UPDATE";
 
 export interface NotificationGroupConfig {

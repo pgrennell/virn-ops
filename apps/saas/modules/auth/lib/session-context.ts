@@ -1,4 +1,4 @@
-import type { Session } from "@repo/auth";
+﻿import type { Session } from "@virn/auth";
 import React from "react";
 
 export const SessionContext = React.createContext<

@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Alert, AlertTitle } from "@repo/ui/components/alert";
-import { Button } from "@repo/ui/components/button";
+import { Alert, AlertTitle } from "@virn/ui/components/alert";
+import { Button } from "@virn/ui/components/button";
 import {
 	Form,
 	FormControl,
@@ -10,9 +10,9 @@ import {
 	FormItem,
 	FormLabel,
 	FormMessage,
-} from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
-import { Textarea } from "@repo/ui/components/textarea";
+} from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
+import { Textarea } from "@virn/ui/components/textarea";
 import { MailCheckIcon, MailIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";

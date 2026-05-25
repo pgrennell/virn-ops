@@ -1,5 +1,5 @@
-import { config } from "@config";
-import { cn, Logo } from "@repo/ui";
+﻿import { config } from "@config";
+import { cn, Logo } from "@virn/ui";
 import type { PropsWithChildren } from "react";
 
 import { ColorModeToggle } from "./ColorModeToggle";

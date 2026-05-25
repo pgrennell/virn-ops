@@ -1,6 +1,6 @@
-import "server-only";
-import { auth } from "@repo/auth";
-import { getInvitationById } from "@repo/database";
+﻿import "server-only";
+import { auth } from "@virn/auth";
+import { getInvitationById } from "@virn/database";
 import { headers } from "next/headers";
 import { cache } from "react";
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
 	AlertDialog,
@@ -8,8 +8,8 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-} from "@repo/ui/components/alert-dialog";
-import { Button } from "@repo/ui/components/button";
+} from "@virn/ui/components/alert-dialog";
+import { Button } from "@virn/ui/components/button";
 import { useTranslations } from "next-intl";
 import { createContext, type PropsWithChildren, useContext, useState } from "react";
 

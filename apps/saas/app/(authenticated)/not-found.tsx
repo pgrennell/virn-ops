@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/button";
+﻿import { Button } from "@virn/ui/components/button";
 import { AppWrapper } from "@shared/components/AppWrapper";
 import { ArrowLeftIcon } from "lucide-react";
 import { getTranslations } from "next-intl/server";

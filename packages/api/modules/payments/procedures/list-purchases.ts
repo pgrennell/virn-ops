@@ -1,5 +1,5 @@
-import { getPurchasesByOrganizationId, getPurchasesByUserId } from "@repo/database";
-import { getPlanIdByProviderPriceId, getPlanPriceByProviderPriceId } from "@repo/payments";
+﻿import { getPurchasesByOrganizationId, getPurchasesByUserId } from "@virn/database";
+import { getPlanIdByProviderPriceId, getPlanPriceByProviderPriceId } from "@virn/payments";
 import { z } from "zod";
 
 import { protectedProcedure } from "../../../orpc/procedures";

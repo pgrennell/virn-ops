@@ -1,4 +1,4 @@
-import { Logo } from "@repo/ui";
+﻿import { Logo } from "@virn/ui";
 
 import "./global.css";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";

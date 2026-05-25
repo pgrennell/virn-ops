@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { cn } from "@repo/ui";
+import { cn } from "@virn/ui";
 import { CloudIcon, ComputerIcon, SmartphoneIcon, StarIcon, WandIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";

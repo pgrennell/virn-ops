@@ -1,12 +1,10 @@
-// @ts-expect-error - PrismaPlugin is not typed
-import { PrismaPlugin } from "@prisma/nextjs-monorepo-workaround-plugin";
-import type { NextConfig } from "next";
+﻿import type { NextConfig } from "next";
 import nextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = nextIntlPlugin("./modules/i18n/request.ts");
 
 const nextConfig: NextConfig = {
-	transpilePackages: ["@repo/api", "@repo/auth", "@repo/database", "@repo/ui"],
+	transpilePackages: ["@virn/api", "@virn/auth", "@virn/database", "@virn/ui"],
 	images: {
 		remotePatterns: [
 			{
@@ -40,16 +38,12 @@ const nextConfig: NextConfig = {
 			},
 		];
 	},
-	webpack: (config, { webpack, isServer }) => {
+	webpack: (config, { webpack }) => {
 		config.plugins.push(
 			new webpack.IgnorePlugin({
 				resourceRegExp: /^pg-native$|^cloudflare:sockets$/,
 			}),
 		);
-
-		if (isServer) {
-			config.plugins.push(new PrismaPlugin());
-		}
 
 		return config;
 	},

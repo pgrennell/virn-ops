@@ -1,7 +1,7 @@
-import { getActiveOrganization, getSession } from "@auth/lib/server";
+﻿import { getActiveOrganization, getSession } from "@auth/lib/server";
 import { InviteMemberForm } from "@organizations/components/InviteMemberForm";
 import { OrganizationMembersBlock } from "@organizations/components/OrganizationMembersBlock";
-import { isOrganizationAdmin } from "@repo/auth/lib/helper";
+import { isOrganizationAdmin } from "@virn/auth/lib/helper";
 import { PageHeader } from "@shared/components/PageHeader";
 import { SettingsList } from "@shared/components/SettingsList";
 import { getTranslations } from "next-intl/server";

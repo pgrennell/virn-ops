@@ -1,11 +1,11 @@
-import { SessionProvider } from "@auth/components/SessionProvider";
+﻿import { SessionProvider } from "@auth/components/SessionProvider";
 import { sessionQueryKey } from "@auth/lib/api";
 import { getOrganizationList, getSession } from "@auth/lib/server";
 import { ActiveOrganizationProvider } from "@organizations/components/ActiveOrganizationProvider";
 import { organizationListQueryKey } from "@organizations/lib/api";
 import { listPurchases } from "@payments/lib/server";
-import { config as authConfig } from "@repo/auth/config";
-import { config as paymentsConfig } from "@repo/payments/config";
+import { config as authConfig } from "@virn/auth/config";
+import { config as paymentsConfig } from "@virn/payments/config";
 import { ConfirmationAlertProvider } from "@shared/components/ConfirmationAlertProvider";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { getServerQueryClient } from "@shared/lib/server";

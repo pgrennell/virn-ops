@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { getAdminPath } from "@admin/lib/links";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,8 +10,8 @@ import {
 	useFullOrganizationQuery,
 	useUpdateOrganizationMutation,
 } from "@organizations/lib/api";
-import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Button } from "@virn/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@virn/ui/components/card";
 import {
 	Form,
 	FormControl,
@@ -19,9 +19,9 @@ import {
 	FormItem,
 	FormLabel,
 	FormMessage,
-} from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+} from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { useRouter } from "@shared/hooks/router";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useQueryClient } from "@tanstack/react-query";

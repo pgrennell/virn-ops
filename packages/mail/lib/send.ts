@@ -1,4 +1,4 @@
-import { logger } from "@repo/logs";
+﻿import { logger } from "@virn/logs";
 
 import { config, type Locale } from "../config";
 import type { mailTemplates } from "../emails";

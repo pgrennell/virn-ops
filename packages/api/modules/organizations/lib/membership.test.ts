@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@repo/database", () => ({
+vi.mock("@virn/database", () => ({
 	getOrganizationMembership: vi.fn(),
 }));
 
-import { getOrganizationMembership } from "@repo/database";
+import { getOrganizationMembership } from "@virn/database";
 
 import { verifyOrganizationMembership } from "./membership";
 

@@ -1,6 +1,6 @@
-import { getSession } from "@auth/lib/server";
+﻿import { getSession } from "@auth/lib/server";
 import { OnboardingForm } from "@onboarding/components/OnboardingForm";
-import { config } from "@repo/auth/config";
+import { config } from "@virn/auth/config";
 import { AuthWrapper } from "@shared/components/AuthWrapper";
 import { getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";

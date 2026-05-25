@@ -1,11 +1,11 @@
-import { cn } from "@repo/ui";
+﻿import { cn } from "@virn/ui";
 import {
 	Card,
 	CardContent,
 	CardDescription,
 	CardHeader,
 	CardTitle,
-} from "@repo/ui/components/card";
+} from "@virn/ui/components/card";
 import type { PropsWithChildren, ReactNode } from "react";
 
 export function SettingsItem({

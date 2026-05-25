@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";
 import { organizationListQueryKey } from "@organizations/lib/api";
-import { authClient } from "@repo/auth/client";
-import { Spinner } from "@repo/ui";
-import { toastError, toastSuccess } from "@repo/ui/components/toast";
+import { authClient } from "@virn/auth/client";
+import { Spinner } from "@virn/ui";
+import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";

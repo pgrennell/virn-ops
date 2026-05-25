@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
-import { authClient } from "@repo/auth/client";
-import { Spinner } from "@repo/ui";
+import { authClient } from "@virn/auth/client";
+import { Spinner } from "@virn/ui";
 import { UserAvatar } from "@shared/components/UserAvatar";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation } from "@tanstack/react-query";

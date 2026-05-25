@@ -1,5 +1,5 @@
-{
-	"name": "@repo/utils",
+﻿{
+	"name": "@virn/utils",
 	"version": "0.0.0",
 	"main": "./index.ts",
 	"types": "./**/.tsx",
@@ -11,7 +11,7 @@
 		"zod": "catalog:"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
 		"typescript": "catalog:"
 	}

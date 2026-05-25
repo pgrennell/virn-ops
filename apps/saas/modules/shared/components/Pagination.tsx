@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/button";
+﻿import { Button } from "@virn/ui/components/button";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 
 export type PaginatioProps = {

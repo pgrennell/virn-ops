@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 import { listUserPasskeys, userPasskeyQueryKey, useUserPasskeysQuery } from "@auth/lib/api";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
 import {
 	Dialog,
 	DialogContent,
@@ -9,12 +9,12 @@ import {
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
-} from "@repo/ui/components/dialog";
-import { FormItem } from "@repo/ui/components/form";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
-import { Skeleton } from "@repo/ui/components/skeleton";
-import { toastError, toastPromise, toastSuccess } from "@repo/ui/components/toast";
+} from "@virn/ui/components/dialog";
+import { FormItem } from "@virn/ui/components/form";
+import { Input } from "@virn/ui/components/input";
+import { Label } from "@virn/ui/components/label";
+import { Skeleton } from "@virn/ui/components/skeleton";
+import { toastError, toastPromise, toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyIcon, PencilIcon, PlusIcon, TrashIcon } from "lucide-react";

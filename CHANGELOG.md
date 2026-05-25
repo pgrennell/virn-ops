@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 ## 2026-05-21
 
@@ -87,17 +87,17 @@
 
 #### Database
 
-- **Drizzle notifications and schema**: Notification persistence (preferences, insert support, listing rows, unread counts, mark read) is implemented in `@repo/database` for both Prisma and Drizzle, so the Drizzle scaffold no longer mixes in Prisma-style `db` calls. The Drizzle schema barrel (`drizzle/schema/index.ts`) re-exports the PostgreSQL schema (aligned with the Drizzle client) and exposes `NotificationType` / `NotificationTarget` for type-safe consumers.
+- **Drizzle notifications and schema**: Notification persistence (preferences, insert support, listing rows, unread counts, mark read) is implemented in `@virn/database` for both Prisma and Drizzle, so the Drizzle scaffold no longer mixes in Prisma-style `db` calls. The Drizzle schema barrel (`drizzle/schema/index.ts`) re-exports the PostgreSQL schema (aligned with the Drizzle client) and exposes `NotificationType` / `NotificationTarget` for type-safe consumers.
 - **`user.lastActiveOrganizationId` in Drizzle**: Added on PostgreSQL, MySQL, and SQLite user tables so Drizzle schemas match the Prisma user model and auth hooks that read this field.
 - **Organization lookups (Drizzle)**: `findFirst`-based helpers now normalize missing rows to `null`, matching Prisma `findUnique` behavior for tests and callers.
 
 #### Packages
 
-- **`@repo/notifications`**: Dropped the thin `list`, `mark-read`, and `preferences` modules; the package index re-exports the shared notification query helpers from `@repo/database` next to create/welcome/resolve-link.
+- **`@virn/notifications`**: Dropped the thin `list`, `mark-read`, and `preferences` modules; the package index re-exports the shared notification query helpers from `@virn/database` next to create/welcome/resolve-link.
 
 #### API
 
-- **Notifications procedures**: List and unread-count handlers use the database row helpers from `@repo/notifications` / `@repo/database` and apply `resolveNotificationLink` when shaping list responses.
+- **Notifications procedures**: List and unread-count handlers use the database row helpers from `@virn/notifications` / `@virn/database` and apply `resolveNotificationLink` when shaping list responses.
 
 #### SaaS app
 
@@ -117,7 +117,7 @@ Related: [issue #2395](https://github.com/supastarter/supastarter-nextjs/issues/
 
 #### Packages
 
-- **`@repo/notifications`**: Shared module for notification definitions (`catalog`), creating and listing notifications, marking as read, per-user preferences, and a welcome notification helper.
+- **`@virn/notifications`**: Shared module for notification definitions (`catalog`), creating and listing notifications, marking as read, per-user preferences, and a welcome notification helper.
 
 #### API
 
@@ -127,7 +127,7 @@ Related: [issue #2395](https://github.com/supastarter/supastarter-nextjs/issues/
 
 - **Notification Center**: Navbar UI to view notifications and mark them read.
 - **Notification preferences**: Account settings page and form for per-channel preferences; server-only notification logic is kept out of the client bundle for the preferences form.
-- **Auth**: Database hook after user creation creates a welcome in-app notification via `@repo/notifications`.
+- **Auth**: Database hook after user creation creates a welcome in-app notification via `@virn/notifications`.
 
 #### Mail and i18n
 
@@ -135,7 +135,7 @@ Related: [issue #2395](https://github.com/supastarter/supastarter-nextjs/issues/
 
 #### UI
 
-- **Popover** and **Switch** components exported from `@repo/ui` for notification UI patterns.
+- **Popover** and **Switch** components exported from `@virn/ui` for notification UI patterns.
 
 ### Changed
 
@@ -237,8 +237,8 @@ This release restructures the monorepo around separate marketing and SaaS applic
 - **i18n split**: Translations are now split by scope (`marketing`, `saas`, `mail`, `shared`) and loaded through a new `getMessagesForLocale` helper
 - **Translation key updates**: Marketing and SaaS UI copy now uses full-length translation keys consistently across forms, nav, pricing, settings, admin, and auth flows
 - **API removals**: The contact and newsletter API routers were removed from `packages/api`
-- **Mail changes**: Newsletter signup email/template support was removed and mail rendering now resolves scoped translations from `@repo/i18n`
-- **UI moves**: Several SaaS-specific UI primitives were moved out of `@repo/ui` into `apps/saas/modules/shared`
+- **Mail changes**: Newsletter signup email/template support was removed and mail rendering now resolves scoped translations from `@virn/i18n`
+- **UI moves**: Several SaaS-specific UI primitives were moved out of `@virn/ui` into `apps/saas/modules/shared`
 - **Workspace tooling**: The workspace now relies on a pnpm catalog for shared dependency versions
 
 #### Dedicated marketing and SaaS applications
@@ -258,7 +258,7 @@ This release restructures the monorepo around separate marketing and SaaS applic
 
 - **Scoped translations**: Split locale files into `packages/i18n/translations/{locale}/marketing.json`, `saas.json`, `mail.json`, and `shared.json`
 - **New locales**: Added Spanish (`es`) and French (`fr`) alongside English and German
-- **Typed config**: Added typed i18n config/interfaces and exported `config`, `Locale`, and scoped message types from `@repo/i18n`
+- **Typed config**: Added typed i18n config/interfaces and exported `config`, `Locale`, and scoped message types from `@virn/i18n`
 - **Message loading**: Added `getMessagesForLocale(locale, scope)` with shared-message merging and default-locale fallback behavior
 - **Key normalization**: Updated marketing and SaaS components to use explicit full-length translation keys instead of shorter or ambiguous key paths
 - **App wiring**: Marketing and SaaS now each own their locale request/update helpers and locale-aware providers
@@ -290,7 +290,7 @@ This release restructures the monorepo around separate marketing and SaaS applic
 - **Removed API endpoints**: Deleted the contact and newsletter oRPC modules from `packages/api`
 - **Mail package refactor**: Moved mail helpers into `packages/mail/lib`, added scoped mail translation loading, and removed the newsletter signup template/export
 - **Marketing forms**: Marketing contact/newsletter flows were refactored along with the new app split rather than continuing to rely on the removed shared API modules
-- **SaaS UI ownership**: Moved password input, settings list/item, page header, and related shared components into the SaaS app to avoid over-generalizing them in `@repo/ui`
+- **SaaS UI ownership**: Moved password input, settings list/item, page header, and related shared components into the SaaS app to avoid over-generalizing them in `@virn/ui`
 - **Workspace cleanup**: Added pnpm catalog version management and refreshed package wiring across apps and packages
 
 ---
@@ -464,7 +464,7 @@ This release introduces significant architectural changes that require migration
 - **Docs application**: Moved from web app to standalone Next.js app (`apps/docs`)
 - **UI components**: Moved from `apps/web/modules/ui/` to `packages/ui/`
 - **Configuration**: Removed centralized `config/` package, now scoped to individual packages
-- **Shared components**: Moved `Logo` and `Spinner` components to `@repo/ui`
+- **Shared components**: Moved `Logo` and `Spinner` components to `@virn/ui`
 - **Mail package**: Restructured directory layout (removed `src/`), removed Logo component and custom provider
 - **Payments package**: Moved helper utilities from `src/lib/` to `lib/`
 - **Mail preview app**: New `apps/mail-preview` application added for email previewing
@@ -500,7 +500,7 @@ Documentation has been moved from the web app to a standalone Next.js applicatio
 1. If you have custom docs content, migrate it to `apps/docs/content/docs/`
 2. Update any links pointing to `/docs/*` routes - docs are now served from the separate app
 3. Remove any imports of `TableOfContents` component
-4. Run `pnpm dev` in the `apps/docs` directory to start the docs server (or use `pnpm --filter @repo/docs dev`)
+4. Run `pnpm dev` in the `apps/docs` directory to start the docs server (or use `pnpm --filter @virn/docs dev`)
 5. Update any CI/CD pipelines that build or deploy docs
 
 #### UI components moved to packages
@@ -517,17 +517,17 @@ All UI components have been moved from the web app to a shared package for bette
 **New structure:**
 
 - Created `packages/ui` package containing all UI components
-- Components now imported from `@repo/ui/components/[component-name]`
-- Shared utilities (like `cn`) available from `@repo/ui`
+- Components now imported from `@virn/ui/components/[component-name]`
+- Shared utilities (like `cn`) available from `@virn/ui`
 - `components.json` moved to `packages/ui/components.json`
 - Package includes all Radix UI dependencies and styling utilities
 
 **Migration steps:**
 
-1. Update all imports from `apps/web/modules/ui/components/*` to `@repo/ui/components/*`
-2. Update imports of `cn` utility from `apps/web/modules/ui` to `@repo/ui`
+1. Update all imports from `apps/web/modules/ui/components/*` to `@virn/ui/components/*`
+2. Update imports of `cn` utility from `apps/web/modules/ui` to `@virn/ui`
 3. Remove any references to `components.json` in the web app
-4. Install `@repo/ui` as a dependency if using UI components in other packages
+4. Install `@virn/ui` as a dependency if using UI components in other packages
 5. Update TypeScript path aliases if you had custom ones pointing to the old location
 
 #### Configuration restructuring
@@ -541,7 +541,7 @@ The centralized config package has been removed in favor of scoped configuration
   - `config/package.json`
   - `config/tsconfig.json`
   - `config/types.ts`
-- All imports from `@repo/config` or `config` will fail
+- All imports from `@virn/config` or `config` will fail
 - Config is now scoped to individual packages
 
 **New structure:**
@@ -558,9 +558,9 @@ The centralized config package has been removed in favor of scoped configuration
 
 **Migration steps:**
 
-1. Update imports from `@repo/config` or `config` to package-specific configs:
+1. Update imports from `@virn/config` or `config` to package-specific configs:
    - `import { config } from "@config"` for web app
-   - `import { config as i18nConfig } from "@repo/i18n/config"` for package configs
+   - `import { config as i18nConfig } from "@virn/i18n/config"` for package configs
 2. Update any code referencing the old config package structure
 3. Review each package's config file to understand what configuration is available
 4. Update environment variable usage if config structure changed
@@ -577,8 +577,8 @@ Removed unused shared components that are now available in the UI package.
 
 **Migration steps:**
 
-1. Replace any imports of `Logo` from `@shared/components/Logo` - Logo is now available from `@repo/ui`
-2. Replace any imports of `Spinner` - use skeleton components from `@repo/ui` instead
+1. Replace any imports of `Logo` from `@shared/components/Logo` - Logo is now available from `@virn/ui`
+2. Replace any imports of `Spinner` - use skeleton components from `@virn/ui` instead
 3. Update any custom code that imports these components
 
 #### Mail package restructuring
@@ -587,7 +587,7 @@ Mail package has been restructured with a flatter directory structure and improv
 
 **Breaking changes:**
 
-- Removed `packages/mail/src/components/Logo.tsx` (use `@repo/ui` instead)
+- Removed `packages/mail/src/components/Logo.tsx` (use `@virn/ui` instead)
 - Removed `packages/mail/src/provider/custom.ts` provider
 - Restructured mail package directory layout:
   - `src/components/` → `components/` (PrimaryButton, Wrapper moved)
@@ -605,9 +605,9 @@ Mail package has been restructured with a flatter directory structure and improv
 
 **Migration steps:**
 
-1. If using the Logo component in mail templates, import from `@repo/ui` instead:
+1. If using the Logo component in mail templates, import from `@virn/ui` instead:
    ```typescript
-   import { Logo } from "@repo/ui";
+   import { Logo } from "@virn/ui";
    ```
 2. If using custom mail provider, migrate to one of the supported providers:
    - Resend
@@ -659,9 +659,9 @@ All components and modules have been updated to use the new import paths through
 
 1. Run `pnpm install` to ensure all workspace dependencies are linked correctly
 2. Update any custom code using old import paths:
-   - `apps/web/modules/ui/*` → `@repo/ui/*`
-   - `@repo/config` → package-specific configs
-   - `@shared/components/Logo` → `@repo/ui`
+   - `apps/web/modules/ui/*` → `@virn/ui/*`
+   - `@virn/config` → package-specific configs
+   - `@shared/components/Logo` → `@virn/ui`
 3. Run type checking: `pnpm type-check` to identify any remaining import issues
 4. Update any custom scripts or build tools that reference old paths
 
@@ -717,11 +717,11 @@ Package dependencies have been updated to reflect the new architecture.
 
 **Changes:**
 
-- Added `@repo/ui` as a workspace dependency where needed
+- Added `@virn/ui` as a workspace dependency where needed
 - Updated `pnpm-lock.yaml` with new workspace structure (2760+ lines changed)
 - Removed dependencies on deleted `config` package
 - Updated all package `package.json` files to reflect new structure
-- Added `@repo/docs` workspace package
+- Added `@virn/docs` workspace package
 - Updated tooling packages (scripts, tailwind, typescript) with new dependencies
 - Updated i18n translations (en.json, de.json) with new messages
 
@@ -729,7 +729,7 @@ Package dependencies have been updated to reflect the new architecture.
 
 1. Run `pnpm install` to ensure all workspace dependencies are linked correctly
 2. Verify workspace structure with `pnpm list --depth=0`
-3. Check for any remaining references to `@repo/config` in `package.json` files
+3. Check for any remaining references to `@virn/config` in `package.json` files
 
 #### Monorepo organization improvements
 
@@ -759,7 +759,7 @@ The monorepo structure has been improved for better organization and maintainabi
 
 - Updated `agents.md` to reflect new architecture and import paths
 - Updated coding guidelines to reference new package structure
-- Updated import examples to use new `@repo/ui` package
+- Updated import examples to use new `@virn/ui` package
 
 **Configuration:**
 

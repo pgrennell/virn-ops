@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useSession } from "@auth/hooks/use-session";
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";
-import { config as authConfig } from "@repo/auth/config";
-import { config as paymentsConfig } from "@repo/payments/config";
+import { config as authConfig } from "@virn/auth/config";
+import { config as paymentsConfig } from "@virn/payments/config";
 import {
 	Button,
 	cn,
@@ -18,13 +18,13 @@ import {
 	SheetHeader,
 	SheetTitle,
 	SheetTrigger,
-} from "@repo/ui";
+} from "@virn/ui";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
-} from "@repo/ui/components/tooltip";
+} from "@virn/ui/components/tooltip";
 import { NotificationCenter } from "@shared/components/NotificationCenter";
 import { UserMenu } from "@shared/components/UserMenu";
 import {

@@ -1,11 +1,11 @@
-import { onError } from "@orpc/client";
+﻿import { onError } from "@orpc/client";
 import { SmartCoercionPlugin } from "@orpc/json-schema";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
 import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { auth } from "@repo/auth";
-import { logger } from "@repo/logs";
+import { auth } from "@virn/auth";
+import { logger } from "@virn/logs";
 
 import { router } from "./router";
 
@@ -34,7 +34,7 @@ export const openApiHandler = new OpenAPIHandler(router, {
 				return {
 					...(authSchema as any),
 					info: {
-						title: "supastarter API",
+						title: "Virn Ops API",
 						version: "1.0.0",
 					},
 					servers: [

@@ -1,6 +1,6 @@
-import { getSession } from "@auth/lib/server";
-import { config } from "@repo/auth/config";
-import { Logo } from "@repo/ui";
+﻿import { getSession } from "@auth/lib/server";
+import { config } from "@virn/auth/config";
+import { Logo } from "@virn/ui";
 import { SettingsMenu } from "@settings/components/SettingsMenu";
 import { PageHeader } from "@shared/components/PageHeader";
 import { Building2Icon, UsersIcon } from "lucide-react";

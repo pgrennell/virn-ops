@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import { useSession } from "@auth/hooks/use-session";
 import { sessionQueryKey } from "@auth/lib/api";
 import { config } from "@config";
-import { authClient } from "@repo/auth/client";
-import { Button } from "@repo/ui/components/button";
-import { Skeleton } from "@repo/ui/components/skeleton";
-import { toastSuccess } from "@repo/ui/components/toast";
+import { authClient } from "@virn/auth/client";
+import { Button } from "@virn/ui/components/button";
+import { Skeleton } from "@virn/ui/components/skeleton";
+import { toastSuccess } from "@virn/ui/components/toast";
 import { SettingsItem } from "@shared/components/SettingsItem";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ComputerIcon, XIcon } from "lucide-react";

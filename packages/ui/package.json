@@ -1,5 +1,5 @@
-{
-	"name": "@repo/ui",
+﻿{
+	"name": "@virn/ui",
 	"version": "0.0.0",
 	"main": "./index.ts",
 	"scripts": {
@@ -21,7 +21,7 @@
 		"tailwind-merge": "catalog:"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@types/react": "catalog:",
 		"@types/react-dom": "catalog:",
 		"typescript": "catalog:"

@@ -1,12 +1,12 @@
-import { useOrganizationMemberRoleOptions } from "@organizations/hooks/member-roles";
-import type { OrganizationMemberRole } from "@repo/auth";
+﻿import { useOrganizationMemberRoleOptions } from "@organizations/hooks/member-roles";
+import type { OrganizationMemberRole } from "@virn/auth";
 import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@repo/ui/components/select";
+} from "@virn/ui/components/select";
 
 export function OrganizationRoleSelect({
 	value,

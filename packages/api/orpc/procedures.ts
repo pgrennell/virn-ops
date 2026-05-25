@@ -1,5 +1,5 @@
-import { ORPCError, os } from "@orpc/server";
-import { auth } from "@repo/auth";
+﻿import { ORPCError, os } from "@orpc/server";
+import { auth } from "@virn/auth";
 
 export const publicProcedure = os.$context<{
 	headers: Headers;

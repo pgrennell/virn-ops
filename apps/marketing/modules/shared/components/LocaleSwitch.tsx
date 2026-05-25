@@ -1,15 +1,15 @@
-"use client";
+﻿"use client";
 
 import { useLocalePathname, useLocaleRouter } from "@i18n/routing";
-import { config as i18nConfig } from "@repo/i18n";
-import { Button } from "@repo/ui/components/button";
+import { config as i18nConfig } from "@virn/i18n";
+import { Button } from "@virn/ui/components/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
+} from "@virn/ui/components/dropdown-menu";
 import { LanguagesIcon } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";

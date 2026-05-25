@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { usePlanData } from "@payments/hooks/plan-data";
 import { usePurchases } from "@payments/hooks/purchases";
-import { Badge } from "@repo/ui/components/badge";
+import { Badge } from "@virn/ui/components/badge";
 
 export function ActivePlanBadge({ organizationId }: { organizationId?: string }) {
 	const { planData } = usePlanData();

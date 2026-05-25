@@ -1,6 +1,6 @@
-import { createORPCClient, onError } from "@orpc/client";
+﻿import { createORPCClient, onError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
-import type { ApiRouterClient } from "@repo/api/orpc/router";
+import type { ApiRouterClient } from "@virn/api/orpc/router";
 
 const link = new RPCLink({
 	url: () => {

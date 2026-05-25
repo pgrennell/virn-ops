@@ -1,5 +1,5 @@
-"use client";
-import { cn } from "@repo/ui";
+﻿"use client";
+import { cn } from "@virn/ui";
 import { buttonVariants } from "fumadocs-ui/components/ui/button";
 import { useCopyButton } from "fumadocs-ui/utils/use-copy-button";
 import { Check, Copy } from "lucide-react";

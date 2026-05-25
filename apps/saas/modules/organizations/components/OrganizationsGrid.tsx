@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import { OrganizationLogo } from "@organizations/components/OrganizationLogo";
 import { useActiveOrganization } from "@organizations/hooks/use-active-organization";
 import { useOrganizationListQuery } from "@organizations/lib/api";
-import { config } from "@repo/auth/config";
-import { Card } from "@repo/ui/components/card";
+import { config } from "@virn/auth/config";
+import { Card } from "@virn/ui/components/card";
 import { ChevronRightIcon, PlusCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";

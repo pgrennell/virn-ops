@@ -1,12 +1,12 @@
-import { createHmac } from "node:crypto";
+﻿import { createHmac } from "node:crypto";
 
 import {
 	createPurchase,
 	deletePurchaseBySubscriptionId,
 	getPurchaseBySubscriptionId,
 	updatePurchase,
-} from "@repo/database";
-import { logger } from "@repo/logs";
+} from "@virn/database";
+import { logger } from "@virn/logs";
 import { joinURL } from "ufo";
 
 import { getPlanIdByProviderPriceId } from "../../lib/provider-price-ids";

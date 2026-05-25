@@ -1,9 +1,9 @@
-import { getOrganizationList, getSession } from "@auth/lib/server";
+﻿import { getOrganizationList, getSession } from "@auth/lib/server";
 import { PricingTable } from "@payments/components/PricingTable";
 import { listPurchases } from "@payments/lib/server";
-import { config as authConfig } from "@repo/auth/config";
-import { config as paymentsConfig } from "@repo/payments/config";
-import { createPurchasesHelper } from "@repo/payments/lib/helper";
+import { config as authConfig } from "@virn/auth/config";
+import { config as paymentsConfig } from "@virn/payments/config";
+import { createPurchasesHelper } from "@virn/payments/lib/helper";
 import { AuthWrapper } from "@shared/components/AuthWrapper";
 import { getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";

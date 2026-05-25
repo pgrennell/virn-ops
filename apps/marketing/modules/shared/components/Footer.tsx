@@ -1,6 +1,6 @@
-import { config } from "@config";
+﻿import { config } from "@config";
 import { LocaleLink } from "@i18n/routing";
-import { Logo } from "@repo/ui";
+import { Logo } from "@virn/ui";
 import { useTranslations } from "next-intl";
 
 export function Footer() {
@@ -11,10 +11,7 @@ export function Footer() {
 			<div className="gap-6 lg:grid-cols-3 container grid grid-cols-1">
 				<div>
 					<Logo className="opacity-70 grayscale" />
-					<p className="mt-3 text-sm opacity-70">
-						© {new Date().getFullYear()} {config.appName}.{" "}
-						<a href="https://supastarter.dev">{t("common.footer.builtWith")}</a>.
-					</p>
+					<p className="mt-3 text-sm opacity-70">© {new Date().getFullYear()} {config.appName}.</p>
 				</div>
 
 				<div className="gap-2 flex flex-col">

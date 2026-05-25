@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useChat } from "@ai-sdk/react";
 import { eventIteratorToStream } from "@orpc/client";
-import { cn } from "@repo/ui";
-import { Button } from "@repo/ui/components/button";
-import { Textarea } from "@repo/ui/components/textarea";
-import { toastError } from "@repo/ui/components/toast";
+import { cn } from "@virn/ui";
+import { Button } from "@virn/ui/components/button";
+import { Textarea } from "@virn/ui/components/textarea";
+import { toastError } from "@virn/ui/components/toast";
 import { orpcClient } from "@shared/lib/orpc-client";
 import {
 	ArrowUpIcon,

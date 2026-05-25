@@ -1,11 +1,11 @@
-import { withContentCollections } from "@content-collections/next";
+﻿import { withContentCollections } from "@content-collections/next";
 import type { NextConfig } from "next";
 import nextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = nextIntlPlugin("./modules/i18n/request.ts");
 
 const nextConfig: NextConfig = {
-	transpilePackages: ["@repo/i18n", "@repo/ui"],
+	transpilePackages: ["@virn/i18n", "@virn/ui"],
 	images: {
 		remotePatterns: [
 			{

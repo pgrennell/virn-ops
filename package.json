@@ -1,5 +1,5 @@
-{
-	"name": "supastarter-nextjs",
+﻿{
+	"name": "virn-ops",
 	"private": true,
 	"scripts": {
 		"build": "dotenv -c -- turbo build",
@@ -17,7 +17,7 @@
 		"oxlint-tsgolint": "^0.22.1"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@types/node": "catalog:",
 		"dotenv-cli": "catalog:",
 		"oxfmt": "catalog:",

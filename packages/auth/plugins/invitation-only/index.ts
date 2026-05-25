@@ -1,4 +1,4 @@
-import { getPendingInvitationByEmail } from "@repo/database";
+﻿import { getPendingInvitationByEmail } from "@virn/database";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 

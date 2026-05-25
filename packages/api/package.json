@@ -1,5 +1,5 @@
-{
-	"name": "@repo/api",
+﻿{
+	"name": "@virn/api",
 	"version": "0.0.0",
 	"main": "./index.ts",
 	"scripts": {
@@ -15,22 +15,22 @@
 		"@orpc/openapi": "catalog:",
 		"@orpc/server": "catalog:",
 		"@orpc/zod": "catalog:",
-		"@repo/ai": "workspace:*",
-		"@repo/auth": "workspace:*",
-		"@repo/database": "workspace:*",
-		"@repo/i18n": "workspace:*",
-		"@repo/logs": "workspace:*",
-		"@repo/notifications": "workspace:*",
-		"@repo/payments": "workspace:*",
-		"@repo/storage": "workspace:*",
-		"@repo/utils": "workspace:*",
+		"@virn/ai": "workspace:*",
+		"@virn/auth": "workspace:*",
+		"@virn/database": "workspace:*",
+		"@virn/i18n": "workspace:*",
+		"@virn/logs": "workspace:*",
+		"@virn/notifications": "workspace:*",
+		"@virn/payments": "workspace:*",
+		"@virn/storage": "workspace:*",
+		"@virn/utils": "workspace:*",
 		"@sindresorhus/slugify": "catalog:",
 		"hono": "catalog:",
 		"nanoid": "catalog:",
 		"zod": "catalog:"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*",
+		"@virn/tsconfig": "workspace:*",
 		"@vitest/coverage-v8": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

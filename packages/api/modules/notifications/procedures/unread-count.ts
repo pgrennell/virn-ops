@@ -1,4 +1,4 @@
-import { countUnreadNotificationsForUser } from "@repo/notifications";
+﻿import { countUnreadNotificationsForUser } from "@virn/notifications";
 
 import { protectedProcedure } from "../../../orpc/procedures";
 

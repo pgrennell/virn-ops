@@ -1,14 +1,14 @@
-import { ORPCError } from "@orpc/client";
+﻿import { ORPCError } from "@orpc/client";
 import { call } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@repo/auth", () => ({
+vi.mock("@virn/auth", () => ({
 	auth: {
 		api: { getSession: vi.fn() },
 	},
 }));
 
-vi.mock("@repo/database", () => ({
+vi.mock("@virn/database", () => ({
 	getOrganizationBySlug: vi.fn(),
 }));
 
@@ -16,7 +16,7 @@ vi.mock("nanoid", () => ({
 	nanoid: vi.fn(() => "abc12"),
 }));
 
-import { getOrganizationBySlug } from "@repo/database";
+import { getOrganizationBySlug } from "@virn/database";
 
 import { generateOrganizationSlug } from "./generate-organization-slug";
 

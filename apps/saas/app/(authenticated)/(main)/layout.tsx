@@ -1,8 +1,8 @@
-import { getOrganizationList, getSession } from "@auth/lib/server";
-import { listPurchases } from "@repo/api/modules/payments/procedures/list-purchases";
-import { config as authConfig } from "@repo/auth/config";
-import { config as paymentsConfig } from "@repo/payments/config";
-import { createPurchasesHelper } from "@repo/payments/lib/helper";
+﻿import { getOrganizationList, getSession } from "@auth/lib/server";
+import { listPurchases } from "@virn/api/modules/payments/procedures/list-purchases";
+import { config as authConfig } from "@virn/auth/config";
+import { config as paymentsConfig } from "@virn/payments/config";
+import { createPurchasesHelper } from "@virn/payments/lib/helper";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PropsWithChildren } from "react";
