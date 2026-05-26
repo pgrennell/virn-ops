@@ -1,4 +1,9 @@
-import { getPurchasesByOrganizationId, getPurchasesByUserId } from "@virn/database";
+import { ORPCError } from "@orpc/client";
+import {
+	getOrganizationMembership,
+	getPurchasesByOrganizationId,
+	getPurchasesByUserId,
+} from "@virn/database";
 import { getPlanIdByProviderPriceId, getPlanPriceByProviderPriceId } from "@virn/payments";
 import { z } from "zod";
 
@@ -18,6 +23,16 @@ export const listPurchases = protectedProcedure
 		}),
 	)
 	.handler(async ({ input: { organizationId }, context: { user } }) => {
+		// Dual-mode billing (AUTH_CONTRACT.md §5.2): when org-attached, the caller
+		// passes `organizationId` and we must verify membership; when user-attached
+		// the input is empty and we fall back to user-scoped purchases.
+		if (organizationId) {
+			const membership = await getOrganizationMembership(organizationId, user.id);
+			if (!membership) {
+				throw new ORPCError("FORBIDDEN");
+			}
+		}
+
 		const purchases = organizationId
 			? await getPurchasesByOrganizationId(organizationId)
 			: await getPurchasesByUserId(user.id);

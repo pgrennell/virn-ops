@@ -1,6 +1,6 @@
 import { ORPCError } from "@orpc/client";
 import { call } from "@orpc/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@virn/auth", () => ({
 	auth: {
@@ -16,15 +16,35 @@ vi.mock("nanoid", () => ({
 	nanoid: vi.fn(() => "abc12"),
 }));
 
+import { auth } from "@virn/auth";
 import { getOrganizationBySlug } from "@virn/database";
 
 import { generateOrganizationSlug } from "./generate-organization-slug";
 
 const ctx = { context: { headers: new Headers() } };
 
+const mockSession = {
+	session: { id: "session-1", userId: "user-1", token: "tok", expiresAt: new Date() },
+	user: { id: "user-1", email: "u@example.com", name: "U", emailVerified: true },
+};
+
 describe("generateOrganizationSlug", () => {
+	beforeEach(() => {
+		// Procedure is now gated by protectedProcedure (AUTH_CONTRACT.md §7.3).
+		// Provide a valid session for the happy paths.
+		vi.mocked(auth.api.getSession).mockResolvedValue(mockSession as never);
+	});
+
 	it("is defined", () => {
 		expect(generateOrganizationSlug).toBeDefined();
+	});
+
+	it("throws UNAUTHORIZED when the caller has no session", async () => {
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+
+		await expect(
+			call(generateOrganizationSlug, { name: "My Org" }, ctx),
+		).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 	});
 
 	it("returns a slugified version of the name when slug is available", async () => {

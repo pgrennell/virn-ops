@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { localeMiddleware } from "../../../orpc/middleware/locale-middleware";
 import { protectedProcedure } from "../../../orpc/procedures";
+import { assertSameOriginRedirect } from "../lib/validate-redirect-url";
 
 export const createCustomerPortalLink = protectedProcedure
 	.use(localeMiddleware)
@@ -24,6 +25,8 @@ export const createCustomerPortalLink = protectedProcedure
 		}),
 	)
 	.handler(async ({ input: { purchaseId, redirectUrl }, context: { user } }) => {
+		assertSameOriginRedirect(redirectUrl);
+
 		const purchase = await getPurchaseById(purchaseId);
 
 		if (!purchase) {

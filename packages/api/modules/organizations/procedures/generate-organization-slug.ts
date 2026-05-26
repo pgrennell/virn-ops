@@ -4,9 +4,13 @@ import slugify from "@sindresorhus/slugify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
-import { publicProcedure } from "../../../orpc/procedures";
+import { protectedProcedure } from "../../../orpc/procedures";
 
-export const generateOrganizationSlug = publicProcedure
+// Gated behind protectedProcedure: this endpoint exposes whether an org slug is
+// already taken, which would enumerate customer namespaces if left public. All
+// call sites today are inside the authenticated app shell (create-org and
+// update-org flows). See AUTH_CONTRACT.md §7.3.
+export const generateOrganizationSlug = protectedProcedure
 	.route({
 		method: "GET",
 		path: "/organizations/generate-slug",

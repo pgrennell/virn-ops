@@ -18,13 +18,11 @@ export const listUsers = adminProcedure
 		}),
 	)
 	.handler(async ({ input: { query, limit, offset } }) => {
-		const users = await getUsers({
-			limit,
-			offset,
-			query,
-		});
-
-		const total = await countAllUsers({ query });
+		// Parallelize — the page query and the count query are independent.
+		const [users, total] = await Promise.all([
+			getUsers({ limit, offset, query }),
+			countAllUsers({ query }),
+		]);
 
 		return { users, total };
 	});
