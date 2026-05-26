@@ -2,6 +2,7 @@ import { passkey } from "@better-auth/passkey";
 import {
 	db,
 	getInvitationById,
+	getOrganizationMembership,
 	getPurchasesByOrganizationId,
 	getPurchasesByUserId,
 	getUserByEmail,
@@ -15,7 +16,7 @@ import { cancelSubscription } from "@virn/payments";
 import { getBaseUrl } from "@virn/utils";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { admin, magicLink, openAPI, organization, twoFactor, username } from "better-auth/plugins";
 import { parse as parseCookies } from "cookie";
 
@@ -43,7 +44,11 @@ export const auth = betterAuth({
 	},
 	session: {
 		expiresIn: config.sessionCookieMaxAge,
-		freshAge: 0,
+		// 1 day. Any endpoint that opts into Better Auth's "fresh session" check
+		// (typically used for sensitive ops like change-password, change-email,
+		// delete-user) refuses sessions older than this without re-auth. The prior
+		// value of 0 made every session "fresh" indefinitely. See AUTH_CONTRACT.md §7.2.
+		freshAge: 60 * 60 * 24,
 	},
 	databaseHooks: {
 		session: {
@@ -110,27 +115,48 @@ export const auth = betterAuth({
 			}
 		}),
 		before: createAuthMiddleware(async (ctx) => {
-			if (ctx.path.startsWith("/delete-user") || ctx.path.startsWith("/organization/delete")) {
-				const userId = ctx.context.session?.session.userId;
-				const { organizationId } = ctx.body;
+			// Subscription cancellation runs in `before` (not `after`) because the
+			// `purchase` table cascade-deletes with user/organization — the rows are
+			// gone by the time `after` fires. To close the original "malformed request
+			// nukes subs" gap (AUTH_CONTRACT.md §7.5), we explicitly authorize the
+			// caller HERE before any cancellation side-effect.
 
-				if (userId || organizationId) {
-					const purchases = organizationId
-						? await getPurchasesByOrganizationId(organizationId)
-						: // oxlint-disable-next-line typescript/no-non-null-assertion -- This is a valid case
-							await getPurchasesByUserId(userId!);
-					const subscriptions = purchases.filter(
-						(purchase) => purchase.type === "SUBSCRIPTION" && purchase.subscriptionId !== null,
-					);
+			if (!ctx.path.startsWith("/delete-user") && !ctx.path.startsWith("/organization/delete")) {
+				return;
+			}
 
-					if (subscriptions.length > 0) {
-						for (const subscription of subscriptions) {
-							await cancelSubscription(
-								// oxlint-disable-next-line typescript/no-non-null-assertion -- This is a valid case
-								subscription.subscriptionId!,
-							);
-						}
-					}
+			const userId = ctx.context.session?.session.userId;
+			if (!userId) {
+				throw new APIError("UNAUTHORIZED", {
+					message: "Authentication required to cancel subscriptions on delete.",
+				});
+			}
+
+			const organizationId = ctx.body?.organizationId as string | undefined;
+
+			if (organizationId) {
+				// Org delete: caller must be the owner. Better Auth's org plugin
+				// enforces this internally, but we re-check here so the cancellation
+				// can't fire on a request that the plugin would later reject.
+				const membership = await getOrganizationMembership(organizationId, userId);
+				if (!membership || membership.role !== "owner") {
+					throw new APIError("FORBIDDEN", {
+						message: "Only the organization owner can delete the organization.",
+					});
+				}
+			}
+
+			const purchases = organizationId
+				? await getPurchasesByOrganizationId(organizationId)
+				: await getPurchasesByUserId(userId);
+
+			const subscriptions = purchases.filter(
+				(purchase) => purchase.type === "SUBSCRIPTION" && purchase.subscriptionId !== null,
+			);
+
+			for (const subscription of subscriptions) {
+				if (subscription.subscriptionId) {
+					await cancelSubscription(subscription.subscriptionId);
 				}
 			}
 		}),
@@ -222,7 +248,11 @@ export const auth = betterAuth({
 		admin(),
 		passkey(),
 		magicLink({
-			disableSignUp: false,
+			// Tie magic-link auto-signup to the global signup toggle. When
+			// `config.enableSignup === false` (invitation-only mode), magic-links to
+			// unknown emails fail instead of silently provisioning accounts — closing
+			// the invitation-only bypass described in AUTH_CONTRACT.md §7.4.
+			disableSignUp: !config.enableSignup,
 			sendMagicLink: async ({ email, url }, ctx) => {
 				const request = ctx?.request as Request;
 
