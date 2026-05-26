@@ -11,10 +11,10 @@
 		"@virn/i18n": "workspace:*",
 		"@virn/logs": "workspace:*",
 		"@virn/ui": "workspace:*",
-		"nodemailer": "^8.0.7",
+		"nodemailer": "^8.0.8",
 		"react": "catalog:",
 		"react-dom": "catalog:",
-		"react-email": "^6.1.4",
+		"react-email": "^6.3.2",
 		"resend": "^6.12.3",
 		"use-intl": "catalog:"
 	},
