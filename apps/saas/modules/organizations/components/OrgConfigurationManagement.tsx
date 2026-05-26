@@ -28,7 +28,7 @@ import { Skeleton } from "@virn/ui/components/skeleton";
 import { Spinner } from "@virn/ui/components/spinner";
 import { Switch } from "@virn/ui/components/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Profiles section
@@ -243,6 +243,16 @@ function SettingControl({
 	const [error, setError] = useState<string | null>(null);
 	const hasDraftChange = JSON.stringify(draft) !== JSON.stringify(setting.value);
 
+	// Sync local draft to the resolved setting value whenever the parent's query
+	// refetches with new data (e.g., after a successful save or clear-override
+	// invalidation). Without this, the local draft retains the previous value and
+	// the input visually lags the server until a manual reload. Trade-off: if a
+	// user is mid-edit and the parent updates from a parallel source, their
+	// in-flight draft is overwritten -- acceptable for single-admin-per-session use.
+	useEffect(() => {
+		setDraft(setting.value);
+	}, [setting.value]);
+
 	const save = async () => {
 		setError(null);
 		try {
@@ -335,7 +345,8 @@ function SettingControl({
 							setError(null);
 							try {
 								await onClear();
-								setDraft(setting.value);
+								// Draft re-syncs to the new (default) setting.value via the
+								// useEffect above once the parent's query refetches.
 							} catch (e) {
 								setError(e instanceof Error ? e.message : String(e));
 							}
