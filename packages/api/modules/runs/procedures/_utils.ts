@@ -24,6 +24,7 @@ const CODE_MAP: Record<RunEngineErrorCode, "NOT_FOUND" | "FORBIDDEN" | "BAD_REQU
 	STOP_TASK_BLOCKED: "BAD_REQUEST",
 	UNKNOWN_FIELD_KEY: "BAD_REQUEST",
 	FIELD_VALUE_INVALID: "BAD_REQUEST",
+	GUEST_TOKEN_INVALID: "FORBIDDEN",
 };
 
 /** Wraps a lib helper call so any RunEngineError becomes an ORPCError with a sensible

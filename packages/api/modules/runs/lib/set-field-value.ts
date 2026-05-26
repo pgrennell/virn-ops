@@ -25,7 +25,10 @@ import { RunEngineError } from "./errors";
 
 export interface SetFieldValueContext {
 	organizationId: string;
-	userId: string;
+	/** Better Auth user id; mutually exclusive with `participantId`. */
+	userId?: string;
+	/** Participant id when called via verified participant_token (guest path). */
+	participantId?: string;
 	isAdminOrOwner: boolean;
 }
 
@@ -71,7 +74,11 @@ export async function setRunFieldValue(
 			);
 		}
 		if (!ctx.isAdminOrOwner) {
-			const isAssignee = rs.assignees.some((a) => a.participant.userId === ctx.userId);
+			const isAssignee = rs.assignees.some((a) => {
+				if (ctx.participantId && a.participant.id === ctx.participantId) return true;
+				if (ctx.userId && a.participant.userId === ctx.userId) return true;
+				return false;
+			});
 			if (!isAssignee) {
 				throw new RunEngineError(
 					"RUN_STEP_ACCESS_DENIED",
@@ -157,12 +164,17 @@ export async function setRunFieldValue(
 		await writeAuditAndActivity(
 			{
 				organizationId: ctx.organizationId,
-				actorUserId: ctx.userId,
+				actorUserId: ctx.userId ?? null,
 				action: "field_value.set",
 				verb: "edited",
 				entityType: "field_value",
 				entityId: f.id,
-				changes: { runId, runStepId: input.runStepId ?? null, fieldKey: input.fieldKey },
+				changes: {
+					runId,
+					runStepId: input.runStepId ?? null,
+					fieldKey: input.fieldKey,
+					...(ctx.participantId ? { actorParticipantId: ctx.participantId } : {}),
+				},
 				activityData: { fieldKey: input.fieldKey, fieldLabel: f.label },
 			},
 			tx,

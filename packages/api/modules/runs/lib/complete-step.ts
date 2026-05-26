@@ -32,9 +32,14 @@ import { RunEngineError } from "./errors";
 
 export interface CompleteStepContext {
 	organizationId: string;
-	userId: string;
+	/** Better Auth user id of the calling user, when the call is internal. Mutually
+	 * exclusive with `participantId`. Set to `undefined` for guest calls. */
+	userId?: string;
+	/** Participant id of the calling guest, when the call is via a verified
+	 * participant_token. Mutually exclusive with `userId`. Guests are never admin/owner. */
+	participantId?: string;
 	/** True when the caller is an admin/owner of the active org; bypasses the assignee
-	 * check. (See product decision #1 in the Phase 3 plan.) */
+	 * check. (D-014.) Always `false` for guest contexts. */
 	isAdminOrOwner: boolean;
 }
 
@@ -72,11 +77,15 @@ export async function completeRunStep(
 		);
 	}
 
-	// Access: assignee OR admin/owner.
+	// Access: assignee OR admin/owner. Assignee can be matched either by the calling
+	// user's Better Auth id (internal path) or by participant id (guest path via verified
+	// token). Guests never have isAdminOrOwner = true.
 	if (!ctx.isAdminOrOwner) {
-		const isAssignee = rs.assignees.some(
-			(a) => a.participant.userId === ctx.userId,
-		);
+		const isAssignee = rs.assignees.some((a) => {
+			if (ctx.participantId && a.participant.id === ctx.participantId) return true;
+			if (ctx.userId && a.participant.userId === ctx.userId) return true;
+			return false;
+		});
 		if (!isAssignee) {
 			throw new RunEngineError(
 				"RUN_STEP_ACCESS_DENIED",
@@ -132,17 +141,21 @@ export async function completeRunStep(
 	// `WHERE status = 'active'` clause + boolean return prevents duplicate cascade audits
 	// when two concurrent calls both observe `areAllRequiredRunStepsComplete === true`.
 	const runCompleted = await withTransaction(async (tx) => {
-		await markRunStepCompleted({ runStepId, completedBy: ctx.userId }, tx);
+		await markRunStepCompleted({ runStepId, completedBy: ctx.userId ?? null }, tx);
 		await writeAuditAndActivity(
 			{
 				organizationId: ctx.organizationId,
-				actorUserId: ctx.userId,
+				actorUserId: ctx.userId ?? null,
 				action: "run_step.completed",
 				verb: "completed",
 				entityType: "run_step",
 				entityId: runStepId,
 				changes: { fromStatus: rs.status, toStatus: "completed" },
-				metadata: { runId: rs.run.id, workflowVersionId: rs.run.workflowVersionId },
+				metadata: {
+					runId: rs.run.id,
+					workflowVersionId: rs.run.workflowVersionId,
+					...(ctx.participantId ? { actorParticipantId: ctx.participantId } : {}),
+				},
 				activityData: { stepTitle: rs.title },
 			},
 			tx,
@@ -165,13 +178,16 @@ export async function completeRunStep(
 		await writeAuditAndActivity(
 			{
 				organizationId: ctx.organizationId,
-				actorUserId: ctx.userId,
+				actorUserId: ctx.userId ?? null,
 				action: "run.completed",
 				verb: "completed",
 				entityType: "run",
 				entityId: rs.run.id,
 				changes: { fromStatus: "active", toStatus: "completed" },
-				metadata: { triggeredByRunStepId: runStepId },
+				metadata: {
+					triggeredByRunStepId: runStepId,
+					...(ctx.participantId ? { actorParticipantId: ctx.participantId } : {}),
+				},
 				activityData: { reason: "all required steps complete" },
 			},
 			tx,

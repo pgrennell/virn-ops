@@ -18,6 +18,7 @@ import {
 	auditLog,
 	field,
 	fieldValue,
+	organization,
 	participant,
 	run,
 	runRoleAssignment,
@@ -328,6 +329,181 @@ export async function getDependenciesForRunSteps(
 }
 
 // ---------------------------------------------------------------------------
+// Guest run bundle (for tokenized guest access -- Phase 3.5)
+// ---------------------------------------------------------------------------
+//
+// Single narrowed read that returns ONLY the data a guest participant is allowed to see
+// for one run: the run header, the steps they're assigned to, step-scoped fields (NOT
+// kickoff), their values, plus the dependency rows needed to compute the `blocked` flag.
+// Nothing about other participants, other steps, kickoff fields, the workflow graph, or
+// org settings leaks through. The narrowing IS the security boundary -- transport-layer
+// bugs can't leak data we never fetched.
+//
+// Keeping this in @virn/database (not in @virn/api/lib) preserves the convention that
+// only the database package imports drizzle-orm primitives.
+
+export interface GuestRunBundle {
+	run: {
+		id: string;
+		title: string;
+		status: "active" | "completed" | "archived";
+		startedAt: Date;
+		dueAt: Date | null;
+		orgName: string;
+	};
+	steps: Array<{
+		id: string;
+		stepId: string | null;
+		title: string;
+		description: string | null;
+		status: "pending" | "completed" | "skipped" | "not_applicable";
+		dueAt: Date | null;
+	}>;
+	fields: Array<{
+		id: string;
+		stepId: string | null;
+		key: string;
+		label: string;
+		fieldType: FieldType;
+		config: Record<string, unknown> | null;
+		isRequired: boolean;
+		position: number;
+	}>;
+	values: Array<{
+		fieldId: string | null;
+		runStepId: string | null;
+		value: unknown;
+	}>;
+	dependencies: Array<{ stepId: string; dependsOnStepId: string }>;
+	dependeeStatuses: Array<{ stepId: string | null; status: string }>;
+}
+
+/** Return null when the run doesn't exist or doesn't match the participant's org. The
+ * caller (`getRunForGuest` in api lib) treats null as `GUEST_TOKEN_INVALID`. */
+export async function getGuestRunBundle(input: {
+	organizationId: string;
+	participantId: string;
+	runId: string;
+}): Promise<GuestRunBundle | null> {
+	const runRows = await db
+		.select({
+			id: run.id,
+			title: run.title,
+			status: run.status,
+			startedAt: run.startedAt,
+			dueAt: run.dueAt,
+			orgName: organization.name,
+		})
+		.from(run)
+		.innerJoin(organization, eq(organization.id, run.organizationId))
+		.where(and(eq(run.id, input.runId), eq(run.organizationId, input.organizationId)))
+		.limit(1);
+	const r = runRows[0];
+	if (!r) return null;
+
+	const steps = await db
+		.select({
+			id: runStep.id,
+			stepId: runStep.stepId,
+			title: runStep.title,
+			description: runStep.description,
+			status: runStep.status,
+			dueAt: runStep.dueAt,
+		})
+		.from(runStepAssignee)
+		.innerJoin(runStep, eq(runStep.id, runStepAssignee.runStepId))
+		.where(
+			and(
+				eq(runStepAssignee.participantId, input.participantId),
+				eq(runStep.runId, input.runId),
+			),
+		);
+
+	if (steps.length === 0) {
+		return {
+			run: r,
+			steps: [],
+			fields: [],
+			values: [],
+			dependencies: [],
+			dependeeStatuses: [],
+		};
+	}
+
+	const defStepIds = steps.map((s) => s.stepId).filter((id): id is string => id !== null);
+	const runStepIds = steps.map((s) => s.id);
+
+	const [dependencies, fields, values] = await Promise.all([
+		defStepIds.length
+			? db
+					.select({
+						stepId: stepDependency.stepId,
+						dependsOnStepId: stepDependency.dependsOnStepId,
+					})
+					.from(stepDependency)
+					.where(inArray(stepDependency.stepId, defStepIds))
+			: Promise.resolve([] as Array<{ stepId: string; dependsOnStepId: string }>),
+		defStepIds.length
+			? db
+					.select({
+						id: field.id,
+						stepId: field.stepId,
+						key: field.key,
+						label: field.label,
+						fieldType: field.fieldType,
+						config: field.config,
+						isRequired: field.isRequired,
+						position: field.position,
+					})
+					.from(field)
+					.where(inArray(field.stepId, defStepIds))
+			: Promise.resolve(
+					[] as Array<{
+						id: string;
+						stepId: string | null;
+						key: string;
+						label: string;
+						fieldType: FieldType;
+						config: Record<string, unknown> | null;
+						isRequired: boolean;
+						position: number;
+					}>,
+				),
+		runStepIds.length
+			? db
+					.select({
+						fieldId: fieldValue.fieldId,
+						runStepId: fieldValue.runStepId,
+						value: fieldValue.value,
+					})
+					.from(fieldValue)
+					.where(inArray(fieldValue.runStepId, runStepIds))
+			: Promise.resolve(
+					[] as Array<{ fieldId: string | null; runStepId: string | null; value: unknown }>,
+				),
+	]);
+
+	const dependeeStepIds = [...new Set(dependencies.map((d) => d.dependsOnStepId))];
+	const dependeeStatuses = dependeeStepIds.length
+		? await db
+				.select({ stepId: runStep.stepId, status: runStep.status })
+				.from(runStep)
+				.where(
+					and(eq(runStep.runId, input.runId), inArray(runStep.stepId, dependeeStepIds)),
+				)
+		: [];
+
+	return {
+		run: r,
+		steps,
+		fields,
+		values,
+		dependencies,
+		dependeeStatuses,
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Field-value mutator (for setFieldValue)
 // ---------------------------------------------------------------------------
 
@@ -450,12 +626,14 @@ export async function findIncompleteStopDependencies(
 	return depStepIds.filter((id) => !completedSet.has(id));
 }
 
-/** Mark a runStep completed. No-op if already completed (caller should check first to
- * avoid duplicate audit/activity writes). */
+/** Mark a runStep completed. `completedBy` is nullable -- a guest participant has no
+ * Better Auth user id; the actor's identity for guests is captured in audit/activity
+ * metadata (participantId) instead. No-op if already completed (caller should check
+ * first to avoid duplicate audit/activity writes). */
 export async function markRunStepCompleted(
 	input: {
 		runStepId: string;
-		completedBy: string;
+		completedBy: string | null;
 	},
 	executor: DbExecutor = db,
 ): Promise<void> {
@@ -517,7 +695,9 @@ export async function markRunCompleted(
 export async function writeAuditAndActivity(
 	input: {
 		organizationId: string;
-		actorUserId: string;
+		/** `null` when the actor is a guest participant (no Better Auth user). For guest
+		 * actions, encode the participantId in `metadata` so the row is still attributable. */
+		actorUserId: string | null;
 		action: string; // for audit_log
 		verb: string; // for activity_event
 		entityType:

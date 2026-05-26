@@ -229,3 +229,54 @@ export const fieldValueRelations = relations(fieldValue, ({ one }) => ({
   }),
   field: one(field, { fields: [fieldValue.fieldId], references: [field.id] }),
 }));
+
+// Tokenized guest access (UX_SPEC §5.4, DECISIONS.md D-016 + Phase 3.5 plan).
+//
+// A `participant_token` lets an external participant (a `participant` row whose `userId`
+// is null and `guestEmail` is set) reach a narrowed Run view at /run-guest/ with no
+// Better Auth session. The token's plaintext lives only in the URL fragment sent to the
+// guest -- never written to disk on our side. We store an HMAC-SHA256 hex of it, keyed by
+// a stable server-side `PARTICIPANT_TOKEN_SECRET`. Determinism (`tokenHash` is a function
+// of plaintext + secret) is what makes the WHERE-by-hash lookup O(1); the secret is what
+// makes a DB-only leak insufficient to forge tokens.
+//
+// Rotating PARTICIPANT_TOKEN_SECRET invalidates every outstanding link by design -- treat
+// as a stable, long-lived signing key. Soft-revoke (`revokedAt` set) preserves audit.
+export const participantToken = pgTable(
+  "participant_token",
+  {
+    id: id(),
+    organizationId: orgId(),
+    participantId: text("participant_id")
+      .notNull()
+      .references(() => participant.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    lastUsedAt: timestamp("last_used_at"),
+    revokedAt: timestamp("revoked_at"),
+    issuedByUserId: text("issued_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps,
+  },
+  (t) => [
+    unique("uq_participant_token_hash").on(t.tokenHash),
+    index("idx_participant_token_org").on(t.organizationId),
+    index("idx_participant_token_participant").on(t.participantId),
+    check(
+      "participant_token_expires_after_created",
+      sql`${t.expiresAt} > ${t.createdAt}`,
+    ),
+  ],
+);
+
+export const participantTokenRelations = relations(participantToken, ({ one }) => ({
+  participant: one(participant, {
+    fields: [participantToken.participantId],
+    references: [participant.id],
+  }),
+  issuedBy: one(user, {
+    fields: [participantToken.issuedByUserId],
+    references: [user.id],
+  }),
+}));

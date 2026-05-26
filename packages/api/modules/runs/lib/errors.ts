@@ -19,7 +19,8 @@ export type RunEngineErrorCode =
 	| "REQUIRED_FIELD_UNFILLED"
 	| "STOP_TASK_BLOCKED"
 	| "UNKNOWN_FIELD_KEY"
-	| "FIELD_VALUE_INVALID";
+	| "FIELD_VALUE_INVALID"
+	| "GUEST_TOKEN_INVALID";
 
 export class RunEngineError extends Error {
 	readonly code: RunEngineErrorCode;
