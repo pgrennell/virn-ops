@@ -11,7 +11,9 @@
 		"clean": "turbo clean",
 		"test": "dotenv -c -- turbo test",
 		"format": "oxfmt .",
-		"format:check": "oxfmt --check ."
+		"format:check": "oxfmt --check .",
+		"safety-check": "dotenv -c -- turbo type-check test",
+		"safety-check:auth": "pnpm safety-check && pnpm --filter saas e2e:ci"
 	},
 	"dependencies": {
 		"oxlint-tsgolint": "^0.22.1"

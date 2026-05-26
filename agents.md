@@ -29,6 +29,25 @@ product family layout.
 3. `packages/database/drizzle/schema/*.ts` — the existing schema. Match its style **exactly**
    when adding tables.
 
+## Read before touching auth-adjacent code
+
+If your change touches any of: `packages/auth/**`, `packages/api/orpc/**`, oRPC procedures under
+`packages/api/modules/**`, `apps/saas/modules/auth/**`, `apps/saas/modules/organizations/**`, the
+`(authenticated)` route-group layouts, the gating helpers in `apps/saas/modules/shared/lib/`, the
+auth/org schema files, or `packages/payments/**` — **read `docs/AUTH_CONTRACT.md` first**. It
+documents what Supastarter/Better Auth ships, what Virn extends, and the pinned invariants that
+must not silently change. Use its §8 pre-merge checklist before requesting review.
+
+## Two safety-check tiers
+
+- `pnpm safety-check` — fast tier (type-check + vitest across the workspace, ~15–20s). Run this
+  on any PR.
+- `pnpm safety-check:auth` — full tier (`safety-check` + the Playwright E2E auth suite, ~5–10min).
+  Run this **only when the PR touches the auth-adjacent paths above**.
+
+Don't run `safety-check:auth` for unrelated changes — it's slow and unnecessary. Don't skip it
+when auth is touched — that's the whole point.
+
 ## Stack
 
 Next.js (App Router) · Better Auth (organization plugin) · Drizzle ORM on Postgres (Neon) ·
