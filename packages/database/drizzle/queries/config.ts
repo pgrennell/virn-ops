@@ -17,6 +17,7 @@ import {
 	capability,
 	organizationCapability,
 	organizationSetting,
+	settingDataType,
 	settingDefinition,
 } from "../schema/postgres";
 
@@ -65,11 +66,23 @@ export const ALL_PROFILE_CAPABILITY_KEYS: readonly string[] = Array.from(
 	new Set(Object.values(PROFILES).flat()),
 );
 
+/**
+ * Literal-typed union of every capability key referenced by any profile —
+ * derived from the `as const` `PROFILES` map. Use this on the UI side to
+ * type-pin capability references against the actual profile set; adding or
+ * renaming a key in PROFILES then surfaces a compile error wherever it's
+ * referenced.
+ */
+export type ProfileCapabilityKey = (typeof PROFILES)[keyof typeof PROFILES][number];
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingDataType = "string" | "number" | "boolean" | "json" | "select" | "multiselect";
+// Derived from the pgEnum in schema/config.ts — adding a new data type there
+// (and running a migration) automatically propagates here. Keeps the runtime
+// validators and the storage type in lockstep.
+export type SettingDataType = (typeof settingDataType)["enumValues"][number];
 
 export interface EffectiveCapability {
 	id: string;
@@ -211,11 +224,58 @@ export async function getEffectiveSettings(orgId: string): Promise<EffectiveSett
 		}));
 }
 
-/** Look up a single resolved setting value by key. Returns `undefined` if the setting
- * doesn't exist, is inactive, or is gated off by its capability. */
+/**
+ * Look up a single resolved setting value by key. Returns `undefined` if the
+ * setting doesn't exist, is inactive, or is gated off by its capability.
+ *
+ * Targeted single-row query — mirrors `getEffectiveSettings`'s join shape but
+ * filters by `setting_definition.key` so feature-gate calls don't pay for the
+ * full resolver scan. The capability-gating filter (`gating_enabled`) is
+ * computed in JS from the joined override row because Drizzle's expressive
+ * combinators are clearer at the call site than a CASE in SQL.
+ */
 export async function getEffectiveSettingValue(orgId: string, key: string): Promise<unknown> {
-	const all = await getEffectiveSettings(orgId);
-	return all.find((s) => s.key === key)?.value;
+	const rows = await db
+		.select({
+			defaultValue: settingDefinition.defaultValue,
+			capabilityId: settingDefinition.capabilityId,
+			overrideValue: organizationSetting.value,
+			overrideMarker: organizationSetting.organizationId,
+			capDefaultEnabled: capability.defaultEnabled,
+			capOverrideEnabled: organizationCapability.enabled,
+			capOverrideMarker: organizationCapability.organizationId,
+		})
+		.from(settingDefinition)
+		.leftJoin(
+			organizationSetting,
+			and(
+				eq(organizationSetting.settingDefinitionId, settingDefinition.id),
+				eq(organizationSetting.organizationId, orgId),
+			),
+		)
+		.leftJoin(capability, eq(capability.id, settingDefinition.capabilityId))
+		.leftJoin(
+			organizationCapability,
+			and(
+				eq(organizationCapability.capabilityId, settingDefinition.capabilityId),
+				eq(organizationCapability.organizationId, orgId),
+			),
+		)
+		.where(and(eq(settingDefinition.key, key), eq(settingDefinition.status, "active")))
+		.limit(1);
+
+	const row = rows[0];
+	if (!row) return undefined;
+
+	if (row.capabilityId) {
+		const capEnabled =
+			row.capOverrideMarker !== null
+				? (row.capOverrideEnabled ?? row.capDefaultEnabled)
+				: row.capDefaultEnabled;
+		if (capEnabled !== true) return undefined;
+	}
+
+	return row.overrideMarker !== null ? row.overrideValue : row.defaultValue;
 }
 
 // ---------------------------------------------------------------------------
