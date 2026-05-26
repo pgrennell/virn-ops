@@ -1,13 +1,31 @@
 "use client";
 
-// Shared primitive (#1 of 2). Section-grouped step list with status icons. Mode-agnostic:
-// the parent decides what happens on click (RunView selects a step for the panel; the
-// future Workflow Builder will open an edit drawer). Active/selected step is highlighted
-// via ring + background, matching the wireframe's card treatment.
+// Shared primitive (#1 of 2). Section-grouped step list with status icons. Mode-aware:
+//
+//   complete / view / preview  --  status icon + title (Run / Preview surfaces).
+//   author                      --  drag handle + type icon + title, with inline +Add
+//                                   affordances composed in. The author branch lives in
+//                                   a small set of helpers below the main render; the
+//                                   shell (sections + rows + selection) is shared.
+//
+// Author mutations are not owned here. The parent (BuilderView) passes a single
+// `authorCallbacks` bundle; this component fires events into it. Reorder commit is
+// inline (HTML5 DnD); per-row mutations (rename / delete / type change) live in the
+// step panel, not this list.
 
 import { cn } from "@virn/ui";
-import { CheckCircle2, Circle, Lock, MinusCircle } from "lucide-react";
-import { useMemo } from "react";
+import {
+	CheckCircle2,
+	Circle,
+	GripVertical,
+	Lock,
+	MinusCircle,
+	Plus,
+	StickyNote,
+	UserCheck,
+	Zap,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 
 import type { RunStepStatus, RunViewMode, StepType } from "../types";
 
@@ -34,14 +52,26 @@ export interface RunStepListItem {
 	position: number;
 }
 
+/** Author-mode callback bundle. Passing this in switches the list into author affordances;
+ * omitting it keeps the list in pure run/preview shape. */
+export interface AuthorListCallbacks {
+	onAddSection: () => void;
+	onAddStepInSection: (sectionId: string | null) => void;
+	/** Called after a drag-drop completes with the full new (stepId, position) tuples
+	 * within the affected section. Optimistic-safe per D-018 follow-up (ids don't change). */
+	onReorderSteps: (ordering: Array<{ stepId: string; position: number }>) => void;
+}
+
 interface RunStepListProps {
 	sections: readonly RunStepListSection[];
 	definitionSteps: readonly RunStepListDefinitionStep[];
 	runSteps: readonly RunStepListItem[];
 	activeRunStepId: string | null;
 	onSelectStep: (runStepId: string) => void;
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	mode?: RunViewMode;
+	/** When provided AND mode === "author", composes the author-mode affordances in.
+	 * Otherwise the list renders in run/preview shape. */
+	authorCallbacks?: AuthorListCallbacks;
 }
 
 interface RenderGroup {
@@ -56,15 +86,19 @@ export function RunStepList({
 	runSteps,
 	activeRunStepId,
 	onSelectStep,
+	mode = "complete",
+	authorCallbacks,
 }: RunStepListProps) {
+	const isAuthorMode = mode === "author" && !!authorCallbacks;
 	const groups = useMemo(
-		() => groupRunStepsBySection(sections, definitionSteps, runSteps),
-		[sections, definitionSteps, runSteps],
+		() => groupRunStepsBySection(sections, definitionSteps, runSteps, isAuthorMode),
+		[sections, definitionSteps, runSteps, isAuthorMode],
 	);
 	const defStepById = useMemo(
 		() => new Map(definitionSteps.map((d) => [d.id, d] as const)),
 		[definitionSteps],
 	);
+	const isAuthor = isAuthorMode;
 
 	return (
 		<nav aria-label="Run steps" className="gap-0.5 flex flex-col p-2">
@@ -77,56 +111,136 @@ export function RunStepList({
 					)}
 					{group.items.map((rs) => {
 						const def = rs.stepId ? defStepById.get(rs.stepId) : undefined;
-						const showOptionalPill = def != null && !def.isRequired && def.type !== "heading";
+						const showOptionalPill =
+							!isAuthor && def != null && !def.isRequired && def.type !== "heading";
 						return (
 							<RunStepRow
 								key={rs.id}
 								runStep={rs}
+								def={def}
 								active={rs.id === activeRunStepId}
 								showOptionalPill={showOptionalPill}
+								authorMode={isAuthor}
 								onClick={() => onSelectStep(rs.id)}
+								onReorderWithin={
+									isAuthor && authorCallbacks
+										? (orderedIds) => commitReorder(orderedIds, group.items, authorCallbacks)
+										: undefined
+								}
 							/>
 						);
 					})}
+					{isAuthor && authorCallbacks && (
+						<AuthorAddStepRow onClick={() => authorCallbacks.onAddStepInSection(group.sectionId)} />
+					)}
 				</div>
 			))}
+			{isAuthor && authorCallbacks && (
+				<AuthorAddSectionRow onClick={authorCallbacks.onAddSection} />
+			)}
 		</nav>
 	);
 }
 
+// ---------------------------------------------------------------------------
+// Step row -- shared shell, mode-specific leading icon + drag handle
+// ---------------------------------------------------------------------------
+
 function RunStepRow({
 	runStep,
+	def,
 	active,
 	showOptionalPill,
+	authorMode,
 	onClick,
+	onReorderWithin,
 }: {
 	runStep: RunStepListItem;
+	def: RunStepListDefinitionStep | undefined;
 	active: boolean;
 	showOptionalPill: boolean;
+	authorMode: boolean;
 	onClick: () => void;
+	/** Author-mode drag-drop hook. Called with the new order of step ids within the
+	 * current section when a drop lands on this row. */
+	onReorderWithin?: (orderedStepIds: string[]) => void;
 }) {
-	const icon = renderStatusIcon(runStep);
+	const icon = authorMode
+		? renderStepTypeIcon(def?.type ?? "task")
+		: renderStatusIcon(runStep);
 	const isCompleted = runStep.status === "completed";
 	const isSkippedOrNA = runStep.status === "skipped" || runStep.status === "not_applicable";
+
+	// HTML5 DnD state. Lightweight -- no new dep. Only active in author mode.
+	const [isDragOver, setIsDragOver] = useState(false);
+
+	const handleDragStart = (e: React.DragEvent<HTMLButtonElement>) => {
+		if (!authorMode || !runStep.stepId) return;
+		e.dataTransfer.setData("text/x-step-id", runStep.stepId);
+		e.dataTransfer.effectAllowed = "move";
+	};
+	const handleDragOver = (e: React.DragEvent<HTMLButtonElement>) => {
+		if (!authorMode) return;
+		const dragged = e.dataTransfer.types.includes("text/x-step-id");
+		if (!dragged) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = "move";
+		setIsDragOver(true);
+	};
+	const handleDragLeave = () => {
+		setIsDragOver(false);
+	};
+	const handleDrop = (e: React.DragEvent<HTMLButtonElement>) => {
+		if (!authorMode || !onReorderWithin) return;
+		e.preventDefault();
+		setIsDragOver(false);
+		const draggedStepId = e.dataTransfer.getData("text/x-step-id");
+		if (!draggedStepId || !runStep.stepId || draggedStepId === runStep.stepId) return;
+		// Reordering payload: we don't know the full section ordering here, so we hand
+		// the dropped pair up; the commitReorder helper at the list level builds the
+		// final tuple list.
+		onReorderWithin([draggedStepId, runStep.stepId]);
+	};
+
 	return (
 		<button
 			type="button"
 			onClick={onClick}
+			draggable={authorMode}
+			onDragStart={handleDragStart}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
 			aria-current={active ? "step" : undefined}
 			className={cn(
 				"gap-2 flex items-center text-sm text-left px-2 py-1.5 rounded-md transition-colors w-full",
 				active
 					? "bg-background border border-border shadow-sm"
 					: "hover:bg-muted/50",
-				(isCompleted || isSkippedOrNA) && !active && "text-foreground/60",
+				(isCompleted || isSkippedOrNA) && !active && !authorMode && "text-foreground/60",
+				isDragOver && "ring-2 ring-primary/40",
+				authorMode && "cursor-grab active:cursor-grabbing",
 			)}
 		>
+			{authorMode && (
+				<GripVertical
+					className="size-3.5 text-foreground/30 shrink-0"
+					aria-hidden
+				/>
+			)}
 			<span className="shrink-0" aria-hidden>
 				{icon}
 			</span>
 			<span
-				className={cn("flex-1 min-w-0 truncate", isCompleted && "line-through")}
-				title={runStep.blocked ? "Blocked: a dependency step isn't complete yet" : undefined}
+				className={cn(
+					"flex-1 min-w-0 truncate",
+					isCompleted && !authorMode && "line-through",
+				)}
+				title={
+					runStep.blocked && !authorMode
+						? "Blocked: a dependency step isn't complete yet"
+						: undefined
+				}
 			>
 				{runStep.title}
 			</span>
@@ -140,6 +254,50 @@ function RunStepRow({
 			)}
 		</button>
 	);
+}
+
+// ---------------------------------------------------------------------------
+// Author-mode composed pieces
+// ---------------------------------------------------------------------------
+
+function AuthorAddStepRow({ onClick }: { onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className="gap-2 flex items-center text-xs text-foreground/60 hover:text-foreground hover:bg-muted/30 px-2 py-1.5 rounded-md transition-colors w-full"
+		>
+			<Plus className="size-3.5 shrink-0" />
+			<span>Add step</span>
+		</button>
+	);
+}
+
+function AuthorAddSectionRow({ onClick }: { onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className="gap-2 flex items-center text-xs text-foreground/60 hover:text-foreground hover:bg-muted/30 px-2 py-2 mt-2 border-t border-border rounded-md transition-colors w-full"
+		>
+			<Plus className="size-3.5 shrink-0" />
+			<span>Add section</span>
+		</button>
+	);
+}
+
+const STEP_TYPE_ICONS: Record<StepType, React.ComponentType<{ className?: string }>> = {
+	task: Circle,
+	approval: UserCheck,
+	heading: StickyNote,
+	one_off: Zap,
+	code: Circle, // reserved
+	ai: Circle, // reserved
+};
+
+function renderStepTypeIcon(type: StepType) {
+	const Icon = STEP_TYPE_ICONS[type];
+	return <Icon className="size-4 text-foreground/40" />;
 }
 
 function renderStatusIcon(runStep: RunStepListItem) {
@@ -156,13 +314,36 @@ function renderStatusIcon(runStep: RunStepListItem) {
 }
 
 // ---------------------------------------------------------------------------
-// Grouping
+// Reorder commit -- builds full ordering tuples from a dropped pair
+// ---------------------------------------------------------------------------
+
+function commitReorder(
+	pair: string[],
+	itemsInSection: readonly RunStepListItem[],
+	callbacks: AuthorListCallbacks,
+) {
+	const [draggedStepId, targetStepId] = pair;
+	// Pull stepIds in current order, then move dragged before target.
+	const ordered = itemsInSection
+		.map((i) => i.stepId)
+		.filter((id): id is string => id !== null);
+	const fromIdx = ordered.indexOf(draggedStepId);
+	const toIdx = ordered.indexOf(targetStepId);
+	if (fromIdx < 0 || toIdx < 0) return;
+	ordered.splice(fromIdx, 1);
+	ordered.splice(toIdx, 0, draggedStepId);
+	callbacks.onReorderSteps(ordered.map((stepId, position) => ({ stepId, position })));
+}
+
+// ---------------------------------------------------------------------------
+// Grouping (unchanged from Pass 1)
 // ---------------------------------------------------------------------------
 
 function groupRunStepsBySection(
 	sections: readonly RunStepListSection[],
 	definitionSteps: readonly RunStepListDefinitionStep[],
 	runSteps: readonly RunStepListItem[],
+	includeEmptySections: boolean,
 ): RenderGroup[] {
 	const sectionIdByDefStepId = new Map(definitionSteps.map((s) => [s.id, s.sectionId] as const));
 
@@ -181,14 +362,20 @@ function groupRunStepsBySection(
 	const result: RenderGroup[] = [];
 	for (const section of sortedSections) {
 		const items = groupsBySectionId.get(section.id);
-		if (!items || items.length === 0) continue;
+		// Author mode keeps empty sections visible so the +Add Step affordance is
+		// reachable inside them; run mode skips empty sections (operator surfaces should
+		// never render dead-end section headers).
+		if (!items || items.length === 0) {
+			if (!includeEmptySections) continue;
+			result.push({ sectionId: section.id, sectionTitle: section.title, items: [] });
+			continue;
+		}
 		result.push({ sectionId: section.id, sectionTitle: section.title, items });
 	}
 	const unsectioned = groupsBySectionId.get(null);
 	if (unsectioned && unsectioned.length > 0) {
 		result.push({
 			sectionId: null,
-			// Hide the header for unsectioned groups when sections exist; keep them flush.
 			sectionTitle: sortedSections.length === 0 ? null : null,
 			items: unsectioned,
 		});
