@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virn Ops — Home</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root{--color-background-primary:#ffffff;--color-background-secondary:#f6f5f1;--color-background-tertiary:#efede7;--color-background-info:#E6F1FB;--color-text-primary:#2b2b29;--color-text-secondary:#5f5e5a;--color-text-tertiary:#8a8980;--color-text-info:#0C447C;--color-border-tertiary:rgba(0,0,0,0.13);--color-border-secondary:rgba(0,0,0,0.28);--color-border-info:#378ADD;--border-radius-md:8px;--border-radius-lg:12px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--color-background-tertiary);font-family:var(--font-sans);color:var(--color-text-primary);line-height:1.5;}
+.wrap{max-width:780px;margin:0 auto;padding:28px 20px 56px;}
+.label{font-size:18px;font-weight:500;margin:0 0 4px;}
+.note{font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;}
+i.ti{font-size:16px;line-height:1;vertical-align:-2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="label">Home (operator / bridge)</h1>
+<p class="note">The balanced landing: tasks + active runs + approvals. See docs/UX_SPEC.md §5.</p>
+<div style="padding: 1rem 0;">
+<div style="border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); overflow: hidden; background: var(--color-background-primary);">
+  <div style="padding: 18px 20px;">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+      <div style="flex: 1;">
+        <h2 style="margin: 0; font-size: 18px;">Good morning, Paul</h2>
+        <p style="margin: 0; font-size: 13px; color: var(--color-text-secondary);">Monday, 25 May</p>
+      </div>
+      <span style="display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border-radius: var(--border-radius-md); background: var(--color-text-primary); color: var(--color-background-primary); font-size: 13px;"><i class="ti ti-player-play"></i>Start a run</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 18px;">
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px;"><p style="margin: 0; font-size: 13px; color: var(--color-text-secondary);">Open tasks</p><p style="margin: 2px 0 0; font-size: 24px; font-weight: 500;">7</p></div>
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px;"><p style="margin: 0; font-size: 13px; color: var(--color-text-secondary);">Due today</p><p style="margin: 2px 0 0; font-size: 24px; font-weight: 500;">3</p></div>
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px;"><p style="margin: 0; font-size: 13px; color: var(--color-text-secondary);">Overdue</p><p style="margin: 2px 0 0; font-size: 24px; font-weight: 500; color: #A32D2D;">1</p></div>
+      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px;"><p style="margin: 0; font-size: 13px; color: var(--color-text-secondary);">Active runs</p><p style="margin: 2px 0 0; font-size: 24px; font-weight: 500;">5</p></div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px;">
+      <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+        <div style="display: flex; align-items: center; padding: 10px 12px; border-bottom: 0.5px solid var(--color-border-tertiary);"><span style="font-size: 13px; font-weight: 500; flex: 1;">My tasks</span><span style="font-size: 12px; color: var(--color-text-info);">View all</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px;">
+          <span style="width: 16px; height: 16px; border: 1.5px solid var(--color-border-secondary); border-radius: 4px; flex-shrink: 0;"></span>
+          <div style="flex: 1; min-width: 0;"><p style="margin: 0; font-size: 13px;">Provision accounts</p><p style="margin: 0; font-size: 11px; color: var(--color-text-tertiary);">New client onboarding · Acme</p></div>
+          <span style="font-size: 11px; color: #A32D2D;">Overdue</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+          <span style="width: 16px; height: 16px; border: 1.5px solid var(--color-border-secondary); border-radius: 4px; flex-shrink: 0;"></span>
+          <div style="flex: 1; min-width: 0;"><p style="margin: 0; font-size: 13px;">Reconcile bank feed</p><p style="margin: 0; font-size: 11px; color: var(--color-text-tertiary);">Monthly close · April</p></div>
+          <span style="font-size: 11px; color: var(--color-text-tertiary);">Today</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+          <span style="width: 16px; height: 16px; border: 1.5px solid var(--color-border-secondary); border-radius: 4px; flex-shrink: 0;"></span>
+          <div style="flex: 1; min-width: 0;"><p style="margin: 0; font-size: 13px;">Collect signed docs</p><p style="margin: 0; font-size: 11px; color: var(--color-text-tertiary);">New client onboarding · Acme</p></div>
+          <span style="font-size: 11px; color: var(--color-text-tertiary);">Thu</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+          <div style="padding: 10px 12px; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 13px; font-weight: 500;">Awaiting you</div>
+          <div style="padding: 10px 12px;">
+            <p style="margin: 0; font-size: 12px;"><i class="ti ti-checks" style="color: var(--color-text-secondary);"></i> Manager approval</p>
+            <p style="margin: 1px 0 8px; font-size: 11px; color: var(--color-text-tertiary);">New client onboarding · Acme</p>
+            <span style="font-size: 11px; padding: 4px 10px; border-radius: var(--border-radius-md); background: var(--color-text-primary); color: var(--color-background-primary);">Review</span>
+          </div>
+        </div>
+        <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+          <div style="padding: 10px 12px; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 13px; font-weight: 500;">Active runs</div>
+          <div style="padding: 10px 12px;">
+            <p style="margin: 0 0 4px; font-size: 12px;">New client onboarding · Acme</p>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="flex: 1; height: 5px; border-radius: 3px; background: var(--color-background-secondary); overflow: hidden;"><span style="display: block; width: 50%; height: 100%; background: var(--color-text-primary);"></span></span><span style="font-size: 11px; color: var(--color-text-tertiary);">6/12</span></div>
+          </div>
+          <div style="padding: 10px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <p style="margin: 0 0 4px; font-size: 12px;">Monthly close · April</p>
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="flex: 1; height: 5px; border-radius: 3px; background: var(--color-background-secondary); overflow: hidden;"><span style="display: block; width: 80%; height: 100%; background: var(--color-text-primary);"></span></span><span style="font-size: 11px; color: var(--color-text-tertiary);">8/10</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</body>
+</html>

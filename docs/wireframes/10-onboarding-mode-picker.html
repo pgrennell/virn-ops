@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virn Ops — Onboarding mode picker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root{--color-background-primary:#ffffff;--color-background-secondary:#f6f5f1;--color-background-tertiary:#efede7;--color-background-info:#E6F1FB;--color-text-primary:#2b2b29;--color-text-secondary:#5f5e5a;--color-text-tertiary:#8a8980;--color-text-info:#0C447C;--color-border-tertiary:rgba(0,0,0,0.13);--color-border-secondary:rgba(0,0,0,0.28);--color-border-info:#378ADD;--border-radius-md:8px;--border-radius-lg:12px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--color-background-tertiary);font-family:var(--font-sans);color:var(--color-text-primary);line-height:1.5;}
+.wrap{max-width:780px;margin:0 auto;padding:28px 20px 56px;}
+.label{font-size:18px;font-weight:500;margin:0 0 4px;}
+.note{font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;}
+i.ti{font-size:16px;line-height:1;vertical-align:-2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="label">Onboarding — mode picker</h1>
+<p class="note">Create-org final step; the choice applies the L2 profile. See docs/UX_SPEC.md §5.5.</p>
+<div style="padding: 1rem 0;">
+<div style="background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 24px;">
+  <div style="max-width: 520px; margin: 0 auto; background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 0.5px solid var(--color-border-tertiary);">
+      <span style="width: 20px; height: 20px; border-radius: 6px; background: var(--color-text-primary); color: var(--color-background-primary); display: inline-flex; align-items: center; justify-content: center; font-size: 11px;">V</span>
+      <span style="font-size: 14px; font-weight: 500; flex: 1;">Virn Ops</span>
+      <span style="font-size: 12px; color: var(--color-text-tertiary);">Step 3 of 4</span>
+    </div>
+    <div style="padding: 20px;">
+      <h2 style="margin: 0 0 3px; font-size: 18px;">What will you use Virn Ops for?</h2>
+      <p style="margin: 0 0 16px; font-size: 13px; color: var(--color-text-secondary);">This turns on the right features to start. You can change it anytime in Settings.</p>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 2px solid var(--color-border-info); border-radius: var(--border-radius-lg);">
+          <span style="width: 18px; height: 18px; border-radius: 50%; border: 5px solid var(--color-text-info); flex-shrink: 0; margin-top: 1px;"></span>
+          <div style="flex: 1;">
+            <p style="margin: 0 0 2px; font-size: 14px; font-weight: 500;"><i class="ti ti-checkbox" style="color: var(--color-text-info);"></i> Checklist</p>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-secondary);">Recurring processes and task lists — onboarding, turnovers, monthly closes.</p>
+          </div>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg);">
+          <span style="width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--color-border-secondary); flex-shrink: 0; margin-top: 1px;"></span>
+          <div style="flex: 1;">
+            <p style="margin: 0 0 2px; font-size: 14px; font-weight: 500;"><i class="ti ti-book" style="color: var(--color-text-secondary);"></i> SOPs &amp; policies</p>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-secondary);">A living knowledge base with approvals, acknowledgments, and guests.</p>
+          </div>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg);">
+          <span style="width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--color-border-secondary); flex-shrink: 0; margin-top: 1px;"></span>
+          <div style="flex: 1;">
+            <p style="margin: 0 0 2px; font-size: 14px; font-weight: 500;"><i class="ti ti-bolt" style="color: var(--color-text-secondary);"></i> Automation</p>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-secondary);">Everything above, plus rules and webhooks to automate steps.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; padding: 14px 20px; border-top: 0.5px solid var(--color-border-tertiary);">
+      <span style="font-size: 13px; color: var(--color-text-secondary);">Back</span>
+      <span style="flex: 1;"></span>
+      <span style="font-size: 13px; padding: 8px 18px; border-radius: var(--border-radius-md); background: var(--color-text-primary); color: var(--color-background-primary);">Continue</span>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</body>
+</html>

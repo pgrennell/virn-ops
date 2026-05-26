@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virn Ops — Run view</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root{--color-background-primary:#ffffff;--color-background-secondary:#f6f5f1;--color-background-tertiary:#efede7;--color-background-info:#E6F1FB;--color-text-primary:#2b2b29;--color-text-secondary:#5f5e5a;--color-text-tertiary:#8a8980;--color-text-info:#0C447C;--color-border-tertiary:rgba(0,0,0,0.13);--color-border-secondary:rgba(0,0,0,0.28);--color-border-info:#378ADD;--border-radius-md:8px;--border-radius-lg:12px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--color-background-tertiary);font-family:var(--font-sans);color:var(--color-text-primary);line-height:1.5;}
+.wrap{max-width:780px;margin:0 auto;padding:28px 20px 56px;}
+.label{font-size:18px;font-weight:500;margin:0 0 4px;}
+.note{font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;}
+i.ti{font-size:16px;line-height:1;vertical-align:-2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="label">Run view (execution surface)</h1>
+<p class="note">Runtime mirror of the builder: step list + live fields + complete. See docs/UX_SPEC.md §5.</p>
+<div style="padding: 1rem 0;">
+<div style="border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); overflow: hidden; background: var(--color-background-primary);">
+  <div style="padding: 12px 16px; border-bottom: 0.5px solid var(--color-border-tertiary);">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 15px; font-weight: 500;">New client onboarding · Acme Corp</span>
+      <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: #E1F5EE; color: #0F6E56;">Active</span>
+      <span style="flex: 1;"></span>
+      <span style="font-size: 12px; color: var(--color-text-tertiary);">Due Fri · started 23 May</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+      <span style="flex: 1; height: 6px; border-radius: 3px; background: var(--color-background-secondary); overflow: hidden;"><span style="display: block; width: 50%; height: 100%; background: var(--color-text-primary);"></span></span>
+      <span style="font-size: 12px; color: var(--color-text-secondary);">6 of 12 steps</span>
+    </div>
+  </div>
+  <div style="display: flex; min-height: 400px;">
+    <aside style="width: 196px; flex-shrink: 0; border-right: 0.5px solid var(--color-border-tertiary); background: var(--color-background-secondary); padding: 10px 8px; font-size: 13px;">
+      <p style="margin: 6px 6px 4px; font-size: 11px; color: var(--color-text-tertiary);">Before day 1</p>
+      <div style="display: flex; gap: 8px; align-items: center; padding: 7px 8px; color: var(--color-text-tertiary);"><i class="ti ti-circle-check" style="color: #0F6E56;"></i><span style="text-decoration: line-through;">Send welcome email</span></div>
+      <div style="display: flex; gap: 8px; align-items: center; padding: 7px 8px; border-radius: var(--border-radius-md); background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); color: var(--color-text-primary);"><i class="ti ti-circle-dashed"></i>Provision accounts</div>
+      <div style="display: flex; gap: 8px; align-items: center; padding: 7px 8px; color: var(--color-text-tertiary);"><i class="ti ti-lock"></i>Manager approval</div>
+      <p style="margin: 10px 6px 4px; font-size: 11px; color: var(--color-text-tertiary);">Week 1</p>
+      <div style="display: flex; gap: 8px; align-items: center; padding: 7px 8px; color: var(--color-text-secondary);"><i class="ti ti-circle"></i>Schedule onboarding call</div>
+      <div style="display: flex; gap: 8px; align-items: center; padding: 7px 8px; color: var(--color-text-secondary);"><i class="ti ti-circle"></i>Collect signed docs</div>
+    </aside>
+    <div style="flex: 1; min-width: 0; padding: 18px 20px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+        <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">Task</span>
+        <span style="font-size: 11px; color: var(--color-text-tertiary);">assigned to you · due tomorrow</span>
+      </div>
+      <p style="margin: 0 0 10px; font-size: 17px; font-weight: 500;">Provision accounts</p>
+      <p style="margin: 0 0 16px; font-size: 13px; color: var(--color-text-secondary);">Create accounts in the systems the new hire needs, then record which were set up.</p>
+      <label style="display: block; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">Systems provisioned <span style="color: #A32D2D;">*</span></label>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
+        <span style="font-size: 12px; padding: 4px 10px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">Email <i class="ti ti-x" style="font-size: 12px;"></i></span>
+        <span style="font-size: 12px; padding: 4px 10px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">Slack <i class="ti ti-x" style="font-size: 12px;"></i></span>
+        <span style="font-size: 12px; padding: 4px 10px; border-radius: var(--border-radius-md); border: 0.5px dashed var(--color-border-secondary); color: var(--color-text-tertiary);">+ add</span>
+      </div>
+      <label style="display: block; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">Provisioned by</label>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 7px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); margin-bottom: 18px; max-width: 240px;"><span style="width: 20px; height: 20px; border-radius: 50%; background: var(--color-background-info); color: var(--color-text-info); display: inline-flex; align-items: center; justify-content: center; font-size: 10px;">PG</span>Paul Gren</div>
+      <div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+        <span style="font-size: 13px; padding: 7px 14px; border-radius: var(--border-radius-md); background: var(--color-text-primary); color: var(--color-background-primary);">Complete step</span>
+        <span style="font-size: 12px; color: var(--color-text-tertiary);"><i class="ti ti-message"></i> Comment</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</body>
+</html>

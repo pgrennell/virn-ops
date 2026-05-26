@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virn Ops — Configuration</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root{--color-background-primary:#ffffff;--color-background-secondary:#f6f5f1;--color-background-tertiary:#efede7;--color-background-info:#E6F1FB;--color-text-primary:#2b2b29;--color-text-secondary:#5f5e5a;--color-text-tertiary:#8a8980;--color-text-info:#0C447C;--color-border-tertiary:rgba(0,0,0,0.13);--color-border-secondary:rgba(0,0,0,0.28);--color-border-info:#378ADD;--border-radius-md:8px;--border-radius-lg:12px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--color-background-tertiary);font-family:var(--font-sans);color:var(--color-text-primary);line-height:1.5;}
+.wrap{max-width:780px;margin:0 auto;padding:28px 20px 56px;}
+.label{font-size:18px;font-weight:500;margin:0 0 4px;}
+.note{font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;}
+i.ti{font-size:16px;line-height:1;vertical-align:-2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="label">Configuration (admin)</h1>
+<p class="note">The three levels: Mode (L2) + Capabilities &amp; Settings (L3), inside the app shell. See docs/UX_SPEC.md §4.1.</p>
+<div style="padding: 1rem 0;">
+<div style="border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); overflow: hidden; background: var(--color-background-primary);">
+  <div style="display: flex; min-height: 560px;">
+    <aside style="width: 156px; flex-shrink: 0; border-right: 0.5px solid var(--color-border-tertiary); background: var(--color-background-secondary); display: flex; flex-direction: column;">
+      <div style="padding: 14px 14px 10px; display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 15px;">
+        <span style="width: 20px; height: 20px; border-radius: 6px; background: var(--color-text-primary); color: var(--color-background-primary); display: inline-flex; align-items: center; justify-content: center; font-size: 12px;">V</span>
+        Virn Ops
+      </div>
+      <div style="padding: 6px 8px; flex: 1; font-size: 13px;">
+        <p style="margin: 10px 6px 4px; font-size: 11px; color: var(--color-text-tertiary);">Operate</p>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-home"></i>Home</a>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-checkbox"></i>My work</a>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-player-play"></i>Runs</a>
+        <p style="margin: 12px 6px 4px; font-size: 11px; color: var(--color-text-tertiary);">Build</p>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-folder"></i>Library</a>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-layout-grid"></i>Templates</a>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-bolt"></i>Automations</a>
+        <p style="margin: 12px 6px 4px; font-size: 11px; color: var(--color-text-tertiary);">Understand</p>
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-chart-bar"></i>Reports</a>
+      </div>
+      <div style="padding: 8px; border-top: 0.5px solid var(--color-border-tertiary);">
+        <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); color: var(--color-text-primary); text-decoration: none; font-size: 13px;"><i class="ti ti-settings"></i>Settings</a>
+      </div>
+    </aside>
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+      <header style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 0.5px solid var(--color-border-tertiary);">
+        <div style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); color: var(--color-text-tertiary); font-size: 13px; max-width: 190px;"><i class="ti ti-search"></i>Search</div>
+        <span style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); font-size: 13px;"><i class="ti ti-plus"></i>Create</span>
+        <i class="ti ti-bell" style="color: var(--color-text-secondary); font-size: 18px;"></i>
+        <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--color-text-secondary);">Acme Ops<i class="ti ti-chevron-down"></i></span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; border-radius: 999px; background: var(--color-background-secondary);">
+          <span style="width: 22px; height: 22px; border-radius: 50%; background: var(--color-background-info); color: var(--color-text-info); display: inline-flex; align-items: center; justify-content: center; font-size: 11px;">PG</span>
+          <span style="font-size: 11px; color: var(--color-text-info);">Admin · all access</span>
+        </span>
+      </header>
+      <div style="padding: 18px 20px; overflow: hidden;">
+        <h2 style="margin: 0 0 2px; font-size: 18px;">Configuration</h2>
+        <p style="margin: 0 0 18px; font-size: 13px; color: var(--color-text-secondary);">Set the mode, then fine-tune what's on for Acme Ops.</p>
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 500;">Mode <span style="color: var(--color-text-tertiary); font-weight: 400;">· level 2 — a preset that switches features on in bulk</span></p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 6px;">
+          <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 12px;">
+            <i class="ti ti-checkbox" style="font-size: 20px; color: var(--color-text-secondary);"></i>
+            <p style="margin: 8px 0 2px; font-size: 14px; font-weight: 500;">Checklist</p>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-secondary);">Recurring runs and kickoff forms.</p>
+          </div>
+          <div style="border: 2px solid var(--color-border-info); border-radius: var(--border-radius-lg); padding: 12px; position: relative;">
+            <span style="position: absolute; top: 10px; right: 10px; font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">Current</span>
+            <i class="ti ti-book" style="font-size: 20px; color: var(--color-text-info);"></i>
+            <p style="margin: 8px 0 2px; font-size: 14px; font-weight: 500;">SOP</p>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-secondary);">+ approvals, guests, acknowledgments.</p>
+          </div>
+          <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 12px;">
+            <i class="ti ti-bolt" style="font-size: 20px; color: var(--color-text-secondary);"></i>
+            <p style="margin: 8px 0 2px; font-size: 14px; font-weight: 500;">Automation</p>
+            <p style="margin: 0; font-size: 12px; color: var(--color-text-secondary);">+ rules and outbound webhooks.</p>
+          </div>
+        </div>
+        <p style="margin: 0 0 20px; font-size: 12px; color: var(--color-text-tertiary);"><i class="ti ti-info-circle"></i> Switching mode resets mode-managed features. Overrides you set outside the mode are kept.</p>
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 500;">Capabilities <span style="color: var(--color-text-tertiary); font-weight: 400;">· level 3 — turn individual features on or off</span></p>
+        <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; margin-bottom: 20px;">
+          <p style="margin: 0; padding: 7px 12px; font-size: 12px; color: var(--color-text-tertiary); background: var(--color-background-secondary);">Workflows</p>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px;">Recurring runs</span>
+            <span style="font-size: 11px; padding: 2px 7px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">From mode</span>
+            <span style="display: inline-flex; align-items: center; width: 34px; height: 18px; background: var(--color-text-primary); border-radius: 9px; padding: 2px; justify-content: flex-end;"><span style="width: 14px; height: 14px; background: var(--color-background-primary); border-radius: 50%;"></span></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px;">Kickoff forms</span>
+            <span style="font-size: 11px; padding: 2px 7px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">From mode</span>
+            <span style="display: inline-flex; align-items: center; width: 34px; height: 18px; background: var(--color-text-primary); border-radius: 9px; padding: 2px; justify-content: flex-end;"><span style="width: 14px; height: 14px; background: var(--color-background-primary); border-radius: 50%;"></span></span>
+          </div>
+          <p style="margin: 0; padding: 7px 12px; font-size: 12px; color: var(--color-text-tertiary); background: var(--color-background-secondary); border-top: 0.5px solid var(--color-border-tertiary);">Governance</p>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px;">Approvals</span>
+            <span style="font-size: 11px; padding: 2px 7px; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info);">From mode</span>
+            <span style="display: inline-flex; align-items: center; width: 34px; height: 18px; background: var(--color-text-primary); border-radius: 9px; padding: 2px; justify-content: flex-end;"><span style="width: 14px; height: 14px; background: var(--color-background-primary); border-radius: 50%;"></span></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px;">Suggestions</span>
+            <span style="font-size: 11px; padding: 2px 7px; border-radius: var(--border-radius-md); background: #FAEEDA; color: #854F0B;">Overridden</span>
+            <span style="font-size: 11px; color: var(--color-text-tertiary);">Reset</span>
+            <span style="display: inline-flex; align-items: center; width: 34px; height: 18px; background: var(--color-border-secondary); border-radius: 9px; padding: 2px; justify-content: flex-start;"><span style="width: 14px; height: 14px; background: var(--color-background-primary); border-radius: 50%;"></span></span>
+          </div>
+          <p style="margin: 0; padding: 7px 12px; font-size: 12px; color: var(--color-text-tertiary); background: var(--color-background-secondary); border-top: 0.5px solid var(--color-border-tertiary);">Automation</p>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px; color: var(--color-text-secondary);">Rules</span>
+            <span style="font-size: 11px; padding: 2px 7px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-tertiary);">Default</span>
+            <span style="display: inline-flex; align-items: center; width: 34px; height: 18px; background: var(--color-border-secondary); border-radius: 9px; padding: 2px; justify-content: flex-start;"><span style="width: 14px; height: 14px; background: var(--color-background-primary); border-radius: 50%;"></span></span>
+          </div>
+        </div>
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 500;">Settings <span style="color: var(--color-text-tertiary); font-weight: 400;">· level 3 — values, hidden when their feature is off</span></p>
+        <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px;">
+            <span style="flex: 1; font-size: 13px;">Require approval before publish<br><span style="font-size: 11px; color: var(--color-text-tertiary);">under Approvals</span></span>
+            <span style="display: inline-flex; align-items: center; width: 34px; height: 18px; background: var(--color-text-primary); border-radius: 9px; padding: 2px; justify-content: flex-end;"><span style="width: 14px; height: 14px; background: var(--color-background-primary); border-radius: 50%;"></span></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px;">Default review interval<br><span style="font-size: 11px; color: var(--color-text-tertiary);">under Acknowledgments</span></span>
+            <span style="font-size: 13px; padding: 5px 10px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); display: inline-flex; gap: 6px; align-items: center;">90 days<i class="ti ti-chevron-down"></i></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+            <span style="flex: 1; font-size: 13px;">Daily digest time<br><span style="font-size: 11px; color: var(--color-text-tertiary);">universal — no gating feature</span></span>
+            <span style="font-size: 13px; padding: 5px 10px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md);">08:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</body>
+</html>

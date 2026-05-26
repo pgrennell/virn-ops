@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virn Ops — Library</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root{--color-background-primary:#ffffff;--color-background-secondary:#f6f5f1;--color-background-tertiary:#efede7;--color-background-info:#E6F1FB;--color-text-primary:#2b2b29;--color-text-secondary:#5f5e5a;--color-text-tertiary:#8a8980;--color-text-info:#0C447C;--color-border-tertiary:rgba(0,0,0,0.13);--color-border-secondary:rgba(0,0,0,0.28);--color-border-info:#378ADD;--border-radius-md:8px;--border-radius-lg:12px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--color-background-tertiary);font-family:var(--font-sans);color:var(--color-text-primary);line-height:1.5;}
+.wrap{max-width:780px;margin:0 auto;padding:28px 20px 56px;}
+.label{font-size:18px;font-weight:500;margin:0 0 4px;}
+.note{font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;}
+i.ti{font-size:16px;line-height:1;vertical-align:-2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 class="label">Library (build)</h1>
+<p class="note">One library over workflow.type — folder rail, type tabs, type-aware rows. See docs/UX_SPEC.md §4.2.</p>
+<div style="padding: 1rem 0;">
+<div style="border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); overflow: hidden; background: var(--color-background-primary);">
+  <div style="display: flex; min-height: 500px;">
+    <aside style="width: 150px; flex-shrink: 0; border-right: 0.5px solid var(--color-border-tertiary); background: var(--color-background-secondary); padding: 12px 8px; font-size: 13px;">
+      <p style="margin: 4px 6px 8px; font-size: 11px; color: var(--color-text-tertiary);">Folders</p>
+      <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); color: var(--color-text-primary); text-decoration: none;"><i class="ti ti-folder"></i>All items</a>
+      <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-folder"></i>Onboarding</a>
+      <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-folder"></i>Compliance</a>
+      <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-folder"></i>Operations</a>
+      <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); text-decoration: none;"><i class="ti ti-folder"></i>Finance</a>
+      <a style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: var(--border-radius-md); color: var(--color-text-tertiary); text-decoration: none;"><i class="ti ti-plus"></i>New folder</a>
+    </aside>
+    <div style="flex: 1; min-width: 0; padding: 16px 18px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+        <h2 style="margin: 0; font-size: 18px; flex: 1;">Library</h2>
+        <span style="display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); font-size: 13px; background: var(--color-text-primary); color: var(--color-background-primary);"><i class="ti ti-plus"></i>Create<i class="ti ti-chevron-down"></i></span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 4px; font-size: 13px; border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom: 12px;">
+        <span style="padding: 7px 10px; border-bottom: 2px solid var(--color-text-primary); font-weight: 500;">All</span>
+        <span style="padding: 7px 10px; color: var(--color-text-secondary);">Workflows</span>
+        <span style="padding: 7px 10px; color: var(--color-text-secondary);">SOPs</span>
+        <span style="padding: 7px 10px; color: var(--color-text-tertiary);">Forms</span>
+        <span style="flex: 1;"></span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); color: var(--color-text-tertiary);"><i class="ti ti-search"></i>Search</span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); color: var(--color-text-secondary);">Recently updated<i class="ti ti-chevron-down"></i></span>
+      </div>
+      <div style="border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px;">
+          <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info); display: inline-flex; align-items: center; justify-content: center;"><i class="ti ti-list-check"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="margin: 0; font-size: 14px;">New client onboarding</p>
+            <p style="margin: 1px 0 0; font-size: 11px; color: var(--color-text-tertiary);"><span style="padding: 1px 6px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-secondary);">Onboarding</span> &nbsp;· 12 active runs · updated 2d ago</p>
+          </div>
+          <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: #E1F5EE; color: #0F6E56;">Published</span>
+          <span style="font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md);">Run</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+          <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info); display: inline-flex; align-items: center; justify-content: center;"><i class="ti ti-list-check"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="margin: 0; font-size: 14px;">Quarterly access review</p>
+            <p style="margin: 1px 0 0; font-size: 11px; color: var(--color-text-tertiary);"><span style="padding: 1px 6px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-secondary);">Compliance</span> &nbsp;· updated 5h ago</p>
+          </div>
+          <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-tertiary);">Draft</span>
+          <span style="font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md);">Edit</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+          <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--border-radius-md); background: #EEEDFE; color: #3C3489; display: inline-flex; align-items: center; justify-content: center;"><i class="ti ti-file-text"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="margin: 0; font-size: 14px;">Incident response policy</p>
+            <p style="margin: 1px 0 0; font-size: 11px; color: var(--color-text-tertiary);"><span style="padding: 1px 6px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-secondary);">Compliance</span> &nbsp;· v3 · review due in 14d</p>
+          </div>
+          <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: #E1F5EE; color: #0F6E56;">Published</span>
+          <span style="font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md);">Open</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+          <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--border-radius-md); background: #EEEDFE; color: #3C3489; display: inline-flex; align-items: center; justify-content: center;"><i class="ti ti-file-text"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="margin: 0; font-size: 14px;">Vendor offboarding SOP</p>
+            <p style="margin: 1px 0 0; font-size: 11px; color: var(--color-text-tertiary);"><span style="padding: 1px 6px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-secondary);">Operations</span> &nbsp;· updated 1d ago</p>
+          </div>
+          <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-tertiary);">Draft</span>
+          <span style="font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md);">Edit</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+          <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info); display: inline-flex; align-items: center; justify-content: center;"><i class="ti ti-list-check"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="margin: 0; font-size: 14px;">Monthly close checklist</p>
+            <p style="margin: 1px 0 0; font-size: 11px; color: var(--color-text-tertiary);"><span style="padding: 1px 6px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-secondary);">Finance</span> &nbsp;· 4 active runs · recurring</p>
+          </div>
+          <span style="font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); background: #E1F5EE; color: #0F6E56;">Published</span>
+          <span style="font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md);">Run</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</body>
+</html>
