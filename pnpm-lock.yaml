@@ -1024,6 +1024,9 @@ importers:
 
   tooling/scripts:
     dependencies:
+      '@virn/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@virn/auth':
         specifier: workspace:*
         version: link:../../packages/auth

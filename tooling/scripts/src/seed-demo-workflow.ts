@@ -1,5 +1,20 @@
 // tooling/scripts/src/seed-demo-workflow.ts
 //
+// RETIRED as the operator-screen demo path. The Workflow Builder (UX_SPEC §4.3, shipped
+// in commits b6a61bb + 6ccd5af + a418d98) authors real workflows via the API now; the
+// real-Postgres build->publish->launch loop is proven by walk-builder-publish-launch.ts
+// against Neon. Operators who want a fresh demo workflow should use the Builder UI
+// (/[orgSlug]/library/workflows/<id>/builder) or run `pnpm walk:builder` to produce a
+// uniquely-titled walk fixture.
+//
+// This script is RETAINED only as the test fixture for the guest E2E scripts
+// (verify-guest-access.ts, launch-guest-run.ts) which look up the workflow by the
+// hardcoded title "[Demo] Onboarding". If those guest scripts get refactored to author
+// their own fixtures inline, this file can be deleted along with seed-demo-scratch.ts.
+//
+// ---------------------------------------------------------------------------
+// Original purpose (kept for reference):
+//
 // One-shot seed for a sample published workflow so the operator screens (Run view, My Work,
 // Home) have something real to point at. The fixture is shaped to exercise every runtime
 // branch you'd want to verify in a 5-minute browser walkthrough:

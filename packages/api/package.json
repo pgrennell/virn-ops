@@ -2,6 +2,12 @@
 	"name": "@virn/api",
 	"version": "0.0.0",
 	"main": "./index.ts",
+	"exports": {
+		".": "./index.ts",
+		"./modules/workflows/lib": "./modules/workflows/lib/index.ts",
+		"./*": "./*.ts",
+		"./*.ts": "./*.ts"
+	},
 	"scripts": {
 		"clean": "git clean -xdf .cache .turbo dist node_modules",
 		"test": "vitest run",
