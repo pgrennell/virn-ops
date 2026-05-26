@@ -566,11 +566,20 @@ export interface MyTaskRow {
 	runStatus: "active" | "completed" | "archived";
 	workflowId: string;
 	workflowTitle: string;
+	/** True iff any `step_dependency` for this task's definition step has a runStep on the
+	 * same run that isn't `completed`. Cheap up-front computation so My Work can render
+	 * the Lock affordance without round-tripping each row through getRun. */
+	blocked: boolean;
 }
 
 /** All runSteps assigned to a user within this org. Filters by org via the parent run.
  * Direct assignment only (`run_step_assignee` -> `participant.user_id`); role->participant
- * fanout was already materialized at launch time. */
+ * fanout was already materialized at launch time.
+ *
+ * Per-row `blocked` flag is computed in 2 batched follow-up queries (no N+1):
+ *   1. step_dependency rows for the result set's definition stepIds
+ *   2. run_step.status for (runId, dependsOnStepId) pairs
+ * Total: 3 queries for the whole listing. */
 export async function listAssignedTasksForUser(input: {
 	organizationId: string;
 	userId: string;
@@ -588,9 +597,11 @@ export async function listAssignedTasksForUser(input: {
 	if (input.status) conds.push(eq(runStep.status, input.status));
 	if (input.dueBefore) conds.push(lte(runStep.dueAt, input.dueBefore));
 
-	return await db
+	// Query 1: tasks (with internal `definitionStepId` for the dependency join).
+	const rawRows = await db
 		.select({
 			runStepId: runStep.id,
+			definitionStepId: runStep.stepId,
 			stepTitle: runStep.title,
 			stepDescription: runStep.description,
 			status: runStep.status,
@@ -610,6 +621,74 @@ export async function listAssignedTasksForUser(input: {
 		.orderBy(runStep.dueAt, runStep.id)
 		.limit(limit)
 		.offset(offset);
+
+	if (rawRows.length === 0) return [];
+
+	// Query 2: step_dependency rows scoped to our definition stepIds.
+	const taskDefStepIds = [
+		...new Set(rawRows.map((r) => r.definitionStepId).filter((id): id is string => id !== null)),
+	];
+	const deps = taskDefStepIds.length
+		? await db
+				.select({
+					stepId: stepDependency.stepId,
+					dependsOnStepId: stepDependency.dependsOnStepId,
+				})
+				.from(stepDependency)
+				.where(inArray(stepDependency.stepId, taskDefStepIds))
+		: [];
+	const depStepIdsByTaskStepId = new Map<string, string[]>();
+	const allDependeeStepIds = new Set<string>();
+	for (const d of deps) {
+		const arr = depStepIdsByTaskStepId.get(d.stepId) ?? [];
+		arr.push(d.dependsOnStepId);
+		depStepIdsByTaskStepId.set(d.stepId, arr);
+		allDependeeStepIds.add(d.dependsOnStepId);
+	}
+
+	// Query 3: status of every dependee runStep on the runs we're inspecting.
+	const runIds = [...new Set(rawRows.map((r) => r.runId))];
+	const dependeeStatuses =
+		allDependeeStepIds.size > 0 && runIds.length > 0
+			? await db
+					.select({
+						runId: runStep.runId,
+						stepId: runStep.stepId,
+						status: runStep.status,
+					})
+					.from(runStep)
+					.where(
+						and(
+							inArray(runStep.runId, runIds),
+							inArray(runStep.stepId, [...allDependeeStepIds]),
+						),
+					)
+			: [];
+	const statusByRunAndStep = new Map<string, string>();
+	for (const r of dependeeStatuses) {
+		if (r.stepId) statusByRunAndStep.set(`${r.runId}::${r.stepId}`, r.status);
+	}
+
+	return rawRows.map((r) => {
+		const ownDeps = r.definitionStepId ? (depStepIdsByTaskStepId.get(r.definitionStepId) ?? []) : [];
+		const blocked = ownDeps.some(
+			(dependsOnStepId) =>
+				statusByRunAndStep.get(`${r.runId}::${dependsOnStepId}`) !== "completed",
+		);
+		return {
+			runStepId: r.runStepId,
+			stepTitle: r.stepTitle,
+			stepDescription: r.stepDescription,
+			status: r.status,
+			dueAt: r.dueAt,
+			runId: r.runId,
+			runTitle: r.runTitle,
+			runStatus: r.runStatus,
+			workflowId: r.workflowId,
+			workflowTitle: r.workflowTitle,
+			blocked,
+		};
+	});
 }
 
 /** Counts for the home dashboard, scoped to the active org + user. */

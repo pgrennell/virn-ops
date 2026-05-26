@@ -29,9 +29,13 @@ interface RunViewProps {
 	/** True when the viewer is admin/owner of the org -- bypasses assignee gating on
 	 * inputs + Complete. Resolved server-side; passed via the page. */
 	isAdminOrOwner: boolean;
+	/** Optional deep-link target from `?step=<runStepId>`. When the runStep exists in this
+	 * run, it becomes the initial active step; otherwise falls back to the default pick
+	 * (first pending non-blocked). */
+	initialRunStepId?: string;
 }
 
-export function RunView({ runId, isAdminOrOwner }: RunViewProps) {
+export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProps) {
 	const queryClient = useQueryClient();
 	const { user } = useSession();
 	const meId = user?.id ?? null;
@@ -46,15 +50,21 @@ export function RunView({ runId, isAdminOrOwner }: RunViewProps) {
 	const [fieldErrors, setFieldErrors] = useState<Map<string, string | null>>(new Map());
 	const [completeError, setCompleteError] = useState<string | null>(null);
 
-	// Pick a sensible default active step once data arrives: first incomplete, non-blocked.
+	// Pick a sensible default active step once data arrives. Honor `?step=` deep-link
+	// when the runStepId actually exists on this run; otherwise fall back to the first
+	// pending non-blocked step.
 	useEffect(() => {
 		if (!data || activeRunStepId) return;
+		const deepLinked = initialRunStepId
+			? data.steps.find((s) => s.id === initialRunStepId)
+			: undefined;
 		const candidate =
+			deepLinked ??
 			data.steps.find((s) => s.status === "pending" && !s.blocked) ??
 			data.steps.find((s) => s.status === "pending") ??
 			data.steps[0];
 		if (candidate) setActiveRunStepId(candidate.id);
-	}, [data, activeRunStepId]);
+	}, [data, activeRunStepId, initialRunStepId]);
 
 	if (isLoading) {
 		return (
