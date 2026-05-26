@@ -50,9 +50,14 @@ import { BuilderTopBar } from "./BuilderTopBar";
 
 interface BuilderViewProps {
 	workflowId: string;
+	/** True when the caller is admin/owner of the active org. Resolved server-side via
+	 * the gating snapshot in the page (UX_SPEC §2 admin-vs-member axis). Non-admin
+	 * members see view mode regardless of draft state -- the API's adminOrgProcedure
+	 * refuses non-admin writes anyway, but the UI must not show controls that 403. */
+	isAdminOrOwner: boolean;
 }
 
-export function BuilderView({ workflowId }: BuilderViewProps) {
+export function BuilderView({ workflowId, isAdminOrOwner }: BuilderViewProps) {
 	const queryClient = useQueryClient();
 	const workflowQuery = useQuery(orpc.workflows.get.queryOptions({ input: { workflowId } }));
 
@@ -161,6 +166,7 @@ export function BuilderView({ workflowId }: BuilderViewProps) {
 			workflowTitle={workflowQuery.data.workflow.title}
 			forkedFromVersionNumber={forkedFromVersionNumber}
 			isDraft={isDraft}
+			isAdminOrOwner={isAdminOrOwner}
 			previewActive={previewActive}
 			onTogglePreview={() => setPreviewActive((p) => !p)}
 			topLevelError={topLevelError}
@@ -184,6 +190,7 @@ interface BuilderInnerProps {
 	workflowTitle: string;
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
+	isAdminOrOwner: boolean;
 	previewActive: boolean;
 	onTogglePreview: () => void;
 	topLevelError: string | null;
@@ -200,6 +207,7 @@ function BuilderInner({
 	workflowTitle,
 	forkedFromVersionNumber,
 	isDraft,
+	isAdminOrOwner,
 	previewActive,
 	onTogglePreview,
 	topLevelError,
@@ -221,11 +229,16 @@ function BuilderInner({
 	const deleteField = useDeleteField(mutArgs);
 	const reorderSteps = useReorderSteps(mutArgs);
 
-	// Author mode is on when we're looking at a draft AND preview isn't engaged.
-	const authorActive = isDraft && !previewActive;
+	// Author mode is on when we're an admin/owner AND looking at a draft AND preview
+	// isn't engaged. Non-admin members never enter author mode -- the API's
+	// adminOrgProcedure would 403 on every write, so we render view mode and hide
+	// the affordances that would silently fail. Preview is admin-only too (it's an
+	// authoring rehearsal, not an operator view).
+	const authorActive = isAdminOrOwner && isDraft && !previewActive;
+	const previewAvailable = isAdminOrOwner && isDraft;
 	const mode: "author" | "preview" | "view" = authorActive
 		? "author"
-		: previewActive
+		: previewActive && previewAvailable
 			? "preview"
 			: "view";
 
@@ -243,21 +256,25 @@ function BuilderInner({
 	}, [activeStepId, bundle.steps, mode]);
 
 	if (mode === "preview") {
+		// previewAvailable is implied by `mode === "preview"`, so admin-gating on
+		// publish/discard here is the same as on author mode below.
 		return (
 			<BuilderShell
 				bundle={bundle}
 				workflowTitle={workflowTitle}
 				forkedFromVersionNumber={forkedFromVersionNumber}
 				isDraft={isDraft}
+				isAdminOrOwner={isAdminOrOwner}
+				previewAvailable={previewAvailable}
 				previewActive
 				onTogglePreview={onTogglePreview}
 				canEdit={false}
 				editPending={editPending}
 				onEdit={onEdit}
-				canPublish={isDraft}
+				canPublish={isAdminOrOwner && isDraft}
 				publishPending={publishPending}
 				onPublish={onPublish}
-				canDiscard={isDraft}
+				canDiscard={isAdminOrOwner && isDraft}
 				discardPending={discardPending}
 				onDiscard={onDiscard}
 				topLevelError={topLevelError}
@@ -276,15 +293,24 @@ function BuilderInner({
 	}
 
 	if (mode === "view") {
+		// View mode is reached two ways:
+		//   - admin looking at a published version (no draft) -> Edit button visible
+		//     (clicking calls editPublished -> draft fork/resume).
+		//   - non-admin member looking at either a draft or published -> no Edit
+		//     button. They can see what's authored; they can't act.
+		// Either way: no author affordances, no Publish/Discard.
+		const canEdit = isAdminOrOwner && !isDraft;
 		return (
 			<BuilderShell
 				bundle={bundle}
 				workflowTitle={workflowTitle}
 				forkedFromVersionNumber={forkedFromVersionNumber}
-				isDraft={false}
+				isDraft={isDraft}
+				isAdminOrOwner={isAdminOrOwner}
+				previewAvailable={previewAvailable}
 				previewActive={false}
 				onTogglePreview={onTogglePreview}
-				canEdit
+				canEdit={canEdit}
 				editPending={editPending}
 				onEdit={onEdit}
 				canPublish={false}
@@ -304,7 +330,7 @@ function BuilderInner({
 		);
 	}
 
-	// AUTHOR
+	// AUTHOR -- only reached when isAdminOrOwner && isDraft && !previewActive.
 	const fieldsForStep = activeStepId
 		? bundle.fields.filter((f) => f.stepId === activeStepId)
 		: [];
@@ -315,6 +341,8 @@ function BuilderInner({
 			workflowTitle={workflowTitle}
 			forkedFromVersionNumber={forkedFromVersionNumber}
 			isDraft
+			isAdminOrOwner={isAdminOrOwner}
+			previewAvailable={previewAvailable}
 			previewActive={false}
 			onTogglePreview={onTogglePreview}
 			canEdit={false}
@@ -355,6 +383,8 @@ interface BuilderShellProps {
 	workflowTitle: string;
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
+	isAdminOrOwner: boolean;
+	previewAvailable: boolean;
 	previewActive: boolean;
 	onTogglePreview: () => void;
 	canEdit: boolean;
@@ -375,6 +405,8 @@ function BuilderShell({
 	workflowTitle,
 	forkedFromVersionNumber,
 	isDraft,
+	isAdminOrOwner,
+	previewAvailable,
 	previewActive,
 	onTogglePreview,
 	canEdit,
@@ -396,6 +428,7 @@ function BuilderShell({
 				versionNumber={bundle.version.versionNumber}
 				versionStatus={bundle.version.status}
 				forkedFromVersionNumber={forkedFromVersionNumber}
+				previewAvailable={previewAvailable}
 				previewActive={previewActive}
 				onTogglePreview={onTogglePreview}
 				canEdit={canEdit}
@@ -415,7 +448,17 @@ function BuilderShell({
 					</Alert>
 				</div>
 			)}
-			{!isDraft && !previewActive && (
+			{!isAdminOrOwner && (
+				<div className="px-4 py-2">
+					<Alert>
+						<AlertDescription className="text-xs">
+							You're viewing this workflow in read-only mode. Editing and publishing
+							require admin or owner permission.
+						</AlertDescription>
+					</Alert>
+				</div>
+			)}
+			{isAdminOrOwner && !isDraft && !previewActive && (
 				<div className="px-4 py-2">
 					<Alert>
 						<AlertDescription className="text-xs">

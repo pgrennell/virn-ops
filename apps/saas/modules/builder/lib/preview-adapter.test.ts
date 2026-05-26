@@ -10,6 +10,10 @@ import { describe, expect, it } from "vitest";
 import { buildPreviewFromBundle } from "./preview-adapter";
 import type { VersionEditBundleResponse } from "./types";
 
+// The fixture is a structural minimum -- we cast to the broader oRPC response type so
+// we don't have to repeat every column added by Drizzle (createdAt, updatedAt,
+// hiddenByDefault, reviewIntervalDays, ...). The adapter only reads the fields below;
+// missing columns are irrelevant to its behavior.
 function makeBundle(): VersionEditBundleResponse {
 	return {
 		workflow: {
@@ -77,7 +81,7 @@ function makeBundle(): VersionEditBundleResponse {
 			},
 		],
 		dependencies: [],
-	};
+	} as unknown as VersionEditBundleResponse;
 }
 
 describe("buildPreviewFromBundle", () => {

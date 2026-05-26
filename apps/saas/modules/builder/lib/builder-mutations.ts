@@ -24,12 +24,11 @@ import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
-// The cached bundle's full shape comes from the oRPC client's inferred return type,
-// which is broader than our hand-inlined VersionEditBundleResponse (includes every
-// Drizzle column on the workflow row). Use the inferred type for cache reads/writes
-// so setQueryData type-checks; cast to VersionEditBundleResponse at consumer sites
-// where the narrower shape is enough.
-type CachedBundle = Awaited<ReturnType<typeof orpc.workflows.getVersionBundle.call>>;
+import type { VersionEditBundleResponse } from "./types";
+
+// The cached bundle is the full oRPC-inferred shape (which IS VersionEditBundleResponse
+// per types.ts -- single source of truth, no drift).
+type CachedBundle = VersionEditBundleResponse;
 
 interface VersionBundleQueryArgs {
 	versionId: string;

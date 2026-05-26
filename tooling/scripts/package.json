@@ -10,6 +10,7 @@
 		"seed:config": "pnpm seed:capabilities && pnpm seed:settings",
 		"seed:demo-workflow": "dotenv -c -e ../../.env -- tsx ./src/seed-demo-workflow.ts",
 		"test:config": "dotenv -c -e ../../.env -- tsx ./src/test-config-resolution.ts",
+		"walk:builder": "dotenv -c -e ../../.env -- tsx ./src/walk-builder-publish-launch.ts",
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {

@@ -90,6 +90,57 @@ describe("BuilderView wires preview through the neutralizers", () => {
 	});
 });
 
+describe("BuilderView honors the admin-vs-member axis (UX_SPEC §2)", () => {
+	const src = readFileSync(BUILDER_VIEW_PATH, "utf8");
+
+	it("accepts isAdminOrOwner as a required prop", () => {
+		expect(src).toMatch(/isAdminOrOwner:\s*boolean/);
+	});
+
+	it("authorActive gates on isAdminOrOwner -- members never enter author mode", () => {
+		// The regression we're catching: `authorActive = isDraft && !previewActive`
+		// (no admin check). Every write would silently 403 against adminOrgProcedure.
+		expect(src).toMatch(/const\s+authorActive\s*=\s*isAdminOrOwner\s*&&/);
+	});
+
+	it("canEdit gates on isAdminOrOwner -- members never see the Edit button on published versions", () => {
+		// Caught regression: `canEdit` hardcoded true in view mode (members see Edit,
+		// click it, get 403 from editPublished's adminOrgProcedure).
+		expect(src).toMatch(/canEdit\s*=\s*isAdminOrOwner/);
+	});
+
+	it("threads isAdminOrOwner into the BuilderShell so the read-only banner can render", () => {
+		expect(src).toMatch(/isAdminOrOwner={isAdminOrOwner}/);
+	});
+});
+
+describe("builder/page.tsx threads the snapshot.isAdminSuperset flag", () => {
+	const pagePath = path.resolve(
+		import.meta.dirname,
+		"..",
+		"..",
+		"..",
+		"app",
+		"(authenticated)",
+		"(main)",
+		"(organizations)",
+		"[organizationSlug]",
+		"library",
+		"workflows",
+		"[workflowId]",
+		"builder",
+		"page.tsx",
+	);
+	const pageSrc = readFileSync(pagePath, "utf8");
+
+	it("captures snapshot from assertCanSee and passes isAdminSuperset to BuilderView", () => {
+		// Caught regression: the page discards the snapshot (`await assertCanSee(...)`
+		// with no destructure), losing the admin-vs-member axis entirely.
+		expect(pageSrc).toMatch(/const\s*\{\s*snapshot\s*\}\s*=\s*await\s+assertCanSee/);
+		expect(pageSrc).toMatch(/isAdminOrOwner={snapshot\.isAdminSuperset}/);
+	});
+});
+
 describe("builder-mutations: split optimistic strategy", () => {
 	const src = readFileSync(BUILDER_MUTATIONS_PATH, "utf8");
 

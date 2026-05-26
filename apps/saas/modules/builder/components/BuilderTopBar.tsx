@@ -22,6 +22,10 @@ interface BuilderTopBarProps {
 	 * null when this draft is v1 (no parent) or when the active version IS the latest
 	 * published. */
 	forkedFromVersionNumber: number | null;
+	/** Whether the Preview toggle should be shown at all. Computed by the parent from
+	 * (isAdminOrOwner && isDraft) -- preview is an authoring rehearsal, not an operator
+	 * view, so we hide the toggle for non-admins. */
+	previewAvailable: boolean;
 	previewActive: boolean;
 	onTogglePreview: () => void;
 	canEdit: boolean;
@@ -40,6 +44,7 @@ export function BuilderTopBar({
 	versionNumber,
 	versionStatus,
 	forkedFromVersionNumber,
+	previewAvailable,
 	previewActive,
 	onTogglePreview,
 	canEdit,
@@ -66,7 +71,7 @@ export function BuilderTopBar({
 			</div>
 
 			<div className="gap-2 flex items-center">
-				{versionStatus === "draft" && (
+				{previewAvailable && (
 					<Button
 						variant={previewActive ? "secondary" : "ghost"}
 						size="sm"
