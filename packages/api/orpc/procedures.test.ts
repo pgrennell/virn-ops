@@ -9,6 +9,14 @@ vi.mock("@virn/auth", () => ({
 	},
 }));
 
+// Mocked so the org-middleware import chain doesn't pull in client.ts (which throws on
+// import when DATABASE_URL is unset, e.g. in vitest). These tests only exercise the
+// non-org procedures; protectedOrgProcedure / adminOrgProcedure are tested via the lib
+// helpers they wrap (see modules/runs/lib/*.test.ts for the pattern).
+vi.mock("@virn/database", () => ({
+	getOrganizationMembership: vi.fn(),
+}));
+
 import { auth } from "@virn/auth";
 
 import { adminProcedure, protectedProcedure, publicProcedure } from "./procedures";

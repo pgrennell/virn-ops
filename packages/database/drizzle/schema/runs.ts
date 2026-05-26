@@ -198,6 +198,25 @@ export const runStepRelations = relations(runStep, ({ one, many }) => ({
   values: many(fieldValue),
 }));
 
+export const runStepAssigneeRelations = relations(runStepAssignee, ({ one }) => ({
+  runStep: one(runStep, {
+    fields: [runStepAssignee.runStepId],
+    references: [runStep.id],
+  }),
+  participant: one(participant, {
+    fields: [runStepAssignee.participantId],
+    references: [participant.id],
+  }),
+}));
+
+export const runRoleAssignmentRelations = relations(runRoleAssignment, ({ one }) => ({
+  run: one(run, { fields: [runRoleAssignment.runId], references: [run.id] }),
+  participant: one(participant, {
+    fields: [runRoleAssignment.participantId],
+    references: [participant.id],
+  }),
+}));
+
 export const participantRelations = relations(participant, ({ one }) => ({
   run: one(run, { fields: [participant.runId], references: [run.id] }),
 }));
