@@ -24,6 +24,7 @@ import {
 	getRunStepWithRun,
 	markRunCompleted,
 	markRunStepCompleted,
+	withTransaction,
 	writeAuditAndActivity,
 } from "@virn/database";
 
@@ -59,6 +60,17 @@ export async function completeRunStep(
 			{ runStepId },
 		);
 	}
+	// Defense-in-depth: once the run cascades to completed (or is archived), no further
+	// step completions are accepted -- even on optional steps the cascade left behind. The
+	// UI hides the Complete button in this case (RunStepPanel); the API enforces it too so
+	// a direct curl can't bypass.
+	if (rs.run.status !== "active") {
+		throw new RunEngineError(
+			"RUN_NOT_ACTIVE",
+			`Cannot complete steps on a ${rs.run.status} run.`,
+			{ runStepId, runId: rs.run.id, runStatus: rs.run.status },
+		);
+	}
 
 	// Access: assignee OR admin/owner.
 	if (!ctx.isAdminOrOwner) {
@@ -76,8 +88,25 @@ export async function completeRunStep(
 
 	// Refusal #1: required fields. Only step-scoped fields (not kickoff) participate here;
 	// kickoff required fields were enforced at launch time.
+	// Refusal #2: stop-task dependencies.
+	//
+	// `getRequiredFieldsForStep` and `findIncompleteStopDependencies` are independent —
+	// run them in parallel. `getFieldValuesForRun` depends on the required-field IDs and
+	// is only needed when there are required fields, so it stays sequential.
 	if (rs.stepId) {
-		const required = await getRequiredFieldsForStep(rs.stepId);
+		const [required, incomplete] = await Promise.all([
+			getRequiredFieldsForStep(rs.stepId),
+			findIncompleteStopDependencies(rs.run.id, rs.stepId),
+		]);
+
+		if (incomplete.length > 0) {
+			throw new RunEngineError(
+				"STOP_TASK_BLOCKED",
+				`Cannot complete: ${incomplete.length} dependency step(s) not yet completed.`,
+				{ runStepId, incompleteDependencyStepIds: incomplete },
+			);
+		}
+
 		if (required.length > 0) {
 			const requiredIds = required.map((r) => r.id);
 			const present = await getFieldValuesForRun(rs.run.id, requiredIds);
@@ -96,39 +125,45 @@ export async function completeRunStep(
 				);
 			}
 		}
-
-		// Refusal #2: stop-task dependencies.
-		const incomplete = await findIncompleteStopDependencies(rs.run.id, rs.stepId);
-		if (incomplete.length > 0) {
-			throw new RunEngineError(
-				"STOP_TASK_BLOCKED",
-				`Cannot complete: ${incomplete.length} dependency step(s) not yet completed.`,
-				{ runStepId, incompleteDependencyStepIds: incomplete },
-			);
-		}
 	}
 
-	// Mark complete + emit append-only records.
-	await markRunStepCompleted({ runStepId, completedBy: ctx.userId });
-	await writeAuditAndActivity({
-		organizationId: ctx.organizationId,
-		actorUserId: ctx.userId,
-		action: "run_step.completed",
-		verb: "completed",
-		entityType: "run_step",
-		entityId: runStepId,
-		changes: { fromStatus: rs.status, toStatus: "completed" },
-		metadata: { runId: rs.run.id, workflowVersionId: rs.run.workflowVersionId },
-		activityData: { stepTitle: rs.title },
-	});
+	// Atomic write: step-complete update + audit + activity must succeed or fail together.
+	// The cascade (run-level completion) runs in the same transaction; `markRunCompleted`'s
+	// `WHERE status = 'active'` clause + boolean return prevents duplicate cascade audits
+	// when two concurrent calls both observe `areAllRequiredRunStepsComplete === true`.
+	const runCompleted = await withTransaction(async (tx) => {
+		await markRunStepCompleted({ runStepId, completedBy: ctx.userId }, tx);
+		await writeAuditAndActivity(
+			{
+				organizationId: ctx.organizationId,
+				actorUserId: ctx.userId,
+				action: "run_step.completed",
+				verb: "completed",
+				entityType: "run_step",
+				entityId: runStepId,
+				changes: { fromStatus: rs.status, toStatus: "completed" },
+				metadata: { runId: rs.run.id, workflowVersionId: rs.run.workflowVersionId },
+				activityData: { stepTitle: rs.title },
+			},
+			tx,
+		);
 
-	// Cascade: if every required runStep is now completed, mark the run completed too.
-	let runCompleted = false;
-	if (rs.run.status === "active") {
+		// Cascade: only attempt if the run is still active at the time we entered.
+		// `markRunCompleted` is the authoritative race-resolver — it only writes when
+		// the row is still `active`, so the cascade audit fires at most once per run.
+		if (rs.run.status !== "active") {
+			return false;
+		}
 		const allDone = await areAllRequiredRunStepsComplete(rs.run.id);
-		if (allDone) {
-			await markRunCompleted(rs.run.id);
-			await writeAuditAndActivity({
+		if (!allDone) {
+			return false;
+		}
+		const didTransition = await markRunCompleted(rs.run.id, tx);
+		if (!didTransition) {
+			return false;
+		}
+		await writeAuditAndActivity(
+			{
 				organizationId: ctx.organizationId,
 				actorUserId: ctx.userId,
 				action: "run.completed",
@@ -138,10 +173,11 @@ export async function completeRunStep(
 				changes: { fromStatus: "active", toStatus: "completed" },
 				metadata: { triggeredByRunStepId: runStepId },
 				activityData: { reason: "all required steps complete" },
-			});
-			runCompleted = true;
-		}
-	}
+			},
+			tx,
+		);
+		return true;
+	});
 
 	return { runStepId, runCompleted };
 }

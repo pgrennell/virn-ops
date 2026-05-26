@@ -174,8 +174,15 @@ export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProp
 		: new Set<string>();
 	const isAssignedToMe = meId != null && activeAssigneeUserIds.has(meId);
 
+	// Run-level status gates panel mode: a completed/archived run forces "view" for every
+	// step regardless of assignment/role. Without this, pending optional steps left over
+	// after a cascade-completion stayed editable + completable (a bug Antigravity caught
+	// during the foundation walkthrough). The lib-layer setFieldValue / completeStep would
+	// also refuse, but the UI shouldn't offer the action in the first place.
+	const runIsActive = data.status === "active";
 	const panelMode = (() => {
 		if (!activeRunStep) return "view" as const;
+		if (!runIsActive) return "view" as const;
 		if (isAdminOrOwner) return "complete" as const;
 		if (isAssignedToMe) return "complete" as const;
 		return "view" as const;
@@ -223,6 +230,7 @@ export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProp
 								title: activeRunStep.title,
 								description: activeRunStep.description,
 								status: activeRunStep.status as RunStepStatus,
+								runStatus: data.status as RunStatus,
 								stepType:
 									(activeRunStep.stepId
 										? (definitionStepById.get(activeRunStep.stepId)?.type as StepType | undefined)

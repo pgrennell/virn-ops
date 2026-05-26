@@ -305,3 +305,72 @@ initial migration when no DB has been touched.
 **Consequences:** Once `pnpm --filter @virn/database migrate` runs against Neon, the
 `0000_initial.sql` baseline is sealed. Future schema changes are additive incremental
 migrations and never squashed.
+
+---
+
+## 2026-05-26 — Phase 3 run engine
+
+Decisions made while building the snapshot + completion API (`packages/api/modules/runs/`,
+`packages/database/drizzle/queries/runs.ts`) that weren't pre-specified in the Phase 3
+brief or `docs/ARCHITECTURE.md`.
+
+### D-014 — Org admins/owners bypass the assignee check on `completeStep` and `setFieldValue`
+
+**Context:** The Phase 3 brief specified that step writes (`setFieldValue`,
+`completeStep`) are gated by assignment via `run_step_assignee → participant.userId`. It
+left open whether org admins/owners — who can already see every run via
+`protectedOrgProcedure` — should also be able to write to steps they aren't personally
+assigned to. Two reasonable defaults exist (deny by role; allow by role) and both have
+business defenders.
+
+**Decision:** Admins and owners (per `member.role ∈ {admin, owner}`, as exposed by
+`adminOrgProcedure`'s membership lookup) bypass the assignee check on both
+`completeStep` and `setFieldValue`. Regular org members can only write to steps where
+they appear in `run_step_assignee`. Kickoff field writes after launch (`runStepId = null`)
+are admin-or-owner only — there is no "assignee" concept for launch-level fields.
+
+**Rationale:** In an operations context, the most common reason to override is to
+*unblock*: the assignee is out, the work needs to move, the admin clears the step. Forcing
+every override through a reassignment dance (admin → reassign → admin acts as the new
+assignee → reassign back) creates friction with no integrity gain — the action is fully
+attributed via `run_step.completed_by` and the append-only audit/activity rows. The
+denial model would also conflict with how org-config and org-billing actions already work:
+admins act broadly. Symmetry.
+
+**Consequences:** Audit and activity rows on admin-completed steps look identical to
+assignee-completed steps; the `actor_user_id` distinguishes them. If we later need a
+visual "Completed by admin override" treatment in the UI, the data is there (admin vs.
+assignee can be derived by joining `run_step_assignee` against the actor at render time).
+A future refinement could expose a per-org setting (`runs.allow_admin_override`) gated by
+a capability if this default proves wrong for some verticals.
+
+### D-015 — Run auto-completes when every *required* step is done; optional steps don't block
+
+**Context:** `step.is_required` (default `true`) was already in the definition schema and
+`step.type` includes `heading` and `one_off` types that are typically not required. The
+brief said "mark the run complete when all required steps are done" — but didn't define
+what "required" means in the cascade: every runStep, every required runStep, or every
+runStep matching some other rule (e.g. excluding `not_applicable`).
+
+**Decision:** A run cascades to `status='completed'` when every runStep whose source
+`step.is_required = true` has `run_step.status = 'completed'`. Optional steps
+(`is_required = false`) and explicitly `skipped` / `not_applicable` runSteps do not gate
+the cascade. Implemented in `areAllRequiredRunStepsComplete()`
+([packages/database/drizzle/queries/runs.ts](../packages/database/drizzle/queries/runs.ts))
+and triggered at the tail of `completeRunStep()`
+([packages/api/modules/runs/lib/complete-step.ts](../packages/api/modules/runs/lib/complete-step.ts)).
+
+**Rationale:** Optional steps exist precisely so they don't block forward progress —
+treating them as cascade gates would defeat the column. Matches how SOP / checklist tools
+behave in practice (e.g., Asana's "required custom fields" pattern, ServiceNow's
+mandatory-vs-conditional tasks). Skipped / not-applicable are already explicit completion
+states with the same intent: "this step is resolved, just not by being done."
+
+**Consequences:** A run with all optional steps would never auto-complete by this rule
+(no required rows → `areAllRequiredRunStepsComplete()` returns `false`). The schema
+default of `is_required = true` means most workflows are unaffected, but a future
+workflow consisting only of optional steps would need to be completed by an explicit
+"mark complete" action — that procedure doesn't exist yet; flag if it's ever needed. The
+cascade emits its own audit + activity pair (`action="run.completed"`, attributed to the
+user who completed the final triggering step) — useful for the activity feed but
+potentially misleading if read as "this user completed the run."

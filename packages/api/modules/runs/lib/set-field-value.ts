@@ -17,6 +17,7 @@ import {
 	getRunStepWithRun,
 	upsertRunFieldValue,
 	validateFieldValue,
+	withTransaction,
 	writeAuditAndActivity,
 } from "@virn/database";
 
@@ -61,6 +62,14 @@ export async function setRunFieldValue(
 				{ runStepId: input.runStepId },
 			);
 		}
+		// Defense-in-depth (matches completeRunStep): a non-active run locks field edits.
+		if (rs.run.status !== "active") {
+			throw new RunEngineError(
+				"RUN_NOT_ACTIVE",
+				`Cannot edit field values on a ${rs.run.status} run.`,
+				{ runStepId: input.runStepId, runId: rs.run.id, runStatus: rs.run.status },
+			);
+		}
 		if (!ctx.isAdminOrOwner) {
 			const isAssignee = rs.assignees.some((a) => a.participant.userId === ctx.userId);
 			if (!isAssignee) {
@@ -93,6 +102,13 @@ export async function setRunFieldValue(
 				runId: input.runId,
 			});
 		}
+		if (r.status !== "active") {
+			throw new RunEngineError(
+				"RUN_NOT_ACTIVE",
+				`Cannot edit kickoff field values on a ${r.status} run.`,
+				{ runId: r.id, runStatus: r.status },
+			);
+		}
 		runId = r.id;
 		workflowVersionId = r.workflowVersionId;
 	}
@@ -122,25 +138,35 @@ export async function setRunFieldValue(
 		);
 	}
 
-	await upsertRunFieldValue({
-		runId,
-		runStepId: input.runStepId,
-		fieldId: f.id,
-		value: validated,
-	});
+	// Atomic write: field-value upsert + activity must succeed or fail together.
+	// A crash between them would leave a stored field value with no activity trail.
+	await withTransaction(async (tx) => {
+		await upsertRunFieldValue(
+			{
+				runId,
+				runStepId: input.runStepId,
+				fieldId: f.id,
+				value: validated,
+			},
+			tx,
+		);
 
-	// Activity (per #6 -- field edits are user-visible). Audit_log skipped here to avoid
-	// noise; setFieldValue fires often during a run. If forensic field-edit history becomes
-	// needed, add a dedicated audit channel.
-	await writeAuditAndActivity({
-		organizationId: ctx.organizationId,
-		actorUserId: ctx.userId,
-		action: "field_value.set",
-		verb: "edited",
-		entityType: "field_value",
-		entityId: f.id,
-		changes: { runId, runStepId: input.runStepId ?? null, fieldKey: input.fieldKey },
-		activityData: { fieldKey: input.fieldKey, fieldLabel: f.label },
+		// Activity (per #6 -- field edits are user-visible). Audit_log skipped here to
+		// avoid noise; setFieldValue fires often during a run. If forensic field-edit
+		// history becomes needed, add a dedicated audit channel.
+		await writeAuditAndActivity(
+			{
+				organizationId: ctx.organizationId,
+				actorUserId: ctx.userId,
+				action: "field_value.set",
+				verb: "edited",
+				entityType: "field_value",
+				entityId: f.id,
+				changes: { runId, runStepId: input.runStepId ?? null, fieldKey: input.fieldKey },
+				activityData: { fieldKey: input.fieldKey, fieldLabel: f.label },
+			},
+			tx,
+		);
 	});
 
 	return { ok: true as const };

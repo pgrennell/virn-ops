@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@virn/ui/components/alert";
 import { Button } from "@virn/ui/components/button";
 import { MessageSquare } from "lucide-react";
 
-import type { FieldSaveState, FieldType, RunStepStatus, RunViewMode, StepType } from "../types";
+import type { FieldSaveState, FieldType, RunStatus, RunStepStatus, RunViewMode, StepType } from "../types";
 import { RunFieldInput } from "./RunFieldInput";
 
 export interface RunStepPanelFieldRow {
@@ -30,6 +30,10 @@ export interface RunStepPanelData {
 	title: string;
 	description: string | null;
 	status: RunStepStatus;
+	/** Run-level status. A non-active run forces read-only on every step regardless of
+	 * the step's own status -- a pending optional step after a cascade-completion still
+	 * has status="pending" but must not be editable/completable. */
+	runStatus: RunStatus;
 	stepType: StepType;
 	blocked: boolean;
 	canComplete: boolean;
@@ -77,12 +81,17 @@ export function RunStepPanel({
 }: RunStepPanelProps) {
 	const chip = STEP_TYPE_CHIP[data.stepType];
 	const isCompleted = data.status === "completed";
+	const runIsCompleted = data.runStatus === "completed" || data.runStatus === "archived";
 	const fieldsByPosition = [...fields].sort((a, b) => a.position - b.position);
 
 	// In complete-mode, the user must be assigned (or admin -- caller passes
-	// `mode="complete"` only when permitted). In view-mode, inputs are disabled.
-	const inputsDisabled = mode !== "complete" || isCompleted;
-	const showCompleteButton = mode === "complete" && !isCompleted && data.stepType !== "heading";
+	// `mode="complete"` only when permitted). In view-mode, inputs are disabled. The
+	// run-level status is also checked: once the parent run finishes, every step's
+	// inputs lock and the Complete button hides, even for steps that are still pending
+	// (e.g. optional steps left over after the cascade).
+	const inputsDisabled = mode !== "complete" || isCompleted || runIsCompleted;
+	const showCompleteButton =
+		mode === "complete" && !isCompleted && !runIsCompleted && data.stepType !== "heading";
 
 	return (
 		<section className="px-5 py-4 flex flex-col min-h-0">
@@ -165,6 +174,15 @@ export function RunStepPanel({
 				<div className="pt-3 border-t border-border">
 					<p className="text-xs text-foreground/50">
 						Completed. Field values above are now read-only.
+					</p>
+				</div>
+			)}
+			{!isCompleted && runIsCompleted && (
+				<div className="pt-3 border-t border-border">
+					<p className="text-xs text-foreground/50">
+						{data.runStatus === "archived"
+							? "This run is archived. Field values are read-only."
+							: "This run completed before this step. Field values are read-only."}
 					</p>
 				</div>
 			)}

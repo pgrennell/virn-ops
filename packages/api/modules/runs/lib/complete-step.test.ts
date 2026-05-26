@@ -9,6 +9,11 @@ vi.mock("@virn/database", () => ({
 	areAllRequiredRunStepsComplete: vi.fn(),
 	markRunCompleted: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
+	// `withTransaction` is the helper from packages/database/drizzle/client.ts; in tests
+	// we run the callback directly with a stub `tx` so the mutation helpers (already
+	// mocked above) record their calls. Real transactional semantics are exercised by
+	// integration tests.
+	withTransaction: vi.fn(async (fn) => fn({} as never)),
 }));
 
 import {
@@ -50,7 +55,11 @@ const RS_PENDING_AS_ASSIGNEE = {
 beforeEach(() => {
 	vi.clearAllMocks();
 	vi.mocked(markRunStepCompleted).mockResolvedValue(undefined);
-	vi.mocked(markRunCompleted).mockResolvedValue(undefined);
+	// markRunCompleted now returns a boolean indicating whether it actually
+	// transitioned the row from 'active' to 'completed' (G3 race fix). Default
+	// the mock to `true` (transition succeeded) — tests that exercise the
+	// lost-race path override it explicitly.
+	vi.mocked(markRunCompleted).mockResolvedValue(true);
 	vi.mocked(writeAuditAndActivity).mockResolvedValue(undefined);
 	vi.mocked(getRequiredFieldsForStep).mockResolvedValue([]);
 	vi.mocked(getFieldValuesForRun).mockResolvedValue([]);
@@ -146,10 +155,12 @@ describe("completeRunStep", () => {
 		const result = await completeRunStep(CTX, "rs_1");
 
 		expect(result).toEqual({ runStepId: "rs_1", runCompleted: false });
-		expect(markRunStepCompleted).toHaveBeenCalledWith({
-			runStepId: "rs_1",
-			completedBy: "user_1",
-		});
+		// Mutation helpers now receive (input, tx) — tx is the executor injected by
+		// withTransaction (stub `{}` in test).
+		expect(markRunStepCompleted).toHaveBeenCalledWith(
+			{ runStepId: "rs_1", completedBy: "user_1" },
+			expect.anything(),
+		);
 		expect(writeAuditAndActivity).toHaveBeenCalledTimes(1);
 		expect(writeAuditAndActivity).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -158,6 +169,7 @@ describe("completeRunStep", () => {
 				entityType: "run_step",
 				entityId: "rs_1",
 			}),
+			expect.anything(),
 		);
 		expect(markRunCompleted).not.toHaveBeenCalled();
 	});
@@ -169,7 +181,9 @@ describe("completeRunStep", () => {
 		const result = await completeRunStep(CTX, "rs_1");
 
 		expect(result.runCompleted).toBe(true);
-		expect(markRunCompleted).toHaveBeenCalledWith("run_1");
+		// markRunCompleted is now called with (runId, tx) — tx is the transaction
+		// handle injected by the withTransaction stub.
+		expect(markRunCompleted).toHaveBeenCalledWith("run_1", expect.anything());
 		// Two append-only emissions: one for the step, one for the run.
 		expect(writeAuditAndActivity).toHaveBeenCalledTimes(2);
 		const calls = vi.mocked(writeAuditAndActivity).mock.calls;
@@ -180,16 +194,48 @@ describe("completeRunStep", () => {
 		});
 	});
 
-	it("does not cascade when run is already non-active", async () => {
+	it("RUN_NOT_ACTIVE when the parent run is completed (defense vs. post-cascade edits)", async () => {
+		vi.mocked(getRunStepWithRun).mockResolvedValueOnce({
+			...RS_PENDING_AS_ASSIGNEE,
+			run: { ...RS_PENDING_AS_ASSIGNEE.run, status: "completed" },
+		} as never);
+		await expect(completeRunStep(CTX, "rs_1")).rejects.toMatchObject({
+			code: "RUN_NOT_ACTIVE",
+			details: { runStatus: "completed" },
+		});
+		expect(markRunStepCompleted).not.toHaveBeenCalled();
+	});
+
+	it("RUN_NOT_ACTIVE when the parent run is archived", async () => {
 		vi.mocked(getRunStepWithRun).mockResolvedValueOnce({
 			...RS_PENDING_AS_ASSIGNEE,
 			run: { ...RS_PENDING_AS_ASSIGNEE.run, status: "archived" },
 		} as never);
+		await expect(completeRunStep(CTX, "rs_1")).rejects.toMatchObject({
+			code: "RUN_NOT_ACTIVE",
+			details: { runStatus: "archived" },
+		});
+		expect(markRunStepCompleted).not.toHaveBeenCalled();
+	});
+
+	it("does not emit cascade audit when markRunCompleted loses the race (G3)", async () => {
+		// Simulate two concurrent "complete last step" calls: both observe
+		// areAllRequiredRunStepsComplete === true, but only one's UPDATE wins the
+		// row-level lock and transitions status from 'active' to 'completed'. The
+		// loser's markRunCompleted returns false; the cascade audit must NOT fire,
+		// otherwise we'd write duplicate run.completed rows.
+		vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_ASSIGNEE as never);
 		vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(true);
+		vi.mocked(markRunCompleted).mockResolvedValueOnce(false);
 
 		const result = await completeRunStep(CTX, "rs_1");
 
 		expect(result.runCompleted).toBe(false);
-		expect(markRunCompleted).not.toHaveBeenCalled();
+		expect(markRunCompleted).toHaveBeenCalledTimes(1);
+		// Only the step-completion audit fires; the cascade audit must be skipped.
+		expect(writeAuditAndActivity).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(writeAuditAndActivity).mock.calls[0][0]).toMatchObject({
+			action: "run_step.completed",
+		});
 	});
 });
