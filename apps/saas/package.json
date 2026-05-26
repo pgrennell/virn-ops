@@ -68,6 +68,7 @@
 		"@types/react-dom": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"dotenv": "catalog:",
+		"drizzle-orm": "catalog:",
 		"postcss": "catalog:",
 		"tailwindcss": "catalog:",
 		"typescript": "catalog:",
