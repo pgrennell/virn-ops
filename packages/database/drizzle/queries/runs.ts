@@ -280,7 +280,13 @@ export async function insertRunSnapshot(input: {
 // ---------------------------------------------------------------------------
 
 /** Fetch a run with everything the Run view needs: steps + values + participants + role
- * assignments + the workflow title for chrome. Returns null if not found or wrong org. */
+ * assignments + the workflow title for chrome + the version's snapshot context (sections,
+ * step definitions for section/type lookup, field definitions for input rendering).
+ *
+ * Returns null if not found or wrong org. The version's sections/steps/fields are
+ * IMMUTABLE post-publish by convention (Invariant #4), so they're safe to surface to the
+ * client alongside the mutable runtime data without breaking snapshot semantics.
+ */
 export async function getRunForOrg(organizationId: string, runId: string) {
 	return (
 		(await db.query.run.findFirst({
@@ -291,6 +297,11 @@ export async function getRunForOrg(organizationId: string, runId: string) {
 				},
 				version: {
 					columns: { id: true, versionNumber: true, status: true },
+					with: {
+						sections: true,
+						steps: true,
+						fields: true,
+					},
 				},
 				steps: {
 					with: {
