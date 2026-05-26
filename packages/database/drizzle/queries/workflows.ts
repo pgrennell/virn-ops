@@ -1,0 +1,993 @@
+// packages/database/drizzle/queries/workflows.ts
+//
+// Definition-layer DB helpers for the Workflow Builder (UX_SPEC §4.3) and the run engine
+// snapshot reads. Lives in @virn/database so that:
+//   - launchRun (api/modules/runs/lib) keeps its single import surface,
+//   - the new Workflow Builder API module reads/writes only via these helpers (no direct
+//     drizzle in api/lib code),
+//   - the Library API module (Pass-4-onwards) can consume the same listing helpers.
+//
+// Snapshot semantics (Invariants #3 / #4): a `workflow_version` of status="published" is
+// immutable -- the run engine snapshots it. The builder mutates ONLY drafts. The lib layer
+// holds a single `assertVersionIsDraft` chokepoint; this file only enumerates the data and
+// trusts the caller has guarded.
+//
+// Field-key lifecycle (Invariant #5): each `field.key` is unique within its version,
+// auto-slugged from the label on create, editable while UNREFERENCED, locked the moment a
+// schema reference exists. Today the locking surfaces are:
+//   - automation_condition.sourceFieldId  -- show-when condition references the field
+//   - step.dueSourceFieldId               -- due-rule pulls a date from the field
+// (Merge variables in description text, e.g. `{{customer_name}}`, are NOT scanned here --
+// the feature isn't shipped yet. When it ships, extend `findFieldReferencers` to scan
+// text; see D-017.)
+//
+// Step references: `step.dueAnchorStepId` points at another step for `offset_from_step`
+// due-rules (deferred). Step deletion enumerates referencers via the same pattern.
+
+import { and, asc, desc, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
+
+import { db, type DbExecutor } from "../client";
+import {
+	automationCondition,
+	field,
+	section,
+	step,
+	stepDependency,
+	workflow,
+	workflowRole,
+	workflowVersion,
+} from "../schema/postgres";
+
+// ---------------------------------------------------------------------------
+// Workflow-level reads
+// ---------------------------------------------------------------------------
+
+/** Fetch a workflow scoped to the org. Returns null if not found or not in this org. */
+export async function getWorkflowForOrg(organizationId: string, workflowId: string) {
+	return (
+		(await db.query.workflow.findFirst({
+			where: (w, { and: a, eq: e }) => a(e(w.id, workflowId), e(w.organizationId, organizationId)),
+		})) ?? null
+	);
+}
+
+export interface WorkflowListRow {
+	id: string;
+	type: "procedure" | "document" | "policy" | "form";
+	title: string;
+	description: string | null;
+	isActive: boolean;
+	createdAt: Date;
+	updatedAt: Date;
+	hasDraft: boolean;
+	latestPublishedVersionNumber: number | null;
+	latestPublishedAt: Date | null;
+}
+
+/** List workflows in an org (Library consumer + Builder index). Excludes soft-deleted rows
+ * by default. Surfaces "has open draft" + "latest published version" because they drive
+ * the row-action choice in the Library (Run published vs. Edit draft). */
+export async function listWorkflowsForOrg(input: {
+	organizationId: string;
+	includeArchived?: boolean;
+	limit?: number;
+	offset?: number;
+}): Promise<WorkflowListRow[]> {
+	const limit = input.limit ?? 100;
+	const offset = input.offset ?? 0;
+
+	const rows = await db
+		.select({
+			id: workflow.id,
+			type: workflow.type,
+			title: workflow.title,
+			description: workflow.description,
+			isActive: workflow.isActive,
+			createdAt: workflow.createdAt,
+			updatedAt: workflow.updatedAt,
+			deletedAt: workflow.deletedAt,
+		})
+		.from(workflow)
+		.where(eq(workflow.organizationId, input.organizationId))
+		.orderBy(desc(workflow.updatedAt))
+		.limit(limit)
+		.offset(offset);
+
+	const visible = input.includeArchived ? rows : rows.filter((r) => r.deletedAt === null);
+	if (visible.length === 0) return [];
+
+	const ids = visible.map((r) => r.id);
+	const versions = await db
+		.select({
+			workflowId: workflowVersion.workflowId,
+			status: workflowVersion.status,
+			versionNumber: workflowVersion.versionNumber,
+			publishedAt: workflowVersion.publishedAt,
+		})
+		.from(workflowVersion)
+		.where(inArray(workflowVersion.workflowId, ids));
+
+	const draftSet = new Set<string>();
+	const latestPub = new Map<string, { versionNumber: number; publishedAt: Date | null }>();
+	for (const v of versions) {
+		if (v.status === "draft") {
+			draftSet.add(v.workflowId);
+		} else if (v.status === "published") {
+			const cur = latestPub.get(v.workflowId);
+			if (!cur || v.versionNumber > cur.versionNumber) {
+				latestPub.set(v.workflowId, {
+					versionNumber: v.versionNumber,
+					publishedAt: v.publishedAt,
+				});
+			}
+		}
+	}
+
+	return visible.map((r) => {
+		const pub = latestPub.get(r.id);
+		return {
+			id: r.id,
+			type: r.type,
+			title: r.title,
+			description: r.description,
+			isActive: r.isActive,
+			createdAt: r.createdAt,
+			updatedAt: r.updatedAt,
+			hasDraft: draftSet.has(r.id),
+			latestPublishedVersionNumber: pub?.versionNumber ?? null,
+			latestPublishedAt: pub?.publishedAt ?? null,
+		};
+	});
+}
+
+export interface WorkflowWithVersionsRow {
+	workflow: typeof workflow.$inferSelect;
+	currentDraft: typeof workflowVersion.$inferSelect | null;
+	latestPublished: typeof workflowVersion.$inferSelect | null;
+	allVersions: Array<typeof workflowVersion.$inferSelect>;
+}
+
+/** Hydrated workflow record + every version in newest-first order, plus shortcuts to the
+ * current draft (at most one — enforced by editPublished/createWorkflow) and the latest
+ * published. Used by the Builder index + by `editPublished` to decide resume-vs-fork. */
+export async function getWorkflowWithVersions(
+	organizationId: string,
+	workflowId: string,
+): Promise<WorkflowWithVersionsRow | null> {
+	const wf = await getWorkflowForOrg(organizationId, workflowId);
+	if (!wf) return null;
+
+	const allVersions = await db
+		.select()
+		.from(workflowVersion)
+		.where(eq(workflowVersion.workflowId, wf.id))
+		.orderBy(desc(workflowVersion.versionNumber));
+
+	const drafts = allVersions.filter((v) => v.status === "draft");
+	if (drafts.length > 1) {
+		// Defense-in-depth: the publish/fork transactions enforce at-most-one draft.
+		// Logging instead of throwing lets readers still see something useful; tests
+		// will catch the underlying drift.
+		console.warn(
+			`getWorkflowWithVersions: workflow ${wf.id} has ${drafts.length} drafts; using newest.`,
+		);
+	}
+	const currentDraft = drafts[0] ?? null;
+	const latestPublished = allVersions.find((v) => v.status === "published") ?? null;
+
+	return { workflow: wf, currentDraft, latestPublished, allVersions };
+}
+
+// ---------------------------------------------------------------------------
+// Version reads — published path (run-engine snapshot consumer)
+// ---------------------------------------------------------------------------
+
+/** Find the most recent published version of a workflow. Returns null if none is published. */
+export async function getLatestPublishedWorkflowVersion(workflowId: string) {
+	return (
+		(await db.query.workflowVersion.findFirst({
+			where: (v, { and: a, eq: e }) => a(e(v.workflowId, workflowId), e(v.status, "published")),
+			orderBy: (v, { desc }) => [desc(v.versionNumber)],
+		})) ?? null
+	);
+}
+
+/** Fetch a specific version. Caller verifies status before launching/editing. */
+export async function getWorkflowVersionById(versionId: string) {
+	return (
+		(await db.query.workflowVersion.findFirst({
+			where: (v, { eq: e }) => e(v.id, versionId),
+		})) ?? null
+	);
+}
+
+/** Pull everything needed to snapshot a launch: all steps (with due-config), all fields
+ * (kickoff + step-scoped), and all step_dependency rows for the version. Single-object
+ * shape consumed by launchRun -- do NOT change without updating that consumer. */
+export async function getVersionLaunchBundle(workflowVersionId: string) {
+	const [steps, fields, deps] = await Promise.all([
+		db.query.step.findMany({
+			where: (s, { eq: e }) => e(s.workflowVersionId, workflowVersionId),
+			orderBy: (s, { asc }) => [asc(s.position)],
+		}),
+		db.query.field.findMany({
+			where: (f, { eq: e }) => e(f.workflowVersionId, workflowVersionId),
+			orderBy: (f, { asc }) => [asc(f.position)],
+		}),
+		db
+			.select({
+				stepId: stepDependency.stepId,
+				dependsOnStepId: stepDependency.dependsOnStepId,
+			})
+			.from(stepDependency)
+			.innerJoin(
+				sql`(SELECT id FROM step WHERE workflow_version_id = ${workflowVersionId}) AS s`,
+				sql`s.id = ${stepDependency.stepId}`,
+			),
+	]);
+	return { steps, fields, deps };
+}
+
+// ---------------------------------------------------------------------------
+// Version reads — draft path (Builder canvas consumer)
+// ---------------------------------------------------------------------------
+
+export interface VersionEditBundleField {
+	id: string;
+	stepId: string | null;
+	key: string;
+	label: string;
+	fieldType:
+		| "text"
+		| "textarea"
+		| "number"
+		| "date"
+		| "select"
+		| "multiselect"
+		| "file"
+		| "image"
+		| "signature"
+		| "member"
+		| "lookup";
+	config: Record<string, unknown> | null;
+	isRequired: boolean;
+	position: number;
+	/** True iff the field is referenced by a schema reference today (condition or due
+	 * source) -- the key can't be renamed. Computed in the same call so the canvas can
+	 * paint the locked-key chip without re-fetching. */
+	isKeyLocked: boolean;
+}
+
+export interface VersionEditBundle {
+	version: typeof workflowVersion.$inferSelect;
+	sections: Array<typeof section.$inferSelect>;
+	steps: Array<typeof step.$inferSelect>;
+	fields: VersionEditBundleField[];
+	dependencies: Array<{ stepId: string; dependsOnStepId: string }>;
+}
+
+/** The Builder's canvas read. Returns the full editable shape PLUS the per-field locked
+ * status -- single round-trip for the entire screen. Status (draft / published) is on the
+ * returned version so the UI can decide whether to enable mutations. */
+export async function getVersionEditBundle(
+	workflowVersionId: string,
+): Promise<VersionEditBundle | null> {
+	const version = await getWorkflowVersionById(workflowVersionId);
+	if (!version) return null;
+
+	const [sections, steps, fields, deps] = await Promise.all([
+		db
+			.select()
+			.from(section)
+			.where(eq(section.workflowVersionId, workflowVersionId))
+			.orderBy(asc(section.position)),
+		db
+			.select()
+			.from(step)
+			.where(eq(step.workflowVersionId, workflowVersionId))
+			.orderBy(asc(step.position)),
+		db
+			.select()
+			.from(field)
+			.where(eq(field.workflowVersionId, workflowVersionId))
+			.orderBy(asc(field.position)),
+		db
+			.select({
+				stepId: stepDependency.stepId,
+				dependsOnStepId: stepDependency.dependsOnStepId,
+			})
+			.from(stepDependency)
+			.innerJoin(
+				sql`(SELECT id FROM step WHERE workflow_version_id = ${workflowVersionId}) AS s`,
+				sql`s.id = ${stepDependency.stepId}`,
+			),
+	]);
+
+	// Lock computation: probe both reference surfaces in two batched queries.
+	const lockedFieldIds = await findLockedFieldIds(fields.map((f) => f.id));
+
+	return {
+		version,
+		sections,
+		steps,
+		fields: fields.map((f) => ({
+			id: f.id,
+			stepId: f.stepId,
+			key: f.key,
+			label: f.label,
+			fieldType: f.fieldType,
+			config: f.config as Record<string, unknown> | null,
+			isRequired: f.isRequired,
+			position: f.position,
+			isKeyLocked: lockedFieldIds.has(f.id),
+		})),
+		dependencies: deps,
+	};
+}
+
+/** Return the subset of `fieldIds` that are referenced by any schema reference today --
+ * conditions or due-rules. Batched: two `inArray` queries regardless of input size. */
+export async function findLockedFieldIds(fieldIds: string[]): Promise<Set<string>> {
+	if (fieldIds.length === 0) return new Set();
+	const [condRefs, dueRefs] = await Promise.all([
+		db
+			.select({ fieldId: automationCondition.sourceFieldId })
+			.from(automationCondition)
+			.where(inArray(automationCondition.sourceFieldId, fieldIds)),
+		db
+			.select({ fieldId: step.dueSourceFieldId })
+			.from(step)
+			.where(inArray(step.dueSourceFieldId, fieldIds)),
+	]);
+	const locked = new Set<string>();
+	for (const r of condRefs) if (r.fieldId) locked.add(r.fieldId);
+	for (const r of dueRefs) if (r.fieldId) locked.add(r.fieldId);
+	return locked;
+}
+
+export interface FieldReferencer {
+	type: "condition" | "due_source";
+	/** The step that holds the reference (or the rule's host step, when we can resolve it).
+	 * The UI uses this to point the user at "what to clear first." */
+	stepId: string | null;
+}
+
+/** Enumerate, in detail, what references a single field today. Used by `update-field`
+ * (rename guard) and `delete-field` (refuse-on-reference) to produce an actionable error
+ * payload. Returns [] when nothing references the field. */
+export async function findFieldReferencers(fieldId: string): Promise<FieldReferencer[]> {
+	const [condRefs, dueRefs] = await Promise.all([
+		db
+			.select({ ruleId: automationCondition.ruleId })
+			.from(automationCondition)
+			.where(eq(automationCondition.sourceFieldId, fieldId)),
+		db
+			.select({ stepId: step.id })
+			.from(step)
+			.where(eq(step.dueSourceFieldId, fieldId)),
+	]);
+	const out: FieldReferencer[] = [];
+	for (const _ of condRefs) out.push({ type: "condition", stepId: null });
+	for (const r of dueRefs) out.push({ type: "due_source", stepId: r.stepId });
+	return out;
+}
+
+export interface StepReferencer {
+	type: "step_dependency_blocker" | "due_anchor";
+	/** The step that holds the reference (the dependent step, or the step with the
+	 * due-anchor pointer). */
+	stepId: string;
+}
+
+/** Enumerate references to a step. Today: step_dependency.dependsOnStepId rows
+ * (other steps that wait for this one) + step.dueAnchorStepId references
+ * (offset_from_step due rules — feature deferred but the guard is wired now so the
+ * authoring surface refuses delete the moment the consumer ships). */
+export async function findStepReferencers(stepId: string): Promise<StepReferencer[]> {
+	const [depRows, anchorRows] = await Promise.all([
+		db
+			.select({ stepId: stepDependency.stepId })
+			.from(stepDependency)
+			.where(eq(stepDependency.dependsOnStepId, stepId)),
+		db
+			.select({ stepId: step.id })
+			.from(step)
+			.where(eq(step.dueAnchorStepId, stepId)),
+	]);
+	const out: StepReferencer[] = [];
+	for (const r of depRows) out.push({ type: "step_dependency_blocker", stepId: r.stepId });
+	for (const r of anchorRows) out.push({ type: "due_anchor", stepId: r.stepId });
+	return out;
+}
+
+// ---------------------------------------------------------------------------
+// Workflow CRUD
+// ---------------------------------------------------------------------------
+
+/** Insert a workflow row + an initial draft `workflow_version` (number=1, status=draft).
+ * Transactional -- a workflow is meaningless without a version to point at. */
+export async function insertWorkflowWithDraft(
+	input: {
+		organizationId: string;
+		title: string;
+		description: string | null;
+		type: "procedure" | "document" | "policy" | "form";
+		createdBy: string;
+	},
+	executor: DbExecutor = db,
+): Promise<{ workflowId: string; versionId: string }> {
+	return await executor.transaction(async (tx) => {
+		const [wf] = await tx
+			.insert(workflow)
+			.values({
+				organizationId: input.organizationId,
+				title: input.title,
+				description: input.description,
+				type: input.type,
+				createdBy: input.createdBy,
+			})
+			.returning({ id: workflow.id });
+
+		const [v] = await tx
+			.insert(workflowVersion)
+			.values({
+				workflowId: wf.id,
+				versionNumber: 1,
+				status: "draft",
+			})
+			.returning({ id: workflowVersion.id });
+
+		return { workflowId: wf.id, versionId: v.id };
+	});
+}
+
+/** Update workflow-level fields (title, description, type, isActive). Org-level
+ * concerns; never touches a `workflow_version`. */
+export async function updateWorkflow(
+	input: {
+		organizationId: string;
+		workflowId: string;
+		title?: string;
+		description?: string | null;
+		type?: "procedure" | "document" | "policy" | "form";
+		isActive?: boolean;
+	},
+	executor: DbExecutor = db,
+): Promise<void> {
+	const patch: Record<string, unknown> = {};
+	if (input.title !== undefined) patch.title = input.title;
+	if (input.description !== undefined) patch.description = input.description;
+	if (input.type !== undefined) patch.type = input.type;
+	if (input.isActive !== undefined) patch.isActive = input.isActive;
+	if (Object.keys(patch).length === 0) return;
+
+	await executor
+		.update(workflow)
+		.set(patch)
+		.where(
+			and(eq(workflow.id, input.workflowId), eq(workflow.organizationId, input.organizationId)),
+		);
+}
+
+/** Soft-archive a workflow: sets `workflow.deletedAt`. This is the WORKFLOW-LEVEL archive
+ * (remove the whole authored asset) -- distinct from version-level `status='archived'`
+ * which retires one published version while the workflow itself stays. */
+export async function archiveWorkflow(
+	input: { organizationId: string; workflowId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
+		.update(workflow)
+		.set({ deletedAt: new Date() })
+		.where(
+			and(eq(workflow.id, input.workflowId), eq(workflow.organizationId, input.organizationId)),
+		);
+}
+
+// ---------------------------------------------------------------------------
+// Section CRUD (draft-only -- caller enforces via assertVersionIsDraft)
+// ---------------------------------------------------------------------------
+
+export async function insertSection(
+	input: { workflowVersionId: string; title: string; position?: number },
+	executor: DbExecutor = db,
+): Promise<{ id: string }> {
+	const [row] = await executor
+		.insert(section)
+		.values({
+			workflowVersionId: input.workflowVersionId,
+			title: input.title,
+			position: input.position ?? (await nextSectionPosition(input.workflowVersionId, executor)),
+		})
+		.returning({ id: section.id });
+	return row;
+}
+
+export async function updateSection(
+	input: { sectionId: string; title?: string; position?: number },
+	executor: DbExecutor = db,
+): Promise<void> {
+	const patch: Record<string, unknown> = {};
+	if (input.title !== undefined) patch.title = input.title;
+	if (input.position !== undefined) patch.position = input.position;
+	if (Object.keys(patch).length === 0) return;
+	await executor.update(section).set(patch).where(eq(section.id, input.sectionId));
+}
+
+export async function deleteSection(
+	input: { sectionId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	// Schema sets step.sectionId -> set null; we don't need to clear it manually.
+	await executor.delete(section).where(eq(section.id, input.sectionId));
+}
+
+async function nextSectionPosition(
+	workflowVersionId: string,
+	executor: DbExecutor,
+): Promise<number> {
+	const [row] = await executor
+		.select({ max: max(section.position) })
+		.from(section)
+		.where(eq(section.workflowVersionId, workflowVersionId));
+	return ((row?.max ?? -1) as number) + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Step CRUD
+// ---------------------------------------------------------------------------
+
+export interface InsertStepInput {
+	workflowVersionId: string;
+	sectionId?: string | null;
+	assignedRoleId?: string | null;
+	type?: "task" | "approval" | "heading" | "one_off" | "code" | "ai";
+	title: string;
+	description?: string | null;
+	position?: number;
+	isRequired?: boolean;
+	isStopTask?: boolean;
+	dueType?: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+	dueOffsetDays?: number | null;
+	dueAnchorStepId?: string | null;
+	dueSourceFieldId?: string | null;
+}
+
+export async function insertStep(
+	input: InsertStepInput,
+	executor: DbExecutor = db,
+): Promise<{ id: string }> {
+	const [row] = await executor
+		.insert(step)
+		.values({
+			workflowVersionId: input.workflowVersionId,
+			sectionId: input.sectionId ?? null,
+			assignedRoleId: input.assignedRoleId ?? null,
+			type: input.type ?? "task",
+			title: input.title,
+			description: input.description ?? null,
+			position: input.position ?? (await nextStepPosition(input.workflowVersionId, executor)),
+			isRequired: input.isRequired ?? true,
+			isStopTask: input.isStopTask ?? false,
+			dueType: input.dueType ?? "none",
+			dueOffsetDays: input.dueOffsetDays ?? null,
+			dueAnchorStepId: input.dueAnchorStepId ?? null,
+			dueSourceFieldId: input.dueSourceFieldId ?? null,
+		})
+		.returning({ id: step.id });
+	return row;
+}
+
+export interface UpdateStepInput {
+	stepId: string;
+	sectionId?: string | null;
+	assignedRoleId?: string | null;
+	type?: "task" | "approval" | "heading" | "one_off" | "code" | "ai";
+	title?: string;
+	description?: string | null;
+	position?: number;
+	isRequired?: boolean;
+	isStopTask?: boolean;
+	dueType?: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+	dueOffsetDays?: number | null;
+	dueAnchorStepId?: string | null;
+	dueSourceFieldId?: string | null;
+}
+
+export async function updateStep(input: UpdateStepInput, executor: DbExecutor = db): Promise<void> {
+	const patch: Record<string, unknown> = {};
+	for (const k of [
+		"sectionId",
+		"assignedRoleId",
+		"type",
+		"title",
+		"description",
+		"position",
+		"isRequired",
+		"isStopTask",
+		"dueType",
+		"dueOffsetDays",
+		"dueAnchorStepId",
+		"dueSourceFieldId",
+	] as const) {
+		if (input[k] !== undefined) patch[k] = input[k];
+	}
+	if (Object.keys(patch).length === 0) return;
+	await executor.update(step).set(patch).where(eq(step.id, input.stepId));
+}
+
+export async function deleteStep(
+	input: { stepId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	// step_dependency.stepId / .dependsOnStepId cascade on delete.
+	// Fields with stepId -> this step cascade too. Caller has already enforced
+	// refuse-on-reference for any field whose key is referenced, and refuse-on-reference
+	// for any step that points at this one as a due-anchor.
+	await executor.delete(step).where(eq(step.id, input.stepId));
+}
+
+async function nextStepPosition(workflowVersionId: string, executor: DbExecutor): Promise<number> {
+	const [row] = await executor
+		.select({ max: max(step.position) })
+		.from(step)
+		.where(eq(step.workflowVersionId, workflowVersionId));
+	return ((row?.max ?? -1) as number) + 1;
+}
+
+/** Reorder steps within a version: assign each (stepId, position) tuple in one
+ * transaction. Caller supplies the full set of step positions for the version. */
+export async function reorderSteps(
+	input: { workflowVersionId: string; ordering: Array<{ stepId: string; position: number }> },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor.transaction(async (tx) => {
+		for (const o of input.ordering) {
+			await tx
+				.update(step)
+				.set({ position: o.position })
+				.where(
+					and(eq(step.id, o.stepId), eq(step.workflowVersionId, input.workflowVersionId)),
+				);
+		}
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Field CRUD (key lifecycle enforced in the api/lib layer)
+// ---------------------------------------------------------------------------
+
+export interface InsertFieldInput {
+	workflowVersionId: string;
+	stepId: string | null;
+	key: string;
+	label: string;
+	fieldType:
+		| "text"
+		| "textarea"
+		| "number"
+		| "date"
+		| "select"
+		| "multiselect"
+		| "file"
+		| "image"
+		| "signature"
+		| "member"
+		| "lookup";
+	config?: Record<string, unknown> | null;
+	isRequired?: boolean;
+	position?: number;
+}
+
+export async function insertField(
+	input: InsertFieldInput,
+	executor: DbExecutor = db,
+): Promise<{ id: string }> {
+	const [row] = await executor
+		.insert(field)
+		.values({
+			workflowVersionId: input.workflowVersionId,
+			stepId: input.stepId,
+			key: input.key,
+			label: input.label,
+			fieldType: input.fieldType,
+			config: input.config ?? null,
+			isRequired: input.isRequired ?? false,
+			position: input.position ?? (await nextFieldPosition(input, executor)),
+		})
+		.returning({ id: field.id });
+	return row;
+}
+
+async function nextFieldPosition(
+	input: { workflowVersionId: string; stepId: string | null },
+	executor: DbExecutor,
+): Promise<number> {
+	// Kickoff fields and step fields each have their own ordering within (version, stepId).
+	const whereExpr =
+		input.stepId === null
+			? and(eq(field.workflowVersionId, input.workflowVersionId), isNull(field.stepId))
+			: and(eq(field.workflowVersionId, input.workflowVersionId), eq(field.stepId, input.stepId));
+	const [row] = await executor.select({ max: max(field.position) }).from(field).where(whereExpr);
+	return ((row?.max ?? -1) as number) + 1;
+}
+
+export interface UpdateFieldInput {
+	fieldId: string;
+	key?: string;
+	label?: string;
+	fieldType?:
+		| "text"
+		| "textarea"
+		| "number"
+		| "date"
+		| "select"
+		| "multiselect"
+		| "file"
+		| "image"
+		| "signature"
+		| "member"
+		| "lookup";
+	config?: Record<string, unknown> | null;
+	isRequired?: boolean;
+	position?: number;
+}
+
+export async function updateField(
+	input: UpdateFieldInput,
+	executor: DbExecutor = db,
+): Promise<void> {
+	const patch: Record<string, unknown> = {};
+	for (const k of [
+		"key",
+		"label",
+		"fieldType",
+		"config",
+		"isRequired",
+		"position",
+	] as const) {
+		if (input[k] !== undefined) patch[k] = input[k];
+	}
+	if (Object.keys(patch).length === 0) return;
+	await executor.update(field).set(patch).where(eq(field.id, input.fieldId));
+}
+
+export async function deleteField(
+	input: { fieldId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor.delete(field).where(eq(field.id, input.fieldId));
+}
+
+/** Fetch a field plus its version's status -- the rename/delete guards need the version
+ * status to refuse on non-draft. One query, one round-trip. */
+export async function getFieldWithVersion(fieldId: string): Promise<{
+	field: typeof field.$inferSelect;
+	version: typeof workflowVersion.$inferSelect;
+} | null> {
+	const rows = await db
+		.select()
+		.from(field)
+		.innerJoin(workflowVersion, eq(workflowVersion.id, field.workflowVersionId))
+		.where(eq(field.id, fieldId))
+		.limit(1);
+	const r = rows[0];
+	if (!r) return null;
+	return { field: r.field, version: r.workflow_version };
+}
+
+/** Same shape for steps. */
+export async function getStepWithVersion(stepId: string): Promise<{
+	step: typeof step.$inferSelect;
+	version: typeof workflowVersion.$inferSelect;
+} | null> {
+	const rows = await db
+		.select()
+		.from(step)
+		.innerJoin(workflowVersion, eq(workflowVersion.id, step.workflowVersionId))
+		.where(eq(step.id, stepId))
+		.limit(1);
+	const r = rows[0];
+	if (!r) return null;
+	return { step: r.step, version: r.workflow_version };
+}
+
+/** And sections. */
+export async function getSectionWithVersion(sectionId: string): Promise<{
+	section: typeof section.$inferSelect;
+	version: typeof workflowVersion.$inferSelect;
+} | null> {
+	const rows = await db
+		.select()
+		.from(section)
+		.innerJoin(workflowVersion, eq(workflowVersion.id, section.workflowVersionId))
+		.where(eq(section.id, sectionId))
+		.limit(1);
+	const r = rows[0];
+	if (!r) return null;
+	return { section: r.section, version: r.workflow_version };
+}
+
+/** Fetch a workflow_version + its parent workflow (for org scoping checks). One join. */
+export async function getVersionWithWorkflow(versionId: string): Promise<{
+	version: typeof workflowVersion.$inferSelect;
+	workflow: typeof workflow.$inferSelect;
+} | null> {
+	const rows = await db
+		.select()
+		.from(workflowVersion)
+		.innerJoin(workflow, eq(workflow.id, workflowVersion.workflowId))
+		.where(eq(workflowVersion.id, versionId))
+		.limit(1);
+	const r = rows[0];
+	if (!r) return null;
+	return { version: r.workflow_version, workflow: r.workflow };
+}
+
+/** Check whether `(workflowVersionId, key)` is unique. Returns the conflicting field's id
+ * if it exists (excluding `excludeFieldId`, so rename-to-same is a no-op). */
+export async function findFieldByKey(
+	workflowVersionId: string,
+	key: string,
+	excludeFieldId?: string,
+): Promise<{ id: string } | null> {
+	const conds = [eq(field.workflowVersionId, workflowVersionId), eq(field.key, key)];
+	if (excludeFieldId) conds.push(ne(field.id, excludeFieldId));
+	const rows = await db
+		.select({ id: field.id })
+		.from(field)
+		.where(and(...conds))
+		.limit(1);
+	return rows[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Step dependency CRUD
+// ---------------------------------------------------------------------------
+
+export async function insertStepDependency(
+	input: { stepId: string; dependsOnStepId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
+		.insert(stepDependency)
+		.values({ stepId: input.stepId, dependsOnStepId: input.dependsOnStepId })
+		.onConflictDoNothing({
+			target: [stepDependency.stepId, stepDependency.dependsOnStepId],
+		});
+}
+
+export async function deleteStepDependency(
+	input: { stepId: string; dependsOnStepId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
+		.delete(stepDependency)
+		.where(
+			and(
+				eq(stepDependency.stepId, input.stepId),
+				eq(stepDependency.dependsOnStepId, input.dependsOnStepId),
+			),
+		);
+}
+
+// ---------------------------------------------------------------------------
+// Workflow role CRUD (org-level, not version-bound)
+// ---------------------------------------------------------------------------
+
+export async function listWorkflowRolesForOrg(organizationId: string) {
+	return await db
+		.select()
+		.from(workflowRole)
+		.where(eq(workflowRole.organizationId, organizationId))
+		.orderBy(asc(workflowRole.name));
+}
+
+export async function insertWorkflowRole(
+	input: { organizationId: string; name: string; isInitiator?: boolean },
+	executor: DbExecutor = db,
+): Promise<{ id: string }> {
+	const [row] = await executor
+		.insert(workflowRole)
+		.values({
+			organizationId: input.organizationId,
+			name: input.name,
+			isInitiator: input.isInitiator ?? false,
+		})
+		.returning({ id: workflowRole.id });
+	return row;
+}
+
+export async function updateWorkflowRole(
+	input: { organizationId: string; roleId: string; name?: string; isInitiator?: boolean },
+	executor: DbExecutor = db,
+): Promise<void> {
+	const patch: Record<string, unknown> = {};
+	if (input.name !== undefined) patch.name = input.name;
+	if (input.isInitiator !== undefined) patch.isInitiator = input.isInitiator;
+	if (Object.keys(patch).length === 0) return;
+	await executor
+		.update(workflowRole)
+		.set(patch)
+		.where(
+			and(
+				eq(workflowRole.id, input.roleId),
+				eq(workflowRole.organizationId, input.organizationId),
+			),
+		);
+}
+
+export async function deleteWorkflowRole(
+	input: { organizationId: string; roleId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	// `step.assignedRoleId -> set null` on delete (schema). Existing steps referencing the
+	// role lose their assignment but otherwise survive; the builder can re-assign.
+	await executor
+		.delete(workflowRole)
+		.where(
+			and(
+				eq(workflowRole.id, input.roleId),
+				eq(workflowRole.organizationId, input.organizationId),
+			),
+		);
+}
+
+// ---------------------------------------------------------------------------
+// Publish / fork primitives (used by lib/publish.ts -- raw DB ops only)
+// ---------------------------------------------------------------------------
+
+/** Atomic publish: flip status draft -> published. The WHERE clause refuses to publish a
+ * non-draft, closing the race between two concurrent publish calls. Returns true iff the
+ * UPDATE matched a row -- false means someone else already published or the version was
+ * never draft. */
+export async function publishVersionRow(
+	input: { versionId: string; publishedByUserId: string },
+	executor: DbExecutor = db,
+): Promise<boolean> {
+	const result = await executor
+		.update(workflowVersion)
+		.set({
+			status: "published",
+			publishedAt: new Date(),
+			publishedBy: input.publishedByUserId,
+		})
+		.where(and(eq(workflowVersion.id, input.versionId), eq(workflowVersion.status, "draft")))
+		.returning({ id: workflowVersion.id });
+	return result.length > 0;
+}
+
+/** Compute the next version number for a workflow (max + 1). */
+export async function nextVersionNumber(workflowId: string, executor: DbExecutor): Promise<number> {
+	const [row] = await executor
+		.select({ max: max(workflowVersion.versionNumber) })
+		.from(workflowVersion)
+		.where(eq(workflowVersion.workflowId, workflowId));
+	return ((row?.max ?? 0) as number) + 1;
+}
+
+/** Insert a draft workflow_version row. Used by editPublished after the deep-copy plan
+ * is computed. */
+export async function insertDraftVersion(
+	input: { workflowId: string; versionNumber: number },
+	executor: DbExecutor = db,
+): Promise<{ id: string }> {
+	const [row] = await executor
+		.insert(workflowVersion)
+		.values({
+			workflowId: input.workflowId,
+			versionNumber: input.versionNumber,
+			status: "draft",
+		})
+		.returning({ id: workflowVersion.id });
+	return row;
+}
+
+/** Delete a workflow_version row. Used by `discardDraft`. CASCADE handles sections /
+ * steps / fields / dependencies. */
+export async function deleteVersion(
+	input: { versionId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor.delete(workflowVersion).where(eq(workflowVersion.id, input.versionId));
+}

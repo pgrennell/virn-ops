@@ -45,64 +45,9 @@ export interface RoleAssignmentInput {
 	guestName?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Definition reads (for launchRun)
-// ---------------------------------------------------------------------------
-
-/** Fetch a workflow scoped to the org. Returns null if not found or not in this org. */
-export async function getWorkflowForOrg(organizationId: string, workflowId: string) {
-	return (
-		(await db.query.workflow.findFirst({
-			where: (w, { and: a, eq: e }) => a(e(w.id, workflowId), e(w.organizationId, organizationId)),
-		})) ?? null
-	);
-}
-
-/** Find the most recent published version of a workflow. Returns null if none is published. */
-export async function getLatestPublishedWorkflowVersion(workflowId: string) {
-	return (
-		(await db.query.workflowVersion.findFirst({
-			where: (v, { and: a, eq: e }) => a(e(v.workflowId, workflowId), e(v.status, "published")),
-			orderBy: (v, { desc }) => [desc(v.versionNumber)],
-		})) ?? null
-	);
-}
-
-/** Fetch a specific version. Caller must verify status before launching from it. */
-export async function getWorkflowVersionById(versionId: string) {
-	return (
-		(await db.query.workflowVersion.findFirst({
-			where: (v, { eq: e }) => e(v.id, versionId),
-		})) ?? null
-	);
-}
-
-/** Pull everything needed to snapshot a launch: all steps (with due-config), all fields
- * (kickoff + step-scoped), and all step_dependency rows for the version. Returned in a
- * single object for atomic consumption by launchRun. */
-export async function getVersionLaunchBundle(workflowVersionId: string) {
-	const [steps, fields, deps] = await Promise.all([
-		db.query.step.findMany({
-			where: (s, { eq: e }) => e(s.workflowVersionId, workflowVersionId),
-			orderBy: (s, { asc }) => [asc(s.position)],
-		}),
-		db.query.field.findMany({
-			where: (f, { eq: e }) => e(f.workflowVersionId, workflowVersionId),
-			orderBy: (f, { asc }) => [asc(f.position)],
-		}),
-		db
-			.select({
-				stepId: stepDependency.stepId,
-				dependsOnStepId: stepDependency.dependsOnStepId,
-			})
-			.from(stepDependency)
-			.innerJoin(
-				sql`(SELECT id FROM step WHERE workflow_version_id = ${workflowVersionId}) AS s`,
-				sql`s.id = ${stepDependency.stepId}`,
-			),
-	]);
-	return { steps, fields, deps };
-}
+// Definition reads -- moved to queries/workflows.ts (getWorkflowForOrg,
+// getLatestPublishedWorkflowVersion, getWorkflowVersionById, getVersionLaunchBundle).
+// Re-exported through queries/index.ts so launchRun's import path is unchanged.
 
 // ---------------------------------------------------------------------------
 // Snapshot write (transactional)

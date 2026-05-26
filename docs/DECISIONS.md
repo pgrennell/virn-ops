@@ -414,3 +414,130 @@ mechanism if a "system event" category emerges is a separate `system_event` tabl
 its own shape, not a relaxation here. Practical implication for builders: any new code
 that wants to emit an audit row needs to commit to a polymorphic target — if the
 event genuinely has no target, it doesn't belong in `audit_log`.
+
+---
+
+## 2026-05-26 — Field key lifecycle: auto-slug → editable → locked → frozen
+
+### D-017 — `field.key` lifecycle in the Workflow Builder
+
+**Context:** Per Invariant #5, every `field` row has an immutable `key` that merge
+variables, conditions, due-rules, and automations target. The friendly `label` can
+change anytime, but the `key` is the stable identity behind the scenes — a key that
+moves after being referenced is a broken reference. The Workflow Builder (Pass 1)
+defines that lifecycle for the authoring UI.
+
+**Decision:** A `field.key` moves through four states:
+
+1. **Auto-slugged on create.** The builder takes the user's friendly label and slugs
+   it (`@sindresorhus/slugify` with `_` separator + lowercase) into a candidate key.
+   Validated against `/^[a-z][a-z0-9_]*$/` (≤ 64 chars). Collisions within the version
+   resolve via `_2`, `_3`, … suffix until unique.
+2. **Editable while unreferenced.** The user can override the auto-slug, and rename
+   the key at any time, AS LONG AS no schema reference points at the field's id.
+   Today's reference surfaces are `automation_condition.sourceFieldId` (show-when
+   conditions) and `step.dueSourceFieldId` (date-field-driven due rules); a single
+   probe in `findFieldReferencers` enumerates both.
+3. **Locked the moment any reference exists.** A `key` rename refuses with
+   `FIELD_KEY_LOCKED`; deletion refuses with `FIELD_HAS_REFERENCERS`. Both error
+   payloads include the referencer list so the UI can render "clear these first."
+   The UI surfaces a locked-key chip in `getVersionEditBundle` so the user knows
+   the rename path is closed before they try it.
+4. **Frozen on publish.** Once `workflow_version.status='published'`, the entire
+   version is immutable through the API (Invariant #3, enforced by
+   `assertVersionIsDraft`). Fork creates a fresh draft that copies field keys
+   verbatim (D-018) — they remain stable across the fork.
+
+**Rationale:** Silent rename of a referenced key is a worse failure mode than
+forcing the user to clear references first. Same probe for rename and delete keeps
+the two refusal flows consistent; whenever the reference surface grows, both flows
+pick up the new path automatically. Slug + suffix collision resolution gives the
+user "free, sensible" keys for 99% of cases without ever having to type one.
+
+**Consequences:**
+
+- **Merge-variable text scans are deferred.** Today's probe covers schema
+  references only — it does NOT scan `{{key}}` interpolations in step descriptions,
+  comment templates, or automation message bodies. Verified during the Pass 1
+  build that no such interpolations exist anywhere in the codebase, so the lock is
+  complete for the current feature set. When merge variables ship, extend
+  `findFieldReferencers` in `@virn/database` to also scan the relevant text
+  columns — the lib layer just trusts what the helper returns, so the extension
+  is centralized.
+- **Step references mirror the field pattern.** `findStepReferencers` enumerates
+  step_dependency edges + `step.dueAnchorStepId` references; step deletion uses the
+  same refuse-on-reference posture as field deletion. The `dueAnchorStepId` consumer
+  (offset_from_step due rules) is deferred today, but the guard is wired now so it
+  can't be forgotten when the consumer ships.
+
+---
+
+## 2026-05-26 — Workflow versioning: draft = only editable; publish = immutable; edit = resume-or-fork
+
+### D-018 — Workflow Builder versioning model
+
+**Context:** Invariants #3 and #4 mandate that runs are immutable snapshots of a
+PUBLISHED workflow_version, that editing a template never touches an in-flight or
+historical run, and that the snapshot is self-contained. The Workflow Builder is
+the surface that produces those published versions; it has to enforce the
+invariants by construction, not by convention.
+
+**Decision:** Three operations + one chokepoint + one structural invariant.
+
+1. **Draft is the only editable state.** Every section / step / field / step_dependency
+   write routes through a single `assertVersionIsDraft` guard at the api/lib boundary.
+   It resolves the version, scopes to the org, and refuses on any status other than
+   `draft` (`VERSION_NOT_DRAFT`). One chokepoint = one rule that can't be forgotten.
+   The published snapshot is physically immutable through this API.
+2. **Publish is atomic + audited.** `publishVersion` transitions
+   `workflow_version.status` from `draft` → `published` via an UPDATE with
+   `WHERE status='draft'` so two concurrent publishers can't both "succeed"
+   (the loser receives `PUBLISH_RACE` and should refetch). Publish refuses on empty
+   versions (`VERSION_HAS_NO_STEPS`). An audit + activity pair fires inside the
+   same transaction (Invariant #6).
+3. **Editing a published workflow = RESUME or FORK.** `editPublished` enforces
+   AT MOST ONE OPEN DRAFT per workflow, server-side. If a draft already exists,
+   the procedure returns it (`forked: false`). If not, it deep-copies the latest
+   published version into a new draft (`forked: true`) and returns the new id.
+   The naive "always fork" alternative produces orphan drafts: edit → navigate
+   away → edit again → v2 and v3 both open. The product invariant is one open
+   draft, so the server owns it — the UI doesn't have to.
+
+**Fork mechanics:**
+   - Deep-copy sections, steps, fields, and step_dependencies into the new draft.
+   - Field `key` values are preserved VERBATIM — keys are the stable identity
+     (Invariant #5), only IDs are per-version.
+   - IDs are remapped: `step.sectionId`, `step.dueAnchorStepId`,
+     `step.dueSourceFieldId`, `field.stepId`, and both endpoints of
+     `step_dependency` get rewritten from the source ids to the freshly-copied ids.
+   - References that somehow point outside the version (shouldn't happen with the
+     current schema, but defensive) get cleared — the fork is fully independent.
+   - In-flight runs hold their own snapshot (Invariant #4) — they are not perturbed.
+
+**Workflow-level archive vs version-level archive:** keep these distinct.
+`workflow.deletedAt` (set by `archiveWorkflowOp`) is the WORKFLOW-LEVEL archive — the
+whole authored asset is hidden from the Library. `workflow_version.status='archived'`
+retires one published version while the workflow itself stays live. Don't blur the
+two notions in UI copy or API names.
+
+**Rationale:** A workflow that's seen any use needs a clear "current published"
+vs "what's being worked on" boundary. Resume-or-fork is the load-bearing
+correctness fix that prevents orphan drafts without making the UI carry the
+invariant. The single `assertVersionIsDraft` chokepoint is the kind of guard you
+write once and forget — every write goes through it, so there's no way for a new
+mutation procedure to forget to check.
+
+**Consequences:**
+
+- No hard delete of workflows. `archiveWorkflowOp` is soft (sets `deletedAt`);
+  Invariant #6 (audit/governance is append-only) implies authored content survives
+  in history. To wipe everything, drop the org.
+- Published versions never mutate. Even a typo-fix in a published step requires a
+  fork. The friction is the feature — the published snapshot is what runs depend
+  on, and a "small fix" that silently mutates a published version would corrupt
+  in-flight execution semantics.
+- The acceptance test (`acceptance.test.ts`) walks
+  `create → addStructure → publish → launchRun` end-to-end and asserts the run's
+  field_value rows reference field rows keyed by the original keys. That single
+  test proves the authoring half and the execution half are wired together — if
+  it ever fails, the publish-to-launch contract is broken at the field level.
