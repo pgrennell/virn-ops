@@ -372,6 +372,19 @@ export async function upsertSettingDefinitions(
 	return { count: rows.length };
 }
 
+/** True when the org has any per-org capability override row -- i.e. the onboarding mode
+ * picker has already been applied (or the admin has touched the Configuration page).
+ * Used by the onboarding mode-picker route to redirect already-configured orgs to the
+ * Configuration page instead of re-prompting. */
+export async function hasOrgCompletedModeSetup(organizationId: string): Promise<boolean> {
+	const rows = await db
+		.select({ marker: organizationCapability.organizationId })
+		.from(organizationCapability)
+		.where(eq(organizationCapability.organizationId, organizationId))
+		.limit(1);
+	return rows.length > 0;
+}
+
 /** Return capability keys referenced by PROFILES that don't yet exist in the DB. Used by
  * the capability seed to verify the canonical set is a superset of profile-managed keys. */
 export async function findMissingProfileCapabilityKeys(): Promise<string[]> {

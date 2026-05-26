@@ -13,7 +13,6 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-	AlertDialogTrigger,
 } from "@virn/ui/components/alert-dialog";
 import { Button } from "@virn/ui/components/button";
 import { Input } from "@virn/ui/components/input";
@@ -25,92 +24,80 @@ import {
 	SelectValue,
 } from "@virn/ui/components/select";
 import { Skeleton } from "@virn/ui/components/skeleton";
-import { Spinner } from "@virn/ui/components/spinner";
 import { Switch } from "@virn/ui/components/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+
+import { type EnablementProfile, ModePicker, PROFILE_META } from "./ModePicker";
 
 // ---------------------------------------------------------------------------
 // Profiles section
 // ---------------------------------------------------------------------------
 
-type EnablementProfile = "checklist" | "sop" | "automation";
-
-const PROFILE_LABELS: Record<EnablementProfile, { name: string; description: string }> = {
-	checklist: {
-		name: "Checklist",
-		description: "Lightweight. Recurring runs + kickoff forms.",
-	},
-	sop: {
-		name: "SOP",
-		description: "Adds governance (approvals, acknowledgments, suggestions), public listings, custom fields, guest participants.",
-	},
-	automation: {
-		name: "Automation",
-		description: "Everything SOP includes, plus automation rules and outbound webhooks.",
-	},
-};
-
 function ProfilesSection() {
 	const queryClient = useQueryClient();
-	const [pending, setPending] = useState<EnablementProfile | null>(null);
-	const [result, setResult] = useState<{ profile: EnablementProfile; enabled: number; disabled: number } | null>(null);
+	const [confirmProfile, setConfirmProfile] = useState<EnablementProfile | null>(null);
+	const [result, setResult] = useState<
+		{ profile: EnablementProfile; enabled: number; disabled: number } | null
+	>(null);
 
 	const apply = useMutation(orpc.config.applyProfile.mutationOptions());
 
-	const onApply = async (profile: EnablementProfile) => {
-		setPending(profile);
+	const onConfirm = async () => {
+		if (!confirmProfile) return;
 		try {
-			const r = await apply.mutateAsync({ profile });
-			setResult({ profile, ...r });
+			const r = await apply.mutateAsync({ profile: confirmProfile });
+			setResult({ profile: confirmProfile, ...r });
 			await queryClient.invalidateQueries({ queryKey: orpc.config.listCapabilities.queryKey() });
 			await queryClient.invalidateQueries({ queryKey: orpc.config.listSettings.queryKey() });
 		} finally {
-			setPending(null);
+			setConfirmProfile(null);
 		}
 	};
 
 	return (
 		<SettingsItem
-			title="Enablement profiles"
-			description="Bulk-set capabilities to a preset. Switching profile overwrites every profile-managed capability; custom overrides outside profile scope are preserved."
+			title="Mode"
+			description="Pick an enablement profile. Switching mode overwrites every profile-managed capability; custom overrides outside profile scope are preserved."
 		>
 			<div className="gap-3 flex flex-col">
-				{(Object.keys(PROFILE_LABELS) as EnablementProfile[]).map((profile) => (
-					<AlertDialog key={profile}>
-						<AlertDialogTrigger asChild>
-							<Button variant="outline" disabled={pending !== null} className="justify-between">
-								<span className="flex flex-col items-start">
-									<span className="font-medium">{PROFILE_LABELS[profile].name}</span>
-									<span className="text-xs text-foreground/60">{PROFILE_LABELS[profile].description}</span>
-								</span>
-								{pending === profile && <Spinner className="size-4" />}
-							</Button>
-						</AlertDialogTrigger>
-						<AlertDialogContent>
-							<AlertDialogHeader>
-								<AlertDialogTitle>Apply {PROFILE_LABELS[profile].name} profile?</AlertDialogTitle>
-								<AlertDialogDescription>
-									This will enable every capability in the {PROFILE_LABELS[profile].name} preset and disable every other profile-managed capability for this organization. Custom overrides on capabilities outside profile scope are preserved.
-								</AlertDialogDescription>
-							</AlertDialogHeader>
-							<AlertDialogFooter>
-								<AlertDialogCancel>Cancel</AlertDialogCancel>
-								<AlertDialogAction onClick={() => onApply(profile)}>Apply</AlertDialogAction>
-							</AlertDialogFooter>
-						</AlertDialogContent>
-					</AlertDialog>
-				))}
+				<ModePicker
+					value={null}
+					onChange={(p) => setConfirmProfile(p)}
+					disabled={apply.isPending}
+				/>
+				<AlertDialog
+					open={confirmProfile !== null}
+					onOpenChange={(open) => !open && setConfirmProfile(null)}
+				>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>
+								Apply {confirmProfile ? PROFILE_META[confirmProfile].name : ""} mode?
+							</AlertDialogTitle>
+							<AlertDialogDescription>
+								This enables every capability in this mode and disables every other
+								profile-managed capability for the organization. Custom overrides on
+								capabilities outside the mode's scope are preserved.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction onClick={onConfirm}>Apply</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 				{result && (
 					<Alert>
 						<AlertDescription>
-							Applied <strong>{PROFILE_LABELS[result.profile].name}</strong>: {result.enabled} enabled, {result.disabled} disabled.
+							Applied <strong>{PROFILE_META[result.profile].name}</strong>: {result.enabled}{" "}
+							enabled, {result.disabled} disabled.
 						</AlertDescription>
 					</Alert>
 				)}
 				{apply.isError && (
 					<Alert variant="error">
-						<AlertDescription>Failed to apply profile: {apply.error.message}</AlertDescription>
+						<AlertDescription>Failed to apply mode: {apply.error.message}</AlertDescription>
 					</Alert>
 				)}
 			</div>

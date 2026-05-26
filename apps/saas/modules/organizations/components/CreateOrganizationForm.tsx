@@ -53,7 +53,10 @@ export function CreateOrganizationForm({ defaultName }: { defaultName?: string }
 				queryKey: organizationListQueryKey,
 			});
 
-			router.replace(`/${newOrganization.slug}`);
+			// Send the user through the mode picker (UX_SPEC §5.5). The picker calls
+			// applyEnablementProfile, then forwards to /${slug}. Already-configured orgs
+			// short-circuit to /${slug}/settings/configuration server-side.
+			router.replace("/new-organization/mode");
 		} catch {
 			toastError(t("organizations.createForm.notifications.error"));
 		}
