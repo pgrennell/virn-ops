@@ -9,10 +9,10 @@
 // in-flight runs. Fields are NOT re-copied per-run; field_value.fieldId FKs the pinned
 // version's field rows, which are immutable post-publish by convention.
 
-import { and, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "../client";
+import { db, type DbExecutor } from "../client";
 import {
 	activityEvent,
 	auditLog,
@@ -32,18 +32,10 @@ import {
 // Types shared by api/modules/runs/lib
 // ---------------------------------------------------------------------------
 
-export type FieldType =
-	| "text"
-	| "textarea"
-	| "number"
-	| "date"
-	| "select"
-	| "multiselect"
-	| "file"
-	| "image"
-	| "signature"
-	| "member"
-	| "lookup";
+// Derived from the pgEnum in schema/workflows.ts. Single source of truth — adding
+// a new field type there (with a migration) automatically expands this union and
+// catches missing branches in `buildFieldZod` / `validateFieldValue` at compile time.
+export type FieldType = (typeof fieldTypeEnum)["enumValues"][number];
 
 export interface RoleAssignmentInput {
 	roleId: string;
@@ -356,13 +348,16 @@ export async function findFieldByVersionAndKey(
 
 /** Upsert a field value scoped to (runId, fieldId). Returns nothing -- caller handles
  * audit + activity writes separately. */
-export async function upsertRunFieldValue(input: {
-	runId: string;
-	runStepId: string | null;
-	fieldId: string;
-	value: unknown;
-}): Promise<void> {
-	await db
+export async function upsertRunFieldValue(
+	input: {
+		runId: string;
+		runStepId: string | null;
+		fieldId: string;
+		value: unknown;
+	},
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
 		.insert(fieldValue)
 		.values({
 			runId: input.runId,
@@ -457,11 +452,14 @@ export async function findIncompleteStopDependencies(
 
 /** Mark a runStep completed. No-op if already completed (caller should check first to
  * avoid duplicate audit/activity writes). */
-export async function markRunStepCompleted(input: {
-	runStepId: string;
-	completedBy: string;
-}): Promise<void> {
-	await db
+export async function markRunStepCompleted(
+	input: {
+		runStepId: string;
+		completedBy: string;
+	},
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
 		.update(runStep)
 		.set({
 			status: "completed",
@@ -489,49 +487,67 @@ export async function areAllRequiredRunStepsComplete(runId: string): Promise<boo
 	return requiredRows.every((r) => r.runStepStatus === "completed");
 }
 
-/** Mark a run completed. */
-export async function markRunCompleted(runId: string): Promise<void> {
-	await db
+/**
+ * Mark a run completed, but only if it's still `active`. Returns `true` when the row
+ * was actually transitioned, `false` when it was already completed/archived.
+ *
+ * The `WHERE status = 'active'` clause closes the cascade race condition (G3 in the
+ * code-review plan): two concurrent "complete the last step" calls can both observe
+ * `areAllRequiredRunStepsComplete === true`, but only the one whose UPDATE acquires
+ * the row first will see `status='active'` to update — the other UPDATE matches zero
+ * rows. Callers use the boolean return to decide whether to write the cascade audit
+ * row, so the audit log can't contain duplicates.
+ */
+export async function markRunCompleted(
+	runId: string,
+	executor: DbExecutor = db,
+): Promise<boolean> {
+	const result = await executor
 		.update(run)
 		.set({ status: "completed", completedAt: new Date() })
-		.where(eq(run.id, runId));
+		.where(and(eq(run.id, runId), eq(run.status, "active")))
+		.returning({ id: run.id });
+	return result.length > 0;
 }
 
 // ---------------------------------------------------------------------------
 // Append-only writes (Invariant #6)
 // ---------------------------------------------------------------------------
 
-export async function writeAuditAndActivity(input: {
-	organizationId: string;
-	actorUserId: string;
-	action: string; // for audit_log
-	verb: string; // for activity_event
-	entityType:
-		| "workflow"
-		| "workflow_version"
-		| "section"
-		| "step"
-		| "field"
-		| "run"
-		| "run_step"
-		| "field_value"
-		| "suggestion"
-		| "automation_rule"
-		| "version_approval"
-		| "acknowledgment"
-		| "template_listing"
-		| "template_listing_version"
-		| "solution_pack"
-		| "pack_version"
-		| "field_definition"
-		| "role";
-	entityId: string;
-	changes?: Record<string, unknown>;
-	metadata?: Record<string, unknown>;
-	activityData?: Record<string, unknown>;
-}): Promise<void> {
+export async function writeAuditAndActivity(
+	input: {
+		organizationId: string;
+		actorUserId: string;
+		action: string; // for audit_log
+		verb: string; // for activity_event
+		entityType:
+			| "workflow"
+			| "workflow_version"
+			| "section"
+			| "step"
+			| "field"
+			| "run"
+			| "run_step"
+			| "field_value"
+			| "suggestion"
+			| "automation_rule"
+			| "version_approval"
+			| "acknowledgment"
+			| "template_listing"
+			| "template_listing_version"
+			| "solution_pack"
+			| "pack_version"
+			| "field_definition"
+			| "role";
+		entityId: string;
+		changes?: Record<string, unknown>;
+		metadata?: Record<string, unknown>;
+		activityData?: Record<string, unknown>;
+	},
+	executor: DbExecutor = db,
+): Promise<void> {
 	await Promise.all([
-		db.insert(auditLog).values({
+		executor.insert(auditLog).values({
 			organizationId: input.organizationId,
 			actorUserId: input.actorUserId,
 			action: input.action,
@@ -540,7 +556,7 @@ export async function writeAuditAndActivity(input: {
 			changes: input.changes,
 			metadata: input.metadata,
 		}),
-		db.insert(activityEvent).values({
+		executor.insert(activityEvent).values({
 			organizationId: input.organizationId,
 			actorUserId: input.actorUserId,
 			verb: input.verb,
@@ -691,6 +707,70 @@ export async function listAssignedTasksForUser(input: {
 	});
 }
 
+export interface ActiveRunRow {
+	id: string;
+	title: string;
+	status: "active";
+	startedAt: Date;
+	dueAt: Date | null;
+	workflowId: string;
+	workflowTitle: string;
+	workflowType: "procedure" | "document" | "policy" | "form";
+	totalSteps: number;
+	completedSteps: number;
+}
+
+/** Active runs in this org with per-run progress counts. Single GROUP BY query: one row
+ * per active run, with `totalSteps` and `completedSteps` aggregated from `run_step`. Used
+ * by the Home dashboard's right-rail "Active runs" column. Ordered by `startedAt` desc
+ * (most recent first). */
+export async function listActiveRunsWithProgress(input: {
+	organizationId: string;
+	limit?: number;
+	offset?: number;
+}): Promise<ActiveRunRow[]> {
+	const limit = input.limit ?? 20;
+	const offset = input.offset ?? 0;
+
+	const rows = await db
+		.select({
+			id: run.id,
+			title: run.title,
+			status: run.status,
+			startedAt: run.startedAt,
+			dueAt: run.dueAt,
+			workflowId: workflow.id,
+			workflowTitle: workflow.title,
+			workflowType: workflow.type,
+			totalSteps: sql<number>`count(${runStep.id})::int`.as("total_steps"),
+			completedSteps:
+				sql<number>`count(${runStep.id}) filter (where ${runStep.status} = 'completed')::int`.as(
+					"completed_steps",
+				),
+		})
+		.from(run)
+		.innerJoin(workflow, eq(workflow.id, run.workflowId))
+		.leftJoin(runStep, eq(runStep.runId, run.id))
+		.where(and(eq(run.organizationId, input.organizationId), eq(run.status, "active")))
+		.groupBy(run.id, workflow.id)
+		.orderBy(desc(run.startedAt))
+		.limit(limit)
+		.offset(offset);
+
+	return rows.map((r) => ({
+		id: r.id,
+		title: r.title,
+		status: "active" as const,
+		startedAt: r.startedAt,
+		dueAt: r.dueAt,
+		workflowId: r.workflowId,
+		workflowTitle: r.workflowTitle,
+		workflowType: r.workflowType,
+		totalSteps: r.totalSteps,
+		completedSteps: r.completedSteps,
+	}));
+}
+
 /** Counts for the home dashboard, scoped to the active org + user. */
 export async function getHomeCountsForUser(input: {
 	organizationId: string;
@@ -824,5 +904,3 @@ function buildFieldZod(type: FieldType, cfg: Record<string, unknown>): z.ZodType
 	}
 }
 
-// Re-export the underlying enum so consumers can compare against canonical strings.
-export type FieldTypeEnum = (typeof fieldTypeEnum)["enumValues"][number];
