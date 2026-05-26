@@ -1,11 +1,14 @@
-import { getActiveOrganization } from "@auth/lib/server";
+import { getSession } from "@auth/lib/server";
 import { activeOrganizationQueryKey } from "@organizations/lib/api";
 import { listPurchases } from "@payments/lib/server";
 import { config as paymentsConfig } from "@virn/payments/config";
-import { AppWrapper } from "@shared/components/AppWrapper";
+import { AppShell } from "@shared/components/AppShell";
+import { resolveOrgGating } from "@shared/lib/gating-server";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { getServerQueryClient } from "@shared/lib/server";
-import { notFound } from "next/navigation";
+import { SIDEBAR_COLLAPSED_COOKIE } from "@shared/lib/sidebar-context";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import type { PropsWithChildren } from "react";
 
 export default async function OrganizationLayout({
@@ -18,11 +21,19 @@ export default async function OrganizationLayout({
 }>) {
 	const { organizationSlug } = await params;
 
-	const organization = await getActiveOrganization(organizationSlug);
+	const session = await getSession();
+	if (!session) {
+		redirect("/login");
+	}
 
-	if (!organization) {
+	const resolved = await resolveOrgGating(organizationSlug);
+	if (!resolved) {
 		return notFound();
 	}
+
+	const { organization, snapshot } = resolved;
+	const cookieStore = await cookies();
+	const initialCollapsed = cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value === "true";
 
 	const queryClient = getServerQueryClient();
 
@@ -42,5 +53,14 @@ export default async function OrganizationLayout({
 		});
 	}
 
-	return <AppWrapper>{children}</AppWrapper>;
+	return (
+		<AppShell
+			orgSlug={organizationSlug}
+			snapshot={snapshot}
+			role={snapshot.role}
+			initialCollapsed={initialCollapsed}
+		>
+			{children}
+		</AppShell>
+	);
 }

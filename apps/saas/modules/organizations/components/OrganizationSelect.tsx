@@ -34,7 +34,7 @@ import { useMemo } from "react";
 
 import { OrganizationLogo } from "./OrganizationLogo";
 
-export function OrganzationSelect({
+export function OrganizationSelect({
 	className,
 	collapsed = false,
 }: {

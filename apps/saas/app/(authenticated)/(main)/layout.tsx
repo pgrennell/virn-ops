@@ -1,9 +1,8 @@
 import { getOrganizationList, getSession } from "@auth/lib/server";
-import { listPurchases } from "@virn/api/modules/payments/procedures/list-purchases";
+import { listPurchases } from "@payments/lib/server";
 import { config as authConfig } from "@virn/auth/config";
 import { config as paymentsConfig } from "@virn/payments/config";
 import { createPurchasesHelper } from "@virn/payments/lib/helper";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PropsWithChildren } from "react";
 
@@ -35,11 +34,10 @@ export default async function MainLayout({ children }: PropsWithChildren) {
 			? session?.session.activeOrganizationId || organizations?.at(0)?.id
 			: undefined;
 
-		const purchases = await listPurchases.callable({
-			context: { headers: await headers() },
-		})({
-			organizationId,
-		});
+		// Use the React `cache()`-wrapped server helper so this call is deduplicated
+		// with the (org) layout's `listPurchases(organization.id)` call within the
+		// same request — same args, same result, single DB roundtrip.
+		const purchases = await listPurchases(organizationId);
 
 		const { activePlan } = createPurchasesHelper(purchases);
 

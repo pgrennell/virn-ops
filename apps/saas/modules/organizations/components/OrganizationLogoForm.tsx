@@ -49,9 +49,9 @@ export function OrganizationLogoForm() {
 
 		setUploading(true);
 		try {
-			const { signedUploadUrl, path } = await getSignedUploadUrlMutation.mutateAsync({
-				organizationId: activeOrganization.id,
-			});
+			// Org id is read from session context server-side (adminOrgProcedure) —
+			// no input field needed. See AUTH_CONTRACT.md §3.1.
+			const { signedUploadUrl, path } = await getSignedUploadUrlMutation.mutateAsync({});
 
 			const response = await fetch(signedUploadUrl, {
 				method: "PUT",

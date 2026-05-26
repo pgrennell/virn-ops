@@ -1,55 +1,45 @@
 "use client";
 
 import Cookies from "js-cookie";
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
 
-const SIDEBAR_COLLAPSED_COOKIE = "sidebar-collapsed";
+export const SIDEBAR_COLLAPSED_COOKIE = "sidebar-collapsed";
 
 interface SidebarContextValue {
 	isCollapsed: boolean;
-	setIsCollapsed: (collapsed: boolean) => void;
 	toggleCollapsed: () => void;
 }
 
 const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
 
-export function SidebarProvider({ children }: { children: ReactNode }) {
-	const [isCollapsed, setIsCollapsed] = useState(false);
+/**
+ * Hydrate the collapsed state from a server-resolved cookie so the first paint
+ * matches the persisted preference (no 280px→80px flash on collapsed sessions).
+ * `initialCollapsed` should be derived in the layout via `next/headers.cookies()`
+ * and passed down — see AppShell / AccountShell.
+ */
+export function SidebarProvider({
+	children,
+	initialCollapsed = false,
+}: {
+	children: ReactNode;
+	initialCollapsed?: boolean;
+}) {
+	const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
-	useEffect(() => {
-		// Read from cookie on mount
-		const cookieValue = Cookies.get(SIDEBAR_COLLAPSED_COOKIE);
-		if (cookieValue !== undefined) {
-			setIsCollapsed(cookieValue === "true");
-		}
-	}, []);
-
-	const handleSetIsCollapsed = (collapsed: boolean) => {
-		setIsCollapsed(collapsed);
-		Cookies.set(SIDEBAR_COLLAPSED_COOKIE, collapsed ? "true" : "false", {
-			expires: 365, // Persist for 1 year
-		});
-	};
-
-	const handleToggleCollapsed = () => {
+	const toggleCollapsed = () => {
 		const newValue = !isCollapsed;
 		setIsCollapsed(newValue);
-		Cookies.set(SIDEBAR_COLLAPSED_COOKIE, newValue ? "true" : "false", {
-			expires: 365, // Persist for 1 year
-		});
+		Cookies.set(SIDEBAR_COLLAPSED_COOKIE, newValue ? "true" : "false", { expires: 365 });
 	};
 
-	return (
-		<SidebarContext.Provider
-			value={{
-				isCollapsed,
-				setIsCollapsed: handleSetIsCollapsed,
-				toggleCollapsed: handleToggleCollapsed,
-			}}
-		>
-			{children}
-		</SidebarContext.Provider>
+	const value = useMemo(
+		() => ({ isCollapsed, toggleCollapsed }),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[isCollapsed],
 	);
+
+	return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
 }
 
 export function useSidebar() {

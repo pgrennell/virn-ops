@@ -8,7 +8,7 @@ import { BellIcon, InfoIcon, PartyPopperIcon, SparklesIcon } from "lucide-react"
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 	WELCOME: PartyPopperIcon,
@@ -43,6 +43,10 @@ export function NotificationCenter({ className }: { className?: string }) {
 			input: {},
 		}),
 		enabled: Boolean(user),
+		// 30s staleness window — focus-back-to-tab and route navigation won't trigger
+		// a fresh fetch within this window. Counts don't need to be real-time accurate
+		// to the second; this kills the per-navigation refetch storm.
+		staleTime: 30_000,
 		refetchOnWindowFocus: true,
 	});
 
@@ -83,16 +87,29 @@ export function NotificationCenter({ className }: { className?: string }) {
 		}),
 	);
 
+	// Track which IDs we've dispatched mark-read for, so the effect short-circuits
+	// after the list query invalidates and refetches with `read: true`. Without this,
+	// every mark-read triggered a refetch → effect refire → empty-ids-return cycle
+	// that cost an extra render per open. Cleared when the popover closes so a
+	// later session with new unread items dispatches fresh.
+	const markedIdsRef = useRef<Set<string>>(new Set());
+
 	useEffect(() => {
-		if (!open || list.length === 0) {
+		if (!open) {
+			markedIdsRef.current.clear();
 			return;
 		}
-		const rows = list as NotificationRow[];
-		const ids = rows.filter((n) => !n.read).map((n) => n.id);
-		if (ids.length === 0) {
+		if (list.length === 0) {
 			return;
 		}
-		markNotificationsRead({ ids });
+		const newUnreadIds = (list as NotificationRow[])
+			.filter((n) => !n.read && !markedIdsRef.current.has(n.id))
+			.map((n) => n.id);
+		if (newUnreadIds.length === 0) {
+			return;
+		}
+		for (const id of newUnreadIds) markedIdsRef.current.add(id);
+		markNotificationsRead({ ids: newUnreadIds });
 	}, [open, list, markNotificationsRead]);
 
 	if (!user) {
