@@ -91,6 +91,8 @@ export const run = pgTable(
     index("idx_run_org").on(t.organizationId),
     index("idx_run_workflow").on(t.workflowId),
     index("idx_run_status").on(t.status),
+    // H1: composite for the common UI query "active runs in org by due date".
+    index("idx_run_org_status_due").on(t.organizationId, t.status, t.dueAt),
   ],
 );
 
@@ -114,10 +116,14 @@ export const runStep = pgTable(
       onDelete: "set null",
     }),
     completedAt: timestamp("completed_at"),
+    ...timestamps,
   },
   (t) => [
     index("idx_run_step_run").on(t.runId),
     index("idx_run_step_status").on(t.status),
+    // H1 (run-step variant): "my tasks by due date" filters by status='pending'
+    // and orders by dueAt; this composite serves that path without two index hops.
+    index("idx_run_step_status_due").on(t.status, t.dueAt),
   ],
 );
 
@@ -131,8 +137,14 @@ export const runStepAssignee = pgTable(
     participantId: text("participant_id")
       .notNull()
       .references(() => participant.id, { onDelete: "cascade" }),
+    ...timestamps,
   },
-  (t) => [unique("uq_run_step_assignee").on(t.runStepId, t.participantId)],
+  (t) => [
+    unique("uq_run_step_assignee").on(t.runStepId, t.participantId),
+    // H4: the unique covers (runStepId, participantId) queries; this serves the
+    // reverse direction — "what step assignments does this participant have?"
+    index("idx_run_step_assignee_participant").on(t.participantId),
+  ],
 );
 
 // Unified collected value. Kickoff field → runStepId null; step field → runStepId set.
@@ -156,6 +168,8 @@ export const fieldValue = pgTable(
   (t) => [
     unique("uq_field_value_run_field").on(t.runId, t.fieldId),
     index("idx_field_value_run").on(t.runId),
+    // H3: per-step value lookups (e.g. "show all values collected on this run step").
+    index("idx_field_value_run_step").on(t.runStepId),
   ],
 );
 
@@ -173,8 +187,14 @@ export const runRoleAssignment = pgTable(
     participantId: text("participant_id")
       .notNull()
       .references(() => participant.id, { onDelete: "cascade" }),
+    ...timestamps,
   },
-  (t) => [unique("uq_run_role_assignment").on(t.runId, t.roleId)],
+  (t) => [
+    unique("uq_run_role_assignment").on(t.runId, t.roleId),
+    // H4: "what role assignments does this participant have?" — common for the
+    // "my work" surface that resolves a user's task set across runs.
+    index("idx_run_role_assignment_participant").on(t.participantId),
+  ],
 );
 
 export const runRelations = relations(run, ({ one, many }) => ({

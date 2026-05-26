@@ -7,9 +7,10 @@
 // Tables: comment, comment_mention, attachment, tag, taggable, webhook. Soft-delete via
 // `deletedAt` on user-deletable rows (comments, attachments); tags are lifecycle-managed.
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   pgTable,
@@ -46,6 +47,7 @@ export const comment = pgTable(
     index("idx_comment_org").on(t.organizationId),
     index("idx_comment_entity").on(t.entityType, t.entityId),
     index("idx_comment_author").on(t.authorUserId),
+    check("comment_entity_id_nonempty", sql`length(${t.entityId}) > 0`),
   ],
 );
 
@@ -89,6 +91,7 @@ export const attachment = pgTable(
     index("idx_attachment_org").on(t.organizationId),
     index("idx_attachment_entity").on(t.entityType, t.entityId),
     index("idx_attachment_uploader").on(t.uploaderUserId),
+    check("attachment_entity_id_nonempty", sql`length(${t.entityId}) > 0`),
   ],
 );
 
@@ -124,6 +127,7 @@ export const taggable = pgTable(
   (t) => [
     unique("uq_taggable").on(t.tagId, t.entityType, t.entityId),
     index("idx_taggable_entity").on(t.entityType, t.entityId),
+    check("taggable_entity_id_nonempty", sql`length(${t.entityId}) > 0`),
   ],
 );
 

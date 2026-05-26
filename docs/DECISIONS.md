@@ -374,3 +374,43 @@ workflow consisting only of optional steps would need to be completed by an expl
 cascade emits its own audit + activity pair (`action="run.completed"`, attributed to the
 user who completed the final triggering step) — useful for the activity feed but
 potentially misleading if read as "this user completed the run."
+
+---
+
+## 2026-05-26 — Audit model: every audited event references a real entity
+
+### D-016 — `audit_log.entity_type` and `audit_log.entity_id` are NOT NULL
+
+**Context:** The supastarter-shipped `audit_log` had `entity_type` and `entity_id` as
+nullable columns — the table inherited an "optional polymorphic target" stance where
+some audit events (e.g. session login, account deletion) could point at no specific
+entity. The same was true for `activity_event` and the cross-cutting polymorphic tables
+(`attachment`, `comment`, `taggable`). Migration `0001_overrated_green_goblin.sql`
+tightens this: `audit_log.entity_type` and `entity_id` become NOT NULL, and all five
+polymorphic tables get a CHECK constraint enforcing `length(entity_id) > 0`. Applied to
+the Neon dev DB on 2026-05-26 after a pre-flight that confirmed zero existing violations
+(54 rows inspected; the only writers in the codebase are `writeAuditAndActivity`, which
+already required both fields at the procedure boundary).
+
+**Decision:** Every audited event must reference a real entity. There are no
+"unattached" audit rows — `audit_log.entity_type` is NOT NULL, `audit_log.entity_id` is
+NOT NULL, and the polymorphic side tables (`audit_log`, `activity_event`, `attachment`,
+`comment`, `taggable`) all reject empty-string entity ids at the DB level.
+
+**Rationale:** Polymorphic auditability works only when every row pins a target — joining
+audit events back to the entity is the whole point of the table, and a row with no
+target is unjoinable / unfilterable / unactionable in any audit-feed UI. Making the
+constraint explicit at the DB pushes the discipline to the writer (must decide what
+the event is about) rather than the reader (must handle the unattached case forever).
+Session-shaped events ("user logged in") that don't fit naturally into entity-pinning
+land in Better Auth's own session/event tables, not `audit_log`. The empty-string
+defense covers the failure mode where a polymorphic writer fills `entity_id` with
+`""` instead of a real id (a subtle bug that the NOT NULL alone wouldn't catch).
+
+**Consequences:** This is a one-way tightening. To re-open `audit_log` to entity-less
+events later would require both a migration (drop the NOT NULL / CHECK constraints) and
+a corresponding model decision about what "unattached" means in the UI. The right
+mechanism if a "system event" category emerges is a separate `system_event` table with
+its own shape, not a relaxation here. Practical implication for builders: any new code
+that wants to emit an audit row needs to commit to a polymorphic target — if the
+event genuinely has no target, it doesn't belong in `audit_log`.

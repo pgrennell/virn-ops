@@ -967,44 +967,46 @@ export async function getHomeCountsForUser(input: {
 	const startOfTomorrow = new Date(startOfDay);
 	startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
-	const taskBase = db
-		.select({
-			id: runStep.id,
-			dueAt: runStep.dueAt,
-			status: runStep.status,
-		})
-		.from(runStep)
-		.innerJoin(run, eq(run.id, runStep.runId))
-		.innerJoin(runStepAssignee, eq(runStepAssignee.runStepId, runStep.id))
-		.innerJoin(participant, eq(participant.id, runStepAssignee.participantId))
-		.where(
-			and(
-				eq(run.organizationId, input.organizationId),
-				eq(participant.userId, input.userId),
-				eq(runStep.status, "pending"),
-			),
-		);
-	const tasks = await taskBase;
-
-	const openTasksCount = tasks.length;
-	let dueTodayCount = 0;
-	let overdueCount = 0;
-	for (const t of tasks) {
-		if (!t.dueAt) continue;
-		if (t.dueAt < startOfDay) overdueCount++;
-		else if (t.dueAt < startOfTomorrow) dueTodayCount++;
-	}
-
-	const activeRuns = await db
-		.select({ id: run.id })
-		.from(run)
-		.where(and(eq(run.organizationId, input.organizationId), eq(run.status, "active")));
+	// H6: single round-trip with SQL-side aggregation. The previous implementation
+	// fetched every pending task row for the user just to count three categories in
+	// JS — wasteful at any non-trivial org size. Now: one COUNT(*) FILTER per bucket
+	// across a single join, plus a parallel COUNT for active runs.
+	const [taskCountsRow, activeRunsRow] = await Promise.all([
+		db
+			.select({
+				openTasks: sql<number>`COUNT(*)::int`,
+				dueToday: sql<number>`COUNT(*) FILTER (
+					WHERE ${runStep.dueAt} >= ${startOfDay}
+					  AND ${runStep.dueAt} < ${startOfTomorrow}
+				)::int`,
+				overdue: sql<number>`COUNT(*) FILTER (
+					WHERE ${runStep.dueAt} < ${startOfDay}
+				)::int`,
+			})
+			.from(runStep)
+			.innerJoin(run, eq(run.id, runStep.runId))
+			.innerJoin(runStepAssignee, eq(runStepAssignee.runStepId, runStep.id))
+			.innerJoin(participant, eq(participant.id, runStepAssignee.participantId))
+			.where(
+				and(
+					eq(run.organizationId, input.organizationId),
+					eq(participant.userId, input.userId),
+					eq(runStep.status, "pending"),
+				),
+			)
+			.then((rows) => rows[0] ?? { openTasks: 0, dueToday: 0, overdue: 0 }),
+		db
+			.select({ count: sql<number>`COUNT(*)::int` })
+			.from(run)
+			.where(and(eq(run.organizationId, input.organizationId), eq(run.status, "active")))
+			.then((rows) => rows[0] ?? { count: 0 }),
+	]);
 
 	return {
-		openTasksCount,
-		dueTodayCount,
-		overdueCount,
-		activeRunsCount: activeRuns.length,
+		openTasksCount: Number(taskCountsRow.openTasks),
+		dueTodayCount: Number(taskCountsRow.dueToday),
+		overdueCount: Number(taskCountsRow.overdue),
+		activeRunsCount: Number(activeRunsRow.count),
 	};
 }
 

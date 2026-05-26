@@ -123,6 +123,7 @@ export const automationCondition = pgTable(
     value: jsonb("value").$type<unknown>(),
     groupIndex: integer("group_index").notNull().default(0),
     position: integer("position").notNull().default(0),
+    ...timestamps,
   },
   (t) => [index("idx_automation_condition_rule").on(t.ruleId)],
 );
@@ -149,6 +150,7 @@ export const automationAction = pgTable(
     }),
     config: jsonb("config").$type<Record<string, unknown>>(),
     position: integer("position").notNull().default(0),
+    ...timestamps,
   },
   (t) => [index("idx_automation_action_rule").on(t.ruleId)],
 );

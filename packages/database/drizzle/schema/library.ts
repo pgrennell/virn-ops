@@ -55,9 +55,14 @@ export const templateListing = pgTable(
   {
     id: id(),
     // NULL = first-party / platform-published. Otherwise the publishing org.
+    //
+    // `restrict` (not `set null`) — deleting a publisher org must not silently convert
+    // their listings into first-party listings, which would misrepresent ownership and
+    // pollute the curated `isOfficial` set. Org-delete flows that need to remove
+    // listings must do so explicitly (delete or transfer) before removing the org.
     publisherOrganizationId: text("publisher_organization_id").references(
       () => organization.id,
-      { onDelete: "set null" },
+      { onDelete: "restrict" },
     ),
     categoryId: text("category_id").references(() => templateCategory.id, {
       onDelete: "set null",

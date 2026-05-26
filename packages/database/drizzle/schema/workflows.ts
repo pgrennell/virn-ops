@@ -8,7 +8,7 @@
 // them. Fields (step + kickoff) are unified into one table to give a single per-version
 // variable namespace keyed by `field.key` (Invariant #5).
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -142,6 +142,7 @@ export const section = pgTable(
     title: text("title").notNull(),
     position: integer("position").notNull().default(0),
     hiddenByDefault: boolean("hidden_by_default").notNull().default(false),
+    ...timestamps,
   },
   (t) => [index("idx_section_version").on(t.workflowVersionId)],
 );
@@ -175,6 +176,7 @@ export const step = pgTable(
     dueOffsetDays: integer("due_offset_days"),
     dueAnchorStepId: text("due_anchor_step_id"),
     dueSourceFieldId: text("due_source_field_id"),
+    ...timestamps,
   },
   (t) => [
     index("idx_step_version").on(t.workflowVersionId),
@@ -199,6 +201,7 @@ export const field = pgTable(
     config: jsonb("config").$type<Record<string, unknown>>(), // options, lookup ref, etc.
     isRequired: boolean("is_required").notNull().default(false),
     position: integer("position").notNull().default(0),
+    ...timestamps,
   },
   (t) => [
     unique("uq_field_version_key").on(t.workflowVersionId, t.key),
@@ -217,6 +220,7 @@ export const stepDependency = pgTable(
     dependsOnStepId: text("depends_on_step_id")
       .notNull()
       .references(() => step.id, { onDelete: "cascade" }),
+    ...timestamps,
   },
   (t) => [unique("uq_step_dependency").on(t.stepId, t.dependsOnStepId)],
 );
@@ -244,7 +248,13 @@ export const schedule = pgTable(
   },
   (t) => [
     index("idx_schedule_workflow").on(t.workflowId),
-    index("idx_schedule_next_run").on(t.nextRunAt),
+    // H5: partial index — the cron sweeper only ever queries `WHERE is_active AND
+    // next_run_at IS NOT NULL AND next_run_at <= now()`. A partial index restricted
+    // to that predicate is dramatically smaller than the full b-tree and skips all
+    // inactive/unscheduled rows during the scan.
+    index("idx_schedule_next_run")
+      .on(t.nextRunAt)
+      .where(sql`${t.isActive} = true AND ${t.nextRunAt} IS NOT NULL`),
   ],
 );
 

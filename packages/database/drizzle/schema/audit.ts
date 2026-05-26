@@ -10,8 +10,8 @@
 // `changes` jsonb (before/after snapshots). The separate `activity_event` table
 // (activity.ts) carries user-visible activity-feed events.
 
-import { relations } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { check, index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { entityType, id, orgId, user } from "./_shared";
 
 export const auditLog = pgTable(
@@ -26,8 +26,10 @@ export const auditLog = pgTable(
     // "field_definition.created". Free text — no enum, since pack-installed code will
     // emit its own action names.
     action: text("action").notNull(),
-    entityType: entityType("entity_type"),
-    entityId: text("entity_id"),
+    // Polymorphic target. Both columns NOT NULL — an audit row without an entity is
+    // meaningless and would defeat the (entity_type, entity_id) lookup index.
+    entityType: entityType("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
     // Before/after diff, request payload, decision context — whatever the writer wants
     // searchable for forensics. Indexable later via GIN if needed.
     changes: jsonb("changes").$type<Record<string, unknown>>(),
@@ -41,6 +43,8 @@ export const auditLog = pgTable(
     index("idx_audit_log_actor").on(t.actorUserId),
     index("idx_audit_log_entity").on(t.entityType, t.entityId),
     index("idx_audit_log_created_at").on(t.createdAt),
+    // _shared.ts mandates polymorphic FK + CHECK; enforce non-empty entity_id here.
+    check("audit_log_entity_id_nonempty", sql`length(${t.entityId}) > 0`),
   ],
 );
 

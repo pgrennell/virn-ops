@@ -8,8 +8,8 @@
 // Polymorphic via the shared `entityType` enum + plain `entity_id` text + service-layer
 // validation.
 
-import { relations } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { check, index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { entityType, id, orgId, user } from "./_shared";
 
 export const activityEvent = pgTable(
@@ -34,6 +34,8 @@ export const activityEvent = pgTable(
     index("idx_activity_event_actor").on(t.actorUserId),
     index("idx_activity_event_entity").on(t.entityType, t.entityId),
     index("idx_activity_event_created_at").on(t.createdAt),
+    // _shared.ts mandates polymorphic FK + CHECK; enforce non-empty entity_id here.
+    check("activity_event_entity_id_nonempty", sql`length(${t.entityId}) > 0`),
   ],
 );
 

@@ -72,7 +72,8 @@ Four layers, top configures down, each rests on the one below.
 1. **Org-scoping.** Every tenant-owned row carries `organizationId text NOT NULL REFERENCES
    organization(id)`. Enforced in code via `protectedOrgProcedure` / `adminOrgProcedure` and the
    `withOrg(orgId)` query-helper pattern. RLS is a deferred backstop, not a substitute.
-2. **The cross-tenant exception is contained.** Only `template_listing(_version)` and platform-owned
+2. **The cross-tenant exception is contained.** Only `template_listing(_version)`,
+   `template_category` (platform-global taxonomy for the listings), and platform-owned
    `solution_pack(_version)` may live outside an org. No other table may relax invariant #1.
 3. **Definition vs. execution are separate.** Templates (`workflow → workflow_version → section →
    step → field`) are authored/versioned. Runs (`run → run_step → field_value`) are execution

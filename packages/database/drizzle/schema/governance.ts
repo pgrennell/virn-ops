@@ -84,6 +84,8 @@ export const suggestion = pgTable(
     index("idx_suggestion_org").on(t.organizationId),
     index("idx_suggestion_workflow").on(t.workflowId),
     index("idx_suggestion_status").on(t.status),
+    // H2: composite for the most common UI query "open suggestions in my org".
+    index("idx_suggestion_org_status").on(t.organizationId, t.status),
   ],
 );
 
