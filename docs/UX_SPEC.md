@@ -338,8 +338,9 @@ order:
 8. One-procedure-three-modes wedge (S-07) — agent assignee model + mode selector on launch.
 9. Data Sets minimal subset (S-02).
 10. Reader-facing KB surface (S-03) — *not* specified in this UX_SPEC yet; add when built.
-11. MCP agent surface (S-01a) — backend; UI implications are the agent-assignee
-    affordances in §5.3 (Run view).
+11. Agent-safe action surface (S-01a) — backend (oRPC canonical + optional MCP
+    wrapper); UI implications are the agent-assignee affordances in §5.3
+    (Run view).
 12. AI authoring (S-01b/c) — adds prompt/doc ingress to the Builder's create flow.
 13. Tango/Scribe import (S-01d) — adds an import-from-export option in the Library + Builder.
 14. Lightweight monitor (S-06) — Understand nav group, thin Reports.

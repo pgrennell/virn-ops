@@ -47,7 +47,7 @@ branding settings group.
 
 **Virn Ops v1 is the property-operations OS** — turnover, inspections, maintenance routing,
 vendor & tenant onboarding. Under the hood it's a process/workflow/automation engine with
-an agent-native action surface (MCP). That engine is architected to host other
+an agent-safe action surface (credentialed oRPC API + optional MCP wrapper; see STRATEGY S-01a). That engine is architected to host other
 process-shaped products (marketing ops, agency client ops, compliance SOPs, HR ops) as
 solution packs the ServiceNow way — but the platform-of-products framing is a **post-v1
 destination**, not the v1 public story. v1 wins property ops decisively; the pack model

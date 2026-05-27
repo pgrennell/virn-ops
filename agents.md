@@ -26,7 +26,7 @@ they are post-v1 (STRATEGY S-11).
 
 The **engine underneath** is enterprise-grade, multi-tenant infrastructure for recurring
 checklists, SOP/policy knowledge bases, workflow automation, and an **agent-native action
-surface (MCP)**. It is architected to support multiple process-shaped products (marketing
+surface** (credentialed, audited, capability-gated oRPC API + optional MCP wrapper; see STRATEGY S-01a). It is architected to support multiple process-shaped products (marketing
 ops, agency ops, compliance, HR) as solution packs the ServiceNow way — but that
 platform-of-products moat is **long-term destination**, not v1 public framing. Win
 property ops first; the pack model repeats the win post-v1.

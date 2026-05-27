@@ -49,7 +49,7 @@ mega-rounds and 2–10× growth.
 | Cohort | Examples | Why they matter to us | Our posture |
 |---|---|---|---|
 | **AI-powered capture** | **Scribe** ($1.3B, 78K paying orgs, 2× rev YoY); **Tango** ($20M, building toward AI-executable docs); Guidde | Scribe Optimize is the bridge: capture → "what should be automated" → handoff. That's the same bridge our S-07 wedge sits on, but they own the *capture* leg and we own the *execute* leg. | **Partner via import**, not compete head-on. Treat a Tango/Scribe export as a draft `workflow_version` ingress path. |
-| **AI-native orchestration** | **n8n** ($2.5B, $40M+ ARR, 10× usage YoY); Gumloop ($70M raised, Benchmark-led); Lindy | Different buyer, different product. Their existence raises the bar for what an "AI-credible" 2026 product *looks like* at launch — not a direct competitor. | **Do not try to be n8n.** Agent-native MCP (S-01a) is our seam, scoped to process operations, not a general orchestrator. |
+| **AI-native orchestration** | **n8n** ($2.5B, $40M+ ARR, 10× usage YoY); Gumloop ($70M raised, Benchmark-led); Lindy | Different buyer, different product. Their existence raises the bar for what an "AI-credible" 2026 product *looks like* at launch — not a direct competitor. | **Do not try to be n8n.** Our agent-safe action surface (S-01a — oRPC canonical, MCP wrapper optional) is our seam, scoped to process operations, not a general orchestrator. |
 | **In-flow delivery / AI-over-KB** | Guru, Slite, Document360 ("Ask Eddy"), Perfect Wiki | Conversational KB Q&A in Slack/Teams is table stakes for the KB layer. | **S-09 fast-follow** after v1 launch. Reader-KB (S-03) is the data substrate; in-flow delivery is the next layer. |
 
 ### 2.2 Tier 2 — vertical competitors (the actual battle for the vertical)
@@ -105,8 +105,9 @@ Keep them sharp; they are differentiators, not hygiene.
   (Invariant #1) + append-only audit (Invariant #6) + definition/execution split
   (Invariant #3) + stable field keys (Invariant #5) + a clean oRPC procedure layer is
   *exactly* the shape a safe, auditable agent action surface needs. We don't *add* AI
-  safety; we already *are* it. This is the seam that S-01a (MCP surface) lands on, and
-  nothing on the competitive board has it cleanly.
+  safety; we already *are* it. This is the seam that S-01a (the agent-safe action
+  surface — oRPC contract + optional MCP wrapper) lands on, and nothing on the
+  competitive board has it cleanly.
 - **Immutable publish / snapshot isolation (D-018).** A run is a self-contained
   snapshot of a *published* version; editing a template never perturbs in-flight runs;
   editing a published workflow forks a new draft (resume-or-fork, one open draft per
@@ -140,10 +141,13 @@ The pivot promotes most of these from "deferred" to "v1 completeness." A propert
 buyer in 2026 evaluating against the Tier-1 capture cohort + Tier-2 vertical incumbents
 will judge v1 on whether these exist, not on whether they're "on the roadmap."
 
-1. **Agent-native action surface — the MCP server (S-01a, highest leverage).** Expose
-   the workflow/run procedures as an MCP server so "an agent drafts a workflow / launches
-   a run / completes a step" is first-class and logged. This is *the* opening on the
-   competitive board — nobody owns it cleanly. **In v1.**
+1. **Agent-safe action surface (S-01a, highest leverage).** Expose the workflow/run
+   procedures as a credentialed, audited, capability-gated **oRPC API** that agent
+   principals (ADR-006) and sibling-product callers (Virn PM) use through the same
+   write path humans do. Ship a thin **MCP wrapper** alongside for MCP-host
+   compatibility (not the source of truth — protocol-replaceable). This is *the*
+   opening on the competitive board — nobody owns the agent-safe surface cleanly.
+   **In v1.**
 2. **AI authoring — prompt→workflow + doc→workflow (S-01b/c).** Kill the blank-page
    problem. Our section/step/field/stable-key model is ideally shaped for an LLM to emit
    as structured output. **In v1.**
@@ -209,17 +213,30 @@ than delete; reference from implementation decisions. Status uses the v2 vocabul
   safe agent action surface needs, and incumbents would have to retrofit it. This is the
   single biggest unclaimed wedge on the competitive board. Combined with S-07, it becomes
   the product story.
+- **Protocol posture (load-bearing).** The architectural bet is the **agent-safe action
+  surface itself** (credentialed, audited, capability-gated, same write path as humans),
+  **not any single wire protocol.** oRPC is the canonical contract — every caller
+  (humans, guests, agent principals from ADR-006, sibling product Virn PM, custom
+  integrations) writes through it. An **MCP wrapper** ships on top as a *good-citizen
+  alternative* for agent hosts that prefer the MCP protocol (Claude Desktop, MCP-native
+  agents). If MCP fizzles as an ecosystem, the wrapper goes and the surface is intact;
+  if MCP wins, Virn is standards-compliant. **Don't anchor the architecture to MCP-the-
+  protocol — anchor it to the concept.**
 - **Build implication.**
-  - **(a) MCP server** exposing workflow/run procedures (the agent surface), with actions
-    landing in `audit_log` like any other actor. Actor model extends to `user | participant | agent`.
+  - **(a) Agent-safe action surface** exposing workflow/run procedures via oRPC, with
+    agent-principal authentication (ADR-006), capability × permission gating, and every
+    action landing in `audit_log` with `actorKind='agent'`. The same procedures the
+    human UI calls. **A thin MCP wrapper over these procedures ships alongside** for
+    MCP-host compatibility — wrapper, not source of truth.
   - **(b) prompt→workflow generation** producing real draft `workflow_version`s through
     the existing builder API (not a parallel path).
   - **(c) doc→workflow import** for plain text / Markdown / PDFs → draft workflow.
   - **(d) Tango/Scribe export import** as a third generation path — partner, don't build.
   - Reserve `step.type = ai` for "a step an agent completes," gated like any capability.
-- **Status:** **v1.** All four sub-bets ship in v1. Sequence within v1: (a) MCP +
-  agent actor first (unlocks the wedge for S-07); (b) prompt→workflow second (kills
-  blank-page friction); (c)/(d) import paths third.
+- **Status:** **v1.** All four sub-bets ship in v1. Sequence within v1: (a) action
+  surface + agent actor first (unlocks the wedge for S-07; MCP wrapper is fast-follow
+  within the same phase if cheap); (b) prompt→workflow second (kills blank-page
+  friction); (c)/(d) import paths third.
 
 ### S-02 — Data Sets minimal subset in v1
 
@@ -304,9 +321,10 @@ than delete; reference from implementation decisions. Status uses the v2 vocabul
   building SOPs that an agent can execute. The biggest unclaimed wedge on the
   competitive board, and our KB-plus-automation substrate (S-08 single-content-object)
   is exactly what makes one-procedure-three-modes tractable. Distinct from S-01: S-01
-  is about *agents driving the platform* (MCP, generation); S-07 is about *the same
-  content being executable at different levels of AI assistance*. They compound — S-01a
-  (MCP) is *how* the agent fulfills its assigned step in mode (b) or (c).
+  is about *agents driving the platform* (the action surface + generation); S-07 is
+  about *the same content being executable at different levels of AI assistance*. They
+  compound — S-01a's action surface (oRPC + MCP wrapper) is *how* the agent fulfills
+  its assigned step in mode (b) or (c).
 - **Build implication.** Extend the assignee model to include an agent assignee —
   shape locked by **ARCHITECTURE.md ADR-006** (org-scoped `agent` table + per-run
   `participant.kind=agent` binding; `run_step_assignee` unchanged); implementation
@@ -343,7 +361,7 @@ than delete; reference from implementation decisions. Status uses the v2 vocabul
   into Virn and search.
 - **Why.** Every winning KB-adjacent tool has moved to a delivery model. Our governance
   and KB investment is wasted if employees still have to know where to look. Combines
-  naturally with S-01a's MCP surface — the same procedure exposure that drives agent
+  naturally with S-01a's action surface — the same procedure exposure that drives agent
   actions can also answer questions about itself.
 - **Build implication.** Slack/Teams app reading from the same `workflow` corpus, scoped
   by org membership. Search-and-answer surface over `workflow_version` content with
@@ -408,7 +426,7 @@ strength. Virn column: **Ahead** · **In v1** (architected + building) · **v1.1
 | AI prompt→workflow generation | ●● | ●● | ●● | **v1 — S-01b** |
 | AI doc→workflow import | ●● | ● | ● | **v1 — S-01c** |
 | Agent-driven step execution | ○ | ● (gesturing) | ●●● (their core) | **v1 — S-01a + S-07 (our wedge)** |
-| Agent-safe action surface (MCP / audited) | ○ | ○ | ● | **Ahead — S-01a (our opening)** |
+| Agent-safe action surface (credentialed, audited, capability-gated; oRPC + optional MCP wrapper) | ○ | ○ | ● | **Ahead — S-01a (our opening)** |
 | One procedure → human/AI/automated modes | ○ | ● (gesturing) | ○ | **Ahead — S-07 (our wedge)** |
 | "What should we automate" intelligence | ●●● (Optimize) | ● | ○ | **post-v1 — derives from S-01a + run analytics** |
 
@@ -475,11 +493,13 @@ products before treating any cell as fact.
 
 ## 8. Open strategic questions
 
-- **AI sequencing within v1.** MCP (S-01a) and prompt→workflow (S-01b) both ship in v1
-  — which first? They share the builder API; either order works. Working assumption:
-  **MCP first** because it unlocks the S-07 wedge (agent assignees in run mode (b)/(c))
-  and is the unfair-advantage moat; prompt→workflow is table-stakes generation that any
-  competitor can match.
+- **AI sequencing within v1.** The agent-safe action surface (S-01a — oRPC API +
+  agent principal + audit) and prompt→workflow (S-01b) both ship in v1 — which first?
+  They share the builder API; either order works. Working assumption: **action
+  surface first** because it unlocks the S-07 wedge (agent assignees in run mode
+  (b)/(c)) and is the unfair-advantage moat; prompt→workflow is table-stakes
+  generation that any competitor can match. The MCP wrapper is a fast-follow within
+  the same phase if cheap, or split out if it complicates the oRPC build.
 - **Data Sets minimal-subset boundary.** "Org reference lists" is the agreed shape —
   what's the precise schema cut? Working assumption: `data_set` (named list) +
   `data_set_record` (one record per row, with a single `label` + optional `value` JSON)

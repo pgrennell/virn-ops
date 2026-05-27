@@ -21,7 +21,10 @@ looks like 2023. Foundation phases (0, 1, 2, 3, 4 — schema, config, run engine
 are unchanged and largely complete. The downstream phases (5 onward) are
 substantially re-ordered:
 
-- **AI authoring + the MCP agent surface (S-01)** moves from "later" into v1.
+- **AI authoring + the agent-safe action surface (S-01)** moves from "later" into v1.
+  Protocol posture clarified: oRPC is the canonical contract; an MCP wrapper ships
+  alongside as a good-citizen alternative for MCP-host compatibility (not the source
+  of truth — STRATEGY S-01a).
 - **Data Sets minimal subset (S-02)** moves from Batch 7 deferred into v1.
 - **Reader-KB surface (S-03)** is added as an explicit v1 phase (previously
   unspecified).
@@ -89,7 +92,7 @@ commit `edb465e`.
 ## v1 phases (re-sequenced per D-021)
 
 Each phase is one Claude Code session-sized chunk. Within v1, sequence matters —
-phases that unlock the wedge (S-07) or the unfair advantage (S-01a MCP) come early
+phases that unlock the wedge (S-07) or the unfair advantage (S-01a action surface) come early
 so downstream surfaces can lean on them.
 
 ### Phase 7 — Operator surfaces (My Work + Run view + Guest run view)
@@ -137,7 +140,7 @@ first, before any agent-aware code.**
 2. **Assignee model extension** — `participant` now supports `kind='agent'` via the
    migration above. Runtime: an `agent` assignee on a `run_step` (via the existing
    `run_step_assignee → participant.id` chain — unchanged) means the step is
-   fulfilled via the MCP surface (Phase 11), not a human UI. The
+   fulfilled via the agent-safe action surface (Phase 11), not a human UI. The
    `writeAuditAndActivity` helper gains an `actorKind` parameter, defaulting to
    `'user'` so existing call sites are unchanged; only the new agent-aware writers
    pass `'agent'`.
@@ -183,24 +186,63 @@ A read/search/acknowledge surface over `workflow.type ∈ {document, policy}` +
 - Visibility honors `workflow.visibility` (`org-internal | guest-visible | public`).
 - Substrate for the post-v1 Slack/Teams delivery (S-09).
 
-### Phase 11 — MCP agent surface (S-01a) — the unfair advantage
+### Phase 11 — Agent-safe action surface (S-01a) — the unfair advantage
 
-Expose the workflow/run procedures as an MCP server so agent actions land in
-`audit_log` like any other actor. Agent identity is an org-scoped `participant` of
-kind `agent` with its own credential.
+Expose the workflow/run procedures as a **credentialed, audited, capability-gated
+oRPC API** that agent principals (ADR-006) and sibling-product callers (Virn PM)
+use through the same write path humans do. A thin **MCP wrapper** ships alongside
+for MCP-host compatibility (Claude Desktop, MCP-native agents) — wrapper, not
+source of truth. Per STRATEGY S-01a: the architectural bet is the *surface itself*,
+not any specific wire protocol. oRPC is canonical; MCP is one wrapper among
+possible others.
 
-- Surface (read): list workflows / read workflow / list runs / read run / list my
-  assigned steps.
-- Surface (write): launch a run / set a field value / complete a step / add a
+**Sub-phase 11a — Canonical oRPC action surface (primary deliverable).**
+
+- **Surface (read):** list workflows / read workflow / list runs / read run /
+  list my assigned steps. Same oRPC procedures the human UI calls; no parallel
+  read path.
+- **Surface (write):** launch a run / set a field value / complete a step / add a
   comment. All through the **same** oRPC procedures the human UI uses — no
   parallel write path.
-- AuthZ: per-agent capability grants (the existing capability × permission gating
-  already covers this — agents are just another principal type).
-- Every agent action writes an `audit_log` row with `actor_kind='agent'` and the
-  agent's participant id.
+- **Credential validation as oRPC middleware.** A new procedure-level middleware
+  resolves an incoming `Authorization: Bearer <token>` (the API-key-shaped agent
+  credential from ADR-006 / D-022) to an `agent.id` + capability set, then
+  proceeds through the existing oRPC stack. Lives once, in middleware — applies
+  uniformly regardless of which wrapper (if any) the caller used.
+- **AuthZ:** per-agent capability grants from `agent_capability` (D-022) compose
+  with the existing capability × permission gating. An agent only acts where
+  `capability_enabled(org) ∧ agent_has_capability(agentId, capability)` — agents
+  are subject to org-level capability gates exactly as humans are, with their
+  own narrower grant set on top.
+- **Find-or-create the per-run participant.** On the first write to a given run
+  by a given agent, find-or-create the `participant` row with `kind='agent'` +
+  `agentId` set (ADR-006). Subsequent writes use the same participant id.
+- **Audit attribution.** Every agent action writes an `audit_log` row with
+  `actor_kind='agent'`, `actorParticipantId` set to the participant row, and no
+  `actorUserId`. Activity events mirror this for the user-facing run timeline.
 
-This is the load-bearing seam for S-07 mode (b) and (c). Without it, "AI-assisted"
-and "automated" runs have nothing to drive them.
+**Sub-phase 11b — Thin MCP wrapper (good-citizen alternative).**
+
+- Wrapper exposes the same oRPC procedures from 11a via the MCP protocol — read
+  procedures as MCP `tools` and `resources`, write procedures as MCP `tools`.
+  Credential validation happens in the oRPC middleware (11a), so the wrapper
+  doesn't reimplement auth.
+- Deployable as a sibling endpoint (e.g. `mcp.ops.virn.com` or
+  `ops.virn.com/mcp`) — deployment shape to settle when 11b ships.
+- **Branding:** "Virn Ops MCP" when referring to this wrapper specifically; the
+  canonical surface is "Virn Ops Action API" (or just "the action surface" in
+  internal docs).
+- **Splittable.** If 11b complicates the 11a build, ship 11a alone and split
+  11b as Phase 11.5 — the strategic value is in 11a; the wrapper is the
+  ecosystem-compatibility cherry.
+
+**Why this matters.** This is the load-bearing seam for S-07 mode (b) and (c) —
+without an agent-credentialed write path, "AI-assisted" and "automated" runs
+have nothing to drive them. It's also the **integration surface for Virn PM** —
+PM calls these same oRPC procedures (directly, not via MCP) to launch
+work-order runs from tenant service requests. One contract, multiple consumers
+(humans-via-UI, agents-via-credential, sibling-product-via-credential, MCP-hosts-
+via-wrapper).
 
 ### Phase 12 — AI authoring (S-01b/c) — kill the blank page
 

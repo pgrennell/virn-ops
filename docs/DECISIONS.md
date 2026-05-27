@@ -784,15 +784,18 @@ code lands until the schema is in place):
    - `description text` — what this agent does (helps humans assigning it work).
    - `credentialHash text NOT NULL` — bcrypt/argon2 hash of the API-key-shaped credential.
      **Never store the plaintext.** The plaintext is shown once on creation and never again
-     (the standard service-account pattern). Credential format TBD in Phase 11 (MCP) — the
-     hash column is shape-agnostic.
+     (the standard service-account pattern). Credential format TBD in Phase 11
+     (agent-safe action surface) — the hash column is shape-agnostic and works
+     identically whether the wire protocol is direct oRPC, the MCP wrapper, or
+     any future wrapper.
    - `credentialLastFour text` — last 4 chars of the plaintext credential for UI display
      ("…a3f9"). Convenience only; not a secret.
    - `credentialRotatedAt timestamp` — set on creation and on every rotation. Drives
      "your agent credential is 90 days old, consider rotating" UI later.
    - `isActive boolean NOT NULL DEFAULT true` — soft-disable without delete. A disabled
-     agent fails authentication at the MCP boundary (the participant rows remain for
-     historical audit, but the agent can't act).
+     agent fails authentication at the action-surface boundary regardless of which
+     protocol the caller used (oRPC, MCP wrapper, future wrappers) — the participant
+     rows remain for historical audit, but the agent can't act.
    - `createdByUserId text REFERENCES user(id)` — which human created the agent (audit
      attribution for the creation event).
    - `timestamps` (createdAt + updatedAt, shared helper).
@@ -830,8 +833,8 @@ code lands until the schema is in place):
    via a new optional `actorParticipantId` column for cross-entity actions).
    - **Open detail:** whether to add `audit_log.actorParticipantId text NULLABLE
      REFERENCES participant(id)` in this same migration, or defer to Phase 11 when the
-     MCP write path actually populates it. Working assumption: **add it now** so the
-     schema is complete and Phase 11 is purely behavioral.
+     agent-credentialed write path actually populates it. Working assumption: **add it
+     now** so the schema is complete and Phase 11 is purely behavioral.
 
 7. **Activity event mirror.** `activity_event` gets the same `actorKind` enum column
    (parallel to D-011's separation — `activity_event` is the user-facing timeline; agents
@@ -873,13 +876,16 @@ code lands until the schema is in place):
 - Phase 8 (BUILD_PLAN.md) ships exactly this migration before any agent-aware code
   lands. The `participant.kind` enum extension is an `ALTER TYPE ADD VALUE` —
   consistent with D-003's stance on extending enums up front while data volume is low.
-- Phase 11 (MCP) layers the credential validation + the actual write path (find-or-create
-  the per-run participant row, set `actorKind='agent'` on every audit/activity write).
-  No additional schema; the foundation is already in place from Phase 8.
+- Phase 11 (agent-safe action surface) layers the credential validation + the actual
+  write path (find-or-create the per-run participant row, set `actorKind='agent'` on
+  every audit/activity write). Credential validation lives in oRPC middleware so it
+  applies regardless of which protocol the caller used (direct oRPC, MCP wrapper, future
+  wrappers). No additional schema; the foundation is already in place from Phase 8.
 - The existing audit infrastructure (`writeAuditAndActivity`) needs one parameter
   addition: `actorKind: 'user' | 'guest' | 'agent'` (default `'user'` to preserve current
-  call sites). All existing callers default-thread through unchanged; only the new MCP
-  write path and the run-engine assignee handling need to pass `'agent'`.
+  call sites). All existing callers default-thread through unchanged; only the new
+  agent-credentialed write path and the run-engine assignee handling need to pass
+  `'agent'`.
 - **Out of scope, decide later:** agent-to-agent delegation; cross-org agents (a Virn-owned
   "platform agent" usable across tenants); agent OAuth flows for action-on-behalf-of a
   user; agent fine-grained ACLs beyond capability gating. ADR-006 explicitly defers these.

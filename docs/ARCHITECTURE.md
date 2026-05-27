@@ -23,7 +23,7 @@ per run.
 The **v1 product** is the property-ops vertical, with STR turnover & housekeeping as the
 concrete first shape. The **underlying engine** is enterprise-grade, multi-tenant
 infrastructure for recurring checklists, living SOP/policy knowledge bases, no-code workflow
-automation, and an **agent-native action surface** (MCP) — all on a single content-object
+automation, and an **agent-safe action surface** (oRPC API + optional MCP wrapper) — all on a single content-object
 substrate. The engine is **architected to support** distinct process-shaped products
 (marketing ops, agency client ops, compliance SOPs, HR ops) via solution packs the same
 ServiceNow way — but that platform-of-products moat is a **long-term destination**, not the
@@ -52,7 +52,7 @@ Virn PM.
    reader-KB + agent surface). The platform-of-products moat (S-11) matures post-v1.
 2. **Agent-native by construction.** Org-scoping, append-only audit, definition/execution split,
    and stable field keys are not just hygiene — they are the substrate that makes a safe
-   agent action surface (MCP, S-01a) tractable. Treat the invariants in §3 as the foundation of
+   agent-safe action surface (S-01a — oRPC API + optional MCP wrapper) tractable. Treat the invariants in §3 as the foundation of
    the unfair advantage, not just correctness plumbing.
 3. **One content object, many views.** Procedures, KB articles, training guides, and agent
    instructions are different *views* of the same `workflow_version` substrate (`workflow.type`
@@ -161,26 +161,29 @@ Four layers, top configures down, each rests on the one below.
 
 ### ADR-006 — Agent principals: org-scoped identity + per-run participant binding
 
-- **Context.** STRATEGY S-01 (agent-native action surface via MCP) and S-07
+- **Context.** STRATEGY S-01 (agent-safe action surface) and S-07
   (one-procedure-three-modes: human / AI-assisted / automated) require a third actor
-  kind alongside `user` and `guest`. An agent (an AI principal that drives runs via the
-  MCP surface) needs identity (name, credentials, capability grants), org scope, and a
-  way to be assigned to `run_step` rows. Today's `participant` table is per-run scoped —
-  a participant row exists in the context of a specific run — which fits humans and
-  guests but doesn't fit agents (long-lived, used across many runs over months). The
-  open question (resolved here) was whether to add agents as a `participant.kind` value
-  only, add a separate `agent` table only, or hybridize.
+  kind alongside `user` and `guest`. An agent (an AI principal that drives runs via
+  the credentialed action surface) needs identity (name, credentials, capability
+  grants), org scope, and a way to be assigned to `run_step` rows. Today's `participant`
+  table is per-run scoped — a participant row exists in the context of a specific run —
+  which fits humans and guests but doesn't fit agents (long-lived, used across many
+  runs over months). The open question (resolved here) was whether to add agents as a
+  `participant.kind` value only, add a separate `agent` table only, or hybridize.
 - **Decision.** **Hybrid.** A new org-scoped `agent` table holds the long-lived identity
   (name, description, credential hash, capability grants, `isActive`, audit metadata).
   The existing `participant` table gains a third kind: `participant.kind ∈ {user, guest,
   agent}`, with a new nullable `agentId` FK pointing at `agent`. `run_step_assignee`
-  is unchanged — it continues to FK to `participant.id` regardless of kind. The MCP
-  server authenticates an incoming agent action via the credential, resolves to
-  `agent.id`, finds-or-creates the `participant` row for the target run with
-  `kind=agent` + `agentId` set, then writes through the **same** oRPC procedures the
-  human UI uses (no parallel write path — STRATEGY S-01a). Agent actions land in
-  `audit_log` with a new `actor_kind ∈ {user, guest, agent}` enum populated from the
-  acting participant.
+  is unchanged — it continues to FK to `participant.id` regardless of kind. The action
+  surface (oRPC API; optionally fronted by an MCP wrapper) authenticates an incoming
+  agent action via the credential, resolves to `agent.id`, finds-or-creates the
+  `participant` row for the target run with `kind=agent` + `agentId` set, then writes
+  through the **same** oRPC procedures the human UI uses (no parallel write path —
+  STRATEGY S-01a). Agent actions land in `audit_log` with a new
+  `actor_kind ∈ {user, guest, agent}` enum populated from the acting participant. The
+  protocol the caller uses (oRPC over HTTP, MCP wrapper, or any future wrapper) does
+  not affect this — `agent` identity, capability gating, and audit attribution all
+  happen at the procedure boundary, not the wire boundary.
 - **Why hybrid, not either pure option.** `participant`-only conflates per-run binding
   with long-lived org identity, has no natural home for credentials, and forces agents
   to either churn participant rows or warp the per-run scoping. Separate-`agent`-only
@@ -205,8 +208,8 @@ Four layers, top configures down, each rests on the one below.
   `agent_capability` join. **Defer:** cross-org agents, agent-to-agent delegation,
   agent OAuth flows (v1 uses opaque API-key-shaped credentials), agent fine-grained
   ACLs beyond capability gating.
-- **Rationale.** This is the load-bearing actor decision that S-01 (MCP) and S-07
-  (three-mode runs) sit on. Getting it wrong is expensive — every assignment query,
+- **Rationale.** This is the load-bearing actor decision that S-01 (the action surface)
+  and S-07 (three-mode runs) sit on. Getting it wrong is expensive — every assignment query,
   every audit-log read, every capability gate threads through it. The hybrid is the
   shape every mature system converged on once service-account-like principals
   appeared (GitHub Apps, AWS IAM roles, Slack bots). It also keeps Invariant #1
@@ -215,11 +218,13 @@ Four layers, top configures down, each rests on the one below.
   is unchanged.
 - **Consequences.** Phase 8 (S-07 wedge) lands the `agent` table + `participant` /
   `audit_log` migrations in one schema change before any agent-aware code ships.
-  Phase 11 (MCP) layers on top: the MCP server is the credential-validating front
-  door that resolves an incoming request to an `agent.id` + capability set. The
-  existing `run_step_assignee` join, the existing audit pattern, and the existing
-  capability resolver all work unchanged for agent principals — only the writers
-  (`assignAgent`, `launchRunWithMode`) need to know about the new kind.
+  Phase 11 (agent-safe action surface) layers on top: the oRPC API gains
+  credential-validation middleware that resolves an incoming request to an `agent.id`
+  + capability set; a thin MCP wrapper ships alongside for MCP-host compatibility,
+  exposing the same procedures via the MCP protocol. The existing `run_step_assignee`
+  join, the existing audit pattern, and the existing capability resolver all work
+  unchanged for agent principals — only the writers (`assignAgent`,
+  `launchRunWithMode`) need to know about the new kind.
 
 ---
 
@@ -279,7 +284,7 @@ Four layers, top configures down, each rests on the one below.
 | **Reader-facing KB (S-03)** | Read/search/acknowledge over `workflow.type ∈ {document, policy}` | Slack/Teams delivery (S-09) | — |
 | **Data sets (S-02 minimal)** | `data_set` + single-field `data_set_record` + `lookup` field type | Multi-field records, full builder | Full build |
 | **AI authoring (S-01b/c)** | Prompt→workflow + doc→workflow → draft `workflow_version` | — | Scribe Optimize-style "what should we automate" |
-| **AI agent surface (S-01a, MCP)** | MCP server exposing workflow/run procedures; agent principal kind; audited via `audit_log` | Agent-driven cross-org orchestration | — |
+| **Agent-safe action surface (S-01a)** | Credentialed, audited, capability-gated oRPC API + agent principal kind (ADR-006); thin MCP wrapper alongside for MCP-host compatibility | Agent-driven cross-org orchestration | — |
 | **Tango/Scribe import (S-01d)** | Import their export formats as draft `workflow_version` | — | Native screen-recording capture |
 | **Three execution modes (S-07)** | `runs.launch` mode selector (`human \| ai_assisted \| automated`); `step.type=ai` lifted from reserved | — | — |
 | **Operator surfaces (UX_SPEC §5)** | Home, My Work, Run view, Guest run view | — | — |
@@ -322,8 +327,10 @@ question, no longer is.
   property — Virn Ops (operations) and Virn PM (records / accounting) on the same property data.
 - Approval engine: per-feature now, or one generalized engine sooner than planned?
 - Library monetization: free-only at launch, or reserve `template_purchase` from day one?
-- AI sequencing within v1: MCP (S-01a) first or prompt→workflow (S-01b) first? See
-  STRATEGY §8 — working assumption is MCP first.
+- AI sequencing within v1: agent-safe action surface (S-01a — oRPC + agent principal +
+  audit) first or prompt→workflow (S-01b) first? See STRATEGY §8 — working assumption is
+  the action surface first; the MCP wrapper is a fast-follow within the same phase if
+  cheap, or split out if it complicates the oRPC build.
 - Data Sets minimal-subset boundary: confirm the single-field `data_set_record` shape per
   STRATEGY §8 working assumption.
 - ~~Agent principal model: should `participant.kind = agent` be a first-class participant

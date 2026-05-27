@@ -101,7 +101,7 @@ Before going further with development, stop and re-examine whether Virn Ops is s
 - **Status:** open — sharpens the pause-and-reconsider questions above; not yet integrated into STRATEGY.md
 - **Tags:** competitors, market, momentum, funding, visualization
 
-[Open the visualization](docs/virn-ops-growth-scorecard.html) — tier-ranked momentum scorecard of 13 products across the process / workflow / SOP-capture / AI-orchestration landscape, with funding, valuation, and usage signals per row, plus a "what this means for Virn Ops" read at the bottom.
+[Open the visualization](./virn-ops-growth-scorecard.html) — tier-ranked momentum scorecard of 13 products across the process / workflow / SOP-capture / AI-orchestration landscape, with funding, valuation, and usage signals per row, plus a "what this means for Virn Ops" read at the bottom.
 
 **The headline:** all four named comps sit in Tier 3 or 4 — Process Street (52, defending via "compliance ops" repositioning), SweetProcess (38, bootstrapped/profitable), Tallyfy (32), Manifestly (28). Tier 1 hypergrowth is AI-native: n8n ($2.5B, $40M ARR, 10× YoY usage), Scribe ($1.3B unicorn moving into "Workflow AI"), Gumloop (Benchmark-led). Tier 2 includes Tango (building toward AI-executable docs — the same wedge as STRATEGY S-07), Lindy, Guidde, Relay.app.
 
