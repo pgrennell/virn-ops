@@ -12,14 +12,25 @@
 
 import { relations, sql } from "drizzle-orm";
 import { check, index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { entityType, id, orgId, user } from "./_shared";
+import { actorKind, entityType, id, orgId, user } from "./_shared";
+import { participant } from "./runs";
 
 export const auditLog = pgTable(
   "audit_log",
   {
     id: id(),
     organizationId: orgId(),
+    // Discriminator for which principal kind acted (ADR-006 + D-022). Populated from the
+    // acting participant's kind, or 'user' when the action has no participant context
+    // (e.g. org-config writes by an admin acting as themselves outside any run).
+    actorKind: actorKind("actor_kind").notNull(),
     actorUserId: text("actor_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    // Cross-entity actor pointer for 'guest' / 'agent' actors whose identity lives in the
+    // participant row. Nullable; populated by the new writers in Phase 11 (MCP). Per D-022:
+    // added now so the schema is complete and Phase 11 is purely behavioural.
+    actorParticipantId: text("actor_participant_id").references(() => participant.id, {
       onDelete: "set null",
     }),
     // The verb / event name, e.g. "workflow.published", "approval.decided",
@@ -41,6 +52,7 @@ export const auditLog = pgTable(
   (t) => [
     index("idx_audit_log_org").on(t.organizationId),
     index("idx_audit_log_actor").on(t.actorUserId),
+    index("idx_audit_log_actor_participant").on(t.actorParticipantId),
     index("idx_audit_log_entity").on(t.entityType, t.entityId),
     index("idx_audit_log_created_at").on(t.createdAt),
     // _shared.ts mandates polymorphic FK + CHECK; enforce non-empty entity_id here.
@@ -52,5 +64,9 @@ export const auditLogRelations = relations(auditLog, ({ one }) => ({
   actor: one(user, {
     fields: [auditLog.actorUserId],
     references: [user.id],
+  }),
+  actorParticipant: one(participant, {
+    fields: [auditLog.actorParticipantId],
+    references: [participant.id],
   }),
 }));

@@ -160,6 +160,10 @@ export async function insertRunSnapshot(input: {
 					input.participants.map((p) => ({
 						organizationId: input.organizationId,
 						runId,
+						// Discriminator picked from which identity field is populated. ADR-006
+						// adds 'agent' as a third kind, set by Phase 11's MCP-side writers; this
+						// path (run launch) only spawns user/guest participants.
+						kind: (p.userId ? "user" : "guest") as "user" | "guest" | "agent",
 						userId: p.userId,
 						guestEmail: p.guestEmail,
 						guestName: p.guestName,
@@ -643,6 +647,13 @@ export async function writeAuditAndActivity(
 		/** `null` when the actor is a guest participant (no Better Auth user). For guest
 		 * actions, encode the participantId in `metadata` so the row is still attributable. */
 		actorUserId: string | null;
+		/** Principal kind for ADR-006 + D-022 audit/activity attribution. Defaults to
+		 * `'user'` so pre-Phase-11 call sites are unchanged; agent-aware writers (Phase 11
+		 * MCP boundary, the new launcher mode hint) pass `'guest'` or `'agent'` explicitly. */
+		actorKind?: "user" | "guest" | "agent";
+		/** Participant.id for `'guest'` / `'agent'` actors whose identity isn't in `user`.
+		 * Nullable; populated by Phase 11 writers. */
+		actorParticipantId?: string | null;
 		action: string; // for audit_log
 		verb: string; // for activity_event
 		entityType:
@@ -671,10 +682,14 @@ export async function writeAuditAndActivity(
 	},
 	executor: DbExecutor = db,
 ): Promise<void> {
+	const actorKind = input.actorKind ?? "user";
+	const actorParticipantId = input.actorParticipantId ?? null;
 	await Promise.all([
 		executor.insert(auditLog).values({
 			organizationId: input.organizationId,
+			actorKind,
 			actorUserId: input.actorUserId,
+			actorParticipantId,
 			action: input.action,
 			entityType: input.entityType,
 			entityId: input.entityId,
@@ -683,7 +698,9 @@ export async function writeAuditAndActivity(
 		}),
 		executor.insert(activityEvent).values({
 			organizationId: input.organizationId,
+			actorKind,
 			actorUserId: input.actorUserId,
+			actorParticipantId,
 			verb: input.verb,
 			entityType: input.entityType,
 			entityId: input.entityId,

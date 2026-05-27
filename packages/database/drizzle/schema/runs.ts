@@ -17,6 +17,7 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import { id, orgId, softDelete, timestamps, user } from "./_shared";
+import { agent } from "./agents";
 import {
   field,
   schedule,
@@ -39,24 +40,40 @@ export const runStepStatus = pgEnum("run_step_status", [
   "not_applicable",
 ]);
 
-// A person on a run: either an internal Better Auth user OR an external guest (email).
-// CHECK enforces exactly one identity.
+// Discriminator for the participant identity. Each kind pairs with exactly one populated
+// identity column (userId / guestEmail / agentId); the CHECK on `participant` keeps them in
+// lockstep. ADR-006 + D-022 (2026-05-27).
+export const participantKind = pgEnum("participant_kind", ["user", "guest", "agent"]);
+
+// A principal on a run: either an internal Better Auth user, an external guest (email), or
+// an org-scoped AI agent (ADR-006 hybrid). `kind` and the corresponding identity FK stay in
+// lockstep via the CHECK below.
 export const participant = pgTable(
   "participant",
   {
     id: id(),
     organizationId: orgId(),
     runId: text("run_id").notNull(), // FK below (run defined after) — see note
+    kind: participantKind("kind").notNull(),
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     guestEmail: text("guest_email"),
     guestName: text("guest_name"),
+    // Agent identity (ADR-006). RESTRICT on delete — an agent with historical participant
+    // rows cannot be hard-deleted; it gets soft-deleted via agent.deletedAt.
+    agentId: text("agent_id").references(() => agent.id, { onDelete: "restrict" }),
     ...timestamps,
   },
   (t) => [
     index("idx_participant_run").on(t.runId),
+    // Single CHECK enforces both "exactly one identity FK populated" AND "kind matches
+    // whichever FK is populated" — three-kind generalization of the old XOR check.
     check(
       "participant_identity",
-      sql`(${t.userId} is not null) <> (${t.guestEmail} is not null)`,
+      sql`(
+        (${t.kind} = 'user' and ${t.userId} is not null and ${t.guestEmail} is null and ${t.agentId} is null) or
+        (${t.kind} = 'guest' and ${t.guestEmail} is not null and ${t.userId} is null and ${t.agentId} is null) or
+        (${t.kind} = 'agent' and ${t.agentId} is not null and ${t.userId} is null and ${t.guestEmail} is null)
+      )`,
     ),
   ],
 );
@@ -239,6 +256,8 @@ export const runRoleAssignmentRelations = relations(runRoleAssignment, ({ one })
 
 export const participantRelations = relations(participant, ({ one }) => ({
   run: one(run, { fields: [participant.runId], references: [run.id] }),
+  user: one(user, { fields: [participant.userId], references: [user.id] }),
+  agent: one(agent, { fields: [participant.agentId], references: [agent.id] }),
 }));
 
 export const fieldValueRelations = relations(fieldValue, ({ one }) => ({
