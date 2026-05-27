@@ -8,6 +8,7 @@ export * from "./auth";
 export * from "./_shared";
 export * from "./config";
 export * from "./agents";
+export * from "./vendors";
 export * from "./workflows";
 export * from "./runs";
 export * from "./automation";

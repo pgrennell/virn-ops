@@ -27,12 +27,19 @@ export const auditLog = pgTable(
     actorUserId: text("actor_user_id").references(() => user.id, {
       onDelete: "set null",
     }),
-    // Cross-entity actor pointer for 'guest' / 'agent' actors whose identity lives in the
-    // participant row. Nullable; populated by the new writers in Phase 11 (MCP). Per D-022:
-    // added now so the schema is complete and Phase 11 is purely behavioural.
+    // Cross-entity actor pointer for 'guest' / 'agent' / 'vendor' actors whose identity
+    // lives in the participant row. Nullable; populated by the new writers in Phase 11
+    // (action surface). Per D-022: added now so the schema is complete and Phase 11 is
+    // purely behavioural.
     actorParticipantId: text("actor_participant_id").references(() => participant.id, {
       onDelete: "set null",
     }),
+    // Cross-product attribution (D-027, 2026-05-27 cross-repo). Free text — values used
+    // in v1: `virn-pm`, `virn-ops`. Populated when a write originated from an inbound
+    // cross-product webhook or a sibling-product call through the action surface; NULL
+    // for writes that originated locally in this product. No enum constraint so future
+    // third-party identifiers can populate it without a migration.
+    crossProductOrigin: text("cross_product_origin"),
     // The verb / event name, e.g. "workflow.published", "approval.decided",
     // "field_definition.created". Free text — no enum, since pack-installed code will
     // emit its own action names.

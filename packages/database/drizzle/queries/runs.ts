@@ -657,13 +657,19 @@ export async function writeAuditAndActivity(
 		/** `null` when the actor is a guest participant (no Better Auth user). For guest
 		 * actions, encode the participantId in `metadata` so the row is still attributable. */
 		actorUserId: string | null;
-		/** Principal kind for ADR-006 + D-022 audit/activity attribution. Defaults to
-		 * `'user'` so pre-Phase-11 call sites are unchanged; agent-aware writers (Phase 11
-		 * MCP boundary, the new launcher mode hint) pass `'guest'` or `'agent'` explicitly. */
-		actorKind?: "user" | "guest" | "agent";
-		/** Participant.id for `'guest'` / `'agent'` actors whose identity isn't in `user`.
-		 * Nullable; populated by Phase 11 writers. */
+		/** Principal kind for audit/activity attribution. ADR-006 + D-022 (agent),
+		 * ADR-007 + D-023 (vendor). Defaults to `'user'` so pre-Phase-11 call sites are
+		 * unchanged; agent-aware / vendor-aware writers (Phase 11 action surface, mode-aware
+		 * launcher, vendor portal) pass the explicit kind. */
+		actorKind?: "user" | "guest" | "agent" | "vendor";
+		/** Participant.id for `'guest'` / `'agent'` / `'vendor'` actors whose identity isn't
+		 * in `user`. Nullable; populated by Phase 11 writers. */
 		actorParticipantId?: string | null;
+		/** Cross-product attribution (D-027, 2026-05-27 cross-repo). Free text — `'virn-pm'`,
+		 * `'virn-ops'`, or a future third-party identifier. Populated when the write
+		 * originated from an inbound cross-product webhook or sibling-product call through
+		 * the action surface; `null` for local writes. */
+		crossProductOrigin?: string | null;
 		action: string; // for audit_log
 		verb: string; // for activity_event
 		entityType:
@@ -685,7 +691,9 @@ export async function writeAuditAndActivity(
 			| "pack_version"
 			| "field_definition"
 			| "role"
-			| "agent";
+			| "agent"
+			| "vendor"
+			| "vendor_contact";
 		entityId: string;
 		changes?: Record<string, unknown>;
 		metadata?: Record<string, unknown>;
@@ -695,12 +703,14 @@ export async function writeAuditAndActivity(
 ): Promise<void> {
 	const actorKind = input.actorKind ?? "user";
 	const actorParticipantId = input.actorParticipantId ?? null;
+	const crossProductOrigin = input.crossProductOrigin ?? null;
 	await Promise.all([
 		executor.insert(auditLog).values({
 			organizationId: input.organizationId,
 			actorKind,
 			actorUserId: input.actorUserId,
 			actorParticipantId,
+			crossProductOrigin,
 			action: input.action,
 			entityType: input.entityType,
 			entityId: input.entityId,
@@ -712,6 +722,7 @@ export async function writeAuditAndActivity(
 			actorKind,
 			actorUserId: input.actorUserId,
 			actorParticipantId,
+			crossProductOrigin,
 			verb: input.verb,
 			entityType: input.entityType,
 			entityId: input.entityId,

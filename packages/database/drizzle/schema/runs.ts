@@ -18,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { id, orgId, softDelete, timestamps, user } from "./_shared";
 import { agent } from "./agents";
+import { vendor, vendorContact } from "./vendors";
 import {
   field,
   schedule,
@@ -41,13 +42,21 @@ export const runStepStatus = pgEnum("run_step_status", [
 ]);
 
 // Discriminator for the participant identity. Each kind pairs with exactly one populated
-// identity column (userId / guestEmail / agentId); the CHECK on `participant` keeps them in
-// lockstep. ADR-006 + D-022 (2026-05-27).
-export const participantKind = pgEnum("participant_kind", ["user", "guest", "agent"]);
+// identity column (userId / guestEmail / agentId / (vendorId + vendorContactId)); the CHECK
+// on `participant` keeps them in lockstep. ADR-006 + D-022 (agent, 2026-05-27); ADR-007 +
+// D-023 (vendor, 2026-05-27).
+export const participantKind = pgEnum("participant_kind", [
+  "user",
+  "guest",
+  "agent",
+  "vendor",
+]);
 
-// A principal on a run: either an internal Better Auth user, an external guest (email), or
-// an org-scoped AI agent (ADR-006 hybrid). `kind` and the corresponding identity FK stay in
-// lockstep via the CHECK below.
+// A principal on a run: an internal Better Auth user, an external guest (email), an
+// org-scoped AI agent (ADR-006 hybrid), or a vendor (ADR-007 — a specific contact at a
+// known third-party business). `kind` and the corresponding identity FK(s) stay in
+// lockstep via the CHECK below. Vendor participants carry BOTH vendorId AND
+// vendorContactId — the audit story requires identifying both "Acme" and "Mike at Acme."
 export const participant = pgTable(
   "participant",
   {
@@ -61,18 +70,28 @@ export const participant = pgTable(
     // Agent identity (ADR-006). RESTRICT on delete — an agent with historical participant
     // rows cannot be hard-deleted; it gets soft-deleted via agent.deletedAt.
     agentId: text("agent_id").references(() => agent.id, { onDelete: "restrict" }),
+    // Vendor identity (ADR-007). Same RESTRICT pattern as agent — historical participant
+    // rows preserve audit integrity; soft-delete via vendor.deletedAt is the user path.
+    // Both vendorId AND vendorContactId are required when kind='vendor' (the CHECK
+    // enforces this) — anonymous-vendor participation isn't modeled.
+    vendorId: text("vendor_id").references(() => vendor.id, { onDelete: "restrict" }),
+    vendorContactId: text("vendor_contact_id").references(() => vendorContact.id, {
+      onDelete: "restrict",
+    }),
     ...timestamps,
   },
   (t) => [
     index("idx_participant_run").on(t.runId),
-    // Single CHECK enforces both "exactly one identity FK populated" AND "kind matches
-    // whichever FK is populated" — three-kind generalization of the old XOR check.
+    // Single CHECK enforces both "exactly one identity surface populated" AND "kind
+    // matches whichever surface is populated" — four-kind generalization. Vendor case
+    // requires BOTH vendorId AND vendorContactId together (anonymous-vendor not allowed).
     check(
       "participant_identity",
       sql`(
-        (${t.kind} = 'user' and ${t.userId} is not null and ${t.guestEmail} is null and ${t.agentId} is null) or
-        (${t.kind} = 'guest' and ${t.guestEmail} is not null and ${t.userId} is null and ${t.agentId} is null) or
-        (${t.kind} = 'agent' and ${t.agentId} is not null and ${t.userId} is null and ${t.guestEmail} is null)
+        (${t.kind} = 'user' and ${t.userId} is not null and ${t.guestEmail} is null and ${t.agentId} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
+        (${t.kind} = 'guest' and ${t.guestEmail} is not null and ${t.userId} is null and ${t.agentId} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
+        (${t.kind} = 'agent' and ${t.agentId} is not null and ${t.userId} is null and ${t.guestEmail} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
+        (${t.kind} = 'vendor' and ${t.vendorId} is not null and ${t.vendorContactId} is not null and ${t.userId} is null and ${t.guestEmail} is null and ${t.agentId} is null)
       )`,
     ),
   ],
@@ -258,6 +277,11 @@ export const participantRelations = relations(participant, ({ one }) => ({
   run: one(run, { fields: [participant.runId], references: [run.id] }),
   user: one(user, { fields: [participant.userId], references: [user.id] }),
   agent: one(agent, { fields: [participant.agentId], references: [agent.id] }),
+  vendor: one(vendor, { fields: [participant.vendorId], references: [vendor.id] }),
+  vendorContact: one(vendorContact, {
+    fields: [participant.vendorContactId],
+    references: [vendorContact.id],
+  }),
 }));
 
 export const fieldValueRelations = relations(fieldValue, ({ one }) => ({

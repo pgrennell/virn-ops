@@ -25,11 +25,15 @@ export const activityEvent = pgTable(
     actorUserId: text("actor_user_id").references(() => user.id, {
       onDelete: "set null",
     }),
-    // Cross-entity actor pointer for 'guest' / 'agent' actors. Mirrors
-    // audit_log.actorParticipantId; populated by Phase 11's MCP writers.
+    // Cross-entity actor pointer for 'guest' / 'agent' / 'vendor' actors. Mirrors
+    // audit_log.actorParticipantId; populated by Phase 11's action-surface writers.
     actorParticipantId: text("actor_participant_id").references(() => participant.id, {
       onDelete: "set null",
     }),
+    // Cross-product attribution (D-027, 2026-05-27 cross-repo). Mirrors
+    // audit_log.crossProductOrigin. Free text — values used in v1: `virn-pm`, `virn-ops`.
+    // NULL for writes that originated locally in this product.
+    crossProductOrigin: text("cross_product_origin"),
     // Past-tense verb naming the event for the UI, e.g. "completed", "commented",
     // "assigned". Free text so packs can extend the vocabulary.
     verb: text("verb").notNull(),

@@ -38,13 +38,18 @@ export const lifecycleStatus = pgEnum("lifecycle_status", [
   "archived",
 ]);
 
-// Actor kind for audit + activity rows (ADR-006 + D-022). Three principal kinds:
-//   - `user`  : Better Auth user acting through the human UI
-//   - `guest` : external participant acting via a tokenized portal
-//   - `agent` : AI principal acting via the MCP surface (Phase 11)
+// Actor kind for audit + activity rows (ADR-006 + D-022; ADR-007 + D-023). Four principal
+// kinds:
+//   - `user`   : Better Auth user acting through the human UI
+//   - `guest`  : external one-off participant acting via a tokenized portal
+//   - `agent`  : machine principal — AI agent OR trusted sibling product (e.g. Virn PM)
+//                acting via the action surface (Phase 11)
+//   - `vendor` : a specific contact at an ongoing third-party business relationship
+//                acting via a tokenized portal (per-run participant carries vendorId +
+//                vendorContactId)
 // Lives in _shared.ts because both audit_log + activity_event use it (parallel to D-011's
 // audit/activity separation).
-export const actorKind = pgEnum("actor_kind", ["user", "guest", "agent"]);
+export const actorKind = pgEnum("actor_kind", ["user", "guest", "agent", "vendor"]);
 
 // Polymorphic discriminator for cross-cutting tables (comments, attachments, activity,
 // tags). Pair with a plain `entity_id text` column + a CHECK — never a bare FK. Grow this
@@ -69,6 +74,8 @@ export const entityType = pgEnum("entity_type", [
   "field_definition",
   "role",
   "agent",
+  "vendor",
+  "vendor_contact",
 ]);
 
 // Content-type discriminator (ARCHITECTURE.md §5). Lives here rather than in workflows.ts
