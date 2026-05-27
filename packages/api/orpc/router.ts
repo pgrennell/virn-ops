@@ -9,6 +9,7 @@ import { organizationsRouter } from "../modules/organizations/router";
 import { paymentsRouter } from "../modules/payments/router";
 import { runsRouter } from "../modules/runs/router";
 import { usersRouter } from "../modules/users/router";
+import { vendorsRouter } from "../modules/vendors/router";
 import { workflowsRouter } from "../modules/workflows/router";
 import { publicProcedure } from "./procedures";
 
@@ -22,6 +23,7 @@ export const router = publicProcedure.router({
 	notifications: notificationsRouter,
 	config: configRouter,
 	runs: runsRouter,
+	vendors: vendorsRouter,
 	workflows: workflowsRouter,
 });
 

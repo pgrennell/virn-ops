@@ -11,6 +11,7 @@
 			"@i18n/*": ["./modules/i18n/*"],
 			"@admin/*": ["./modules/admin/*"],
 			"@agents/*": ["./modules/agents/*"],
+			"@vendors/*": ["./modules/vendors/*"],
 			"@ai/*": ["./modules/ai/*"],
 			"@onboarding/*": ["./modules/onboarding/*"],
 			"@runs/*": ["./modules/runs/*"],

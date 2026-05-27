@@ -23,6 +23,7 @@ export const NAV_AREAS = {
 	configuration: "configuration",
 	membersAndRoles: "members",
 	agents: "agents",
+	vendors: "vendors",
 	branding: "branding",
 	integrations: "integrations",
 	billing: "billing",
@@ -166,6 +167,14 @@ export const NAV_AREA_DEFINITIONS: Record<NavArea, NavAreaDefinition> = {
 		allowedRoles: [ROLES.admin, ROLES.owner],
 		phase: "now",
 	},
+	[NAV_AREAS.vendors]: {
+		area: NAV_AREAS.vendors,
+		// Admin/owner only — vendor entries shape who can be assigned to vendor-fulfilled
+		// run steps and carry per-org status flags (preferred / blacklisted / etc.) that
+		// influence picker selection. Per ADR-007 + D-023.
+		allowedRoles: [ROLES.admin, ROLES.owner],
+		phase: "now",
+	},
 	[NAV_AREAS.branding]: {
 		area: NAV_AREAS.branding,
 		allowedRoles: [ROLES.admin, ROLES.owner],
@@ -263,6 +272,12 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 				segment: "settings/agents",
 				icon: "Bot",
 				label: "Agents",
+			},
+			{
+				area: NAV_AREAS.vendors,
+				segment: "settings/vendors",
+				icon: "Briefcase",
+				label: "Vendors",
 			},
 			{
 				area: NAV_AREAS.branding,

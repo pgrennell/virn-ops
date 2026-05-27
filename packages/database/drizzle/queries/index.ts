@@ -7,4 +7,5 @@ export * from "./participant-tokens";
 export * from "./purchases";
 export * from "./runs";
 export * from "./users";
+export * from "./vendors";
 export * from "./workflows";
