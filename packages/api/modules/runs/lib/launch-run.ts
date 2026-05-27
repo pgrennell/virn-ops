@@ -19,6 +19,7 @@
 import {
 	getAgentForOrg,
 	getLatestPublishedWorkflowVersion,
+	getVendorContactForLaunch,
 	getVersionLaunchBundle,
 	getWorkflowForOrg,
 	getWorkflowVersionById,
@@ -119,16 +120,80 @@ export async function launchRun(
 	// 3. Pull bundle (steps, fields, deps).
 	const { steps, fields } = await getVersionLaunchBundle(version.id);
 
-	// 4. Validate role assignments: each must be user-only OR guest-only.
+	// 4. Validate role assignments: each must be EXACTLY ONE of user / guest / vendor.
+	// For vendor: both vendorId AND vendorContactId required. For all kinds: the chosen
+	// identity FK(s) must resolve in this org and pass status/active checks before any
+	// snapshot rows are written.
+	const validatedVendorByRoleId = new Map<
+		string,
+		{ vendorId: string; vendorContactId: string; vendorName: string; contactName: string }
+	>();
 	for (const ra of input.roleAssignments) {
 		const hasUser = !!ra.userId;
 		const hasGuest = !!ra.guestEmail;
-		if (hasUser === hasGuest) {
+		const hasVendor = !!ra.vendorId || !!ra.vendorContactId;
+		const kindCount = (hasUser ? 1 : 0) + (hasGuest ? 1 : 0) + (hasVendor ? 1 : 0);
+		if (kindCount !== 1) {
 			throw new RunEngineError(
 				"INVALID_ROLE_ASSIGNMENT",
-				`Role assignment must specify exactly one of userId or guestEmail (roleId: ${ra.roleId}).`,
+				`Role assignment must specify exactly one of userId, guestEmail, or (vendorId + vendorContactId) (roleId: ${ra.roleId}).`,
 				{ roleId: ra.roleId },
 			);
+		}
+		if (hasVendor) {
+			// vendorId AND vendorContactId both required when assigning via vendor.
+			if (!ra.vendorId || !ra.vendorContactId) {
+				throw new RunEngineError(
+					"INVALID_ROLE_ASSIGNMENT",
+					`Vendor role assignment requires both vendorId and vendorContactId (roleId: ${ra.roleId}).`,
+					{ roleId: ra.roleId },
+				);
+			}
+			const validation = await getVendorContactForLaunch(
+				ctx.organizationId,
+				ra.vendorId,
+				ra.vendorContactId,
+			);
+			if (!validation) {
+				// Either the vendor isn't in this org, or the contact doesn't belong to it.
+				// Distinguish for the UI's error messaging.
+				throw new RunEngineError(
+					"VENDOR_CONTACT_NOT_FOUND",
+					"Vendor or contact not found in this organization.",
+					{ vendorId: ra.vendorId, vendorContactId: ra.vendorContactId, roleId: ra.roleId },
+				);
+			}
+			if (!validation.vendorIsActive) {
+				throw new RunEngineError(
+					"VENDOR_INACTIVE",
+					`Vendor "${validation.vendorName}" is disabled. Enable it or pick a different vendor.`,
+					{ vendorId: ra.vendorId, roleId: ra.roleId },
+				);
+			}
+			if (validation.vendorStatus === "blacklisted") {
+				throw new RunEngineError(
+					"VENDOR_BLACKLISTED",
+					`Vendor "${validation.vendorName}" is blacklisted and cannot be assigned to a run.`,
+					{ vendorId: ra.vendorId, roleId: ra.roleId },
+				);
+			}
+			if (!validation.contactIsActive) {
+				throw new RunEngineError(
+					"VENDOR_CONTACT_INACTIVE",
+					`Contact "${validation.contactName}" at "${validation.vendorName}" is disabled. Enable them or pick a different contact.`,
+					{
+						vendorId: ra.vendorId,
+						vendorContactId: ra.vendorContactId,
+						roleId: ra.roleId,
+					},
+				);
+			}
+			validatedVendorByRoleId.set(ra.roleId, {
+				vendorId: validation.vendorId,
+				vendorContactId: validation.contactId,
+				vendorName: validation.vendorName,
+				contactName: validation.contactName,
+			});
 		}
 	}
 
@@ -234,15 +299,34 @@ export async function launchRun(
 		}
 	}
 
-	// 7. Build participant + role-assignment + step-assignee plans.
-	const participants: SnapshotParticipantRow[] = input.roleAssignments.map((ra, i) => ({
-		tempKey: `p_${i}`,
-		kind: ra.userId ? "user" : "guest",
-		userId: ra.userId ?? null,
-		guestEmail: ra.guestEmail ?? null,
-		guestName: ra.guestName ?? null,
-		agentId: null,
-	}));
+	// 7. Build participant + role-assignment + step-assignee plans. Per-role assignment
+	// can be a user, guest, or vendor (ADR-007 + D-023). The participant kind discriminator
+	// + the corresponding identity FK(s) are populated based on which one the caller chose;
+	// the participant CHECK constraint enforces lockstep at the DB layer.
+	const participants: SnapshotParticipantRow[] = input.roleAssignments.map((ra, i) => {
+		if (ra.vendorId && ra.vendorContactId) {
+			return {
+				tempKey: `p_${i}`,
+				kind: "vendor",
+				userId: null,
+				guestEmail: null,
+				guestName: null,
+				agentId: null,
+				vendorId: ra.vendorId,
+				vendorContactId: ra.vendorContactId,
+			};
+		}
+		return {
+			tempKey: `p_${i}`,
+			kind: ra.userId ? "user" : "guest",
+			userId: ra.userId ?? null,
+			guestEmail: ra.guestEmail ?? null,
+			guestName: ra.guestName ?? null,
+			agentId: null,
+			vendorId: null,
+			vendorContactId: null,
+		};
+	});
 	if (agentParticipantTempKey && input.agentId) {
 		participants.push({
 			tempKey: agentParticipantTempKey,
@@ -251,6 +335,8 @@ export async function launchRun(
 			guestEmail: null,
 			guestName: null,
 			agentId: input.agentId,
+			vendorId: null,
+			vendorContactId: null,
 		});
 	}
 	const tempKeyByRoleId = new Map<string, string>();
@@ -314,6 +400,10 @@ export async function launchRun(
 			mode,
 			agentId: input.agentId ?? null,
 			agentHandledStepCount: agentHandledStepIds.size,
+			// Vendor assignments (Phase 8 vendor picker, ADR-007 + D-023). The count goes
+			// into changes for forensics; the vendor identities live on participant rows
+			// (queryable via the audit_log -> participant -> vendor join chain).
+			vendorAssignedRoleCount: validatedVendorByRoleId.size,
 		},
 		metadata: { source: "manual" },
 		activityData: { runTitle: input.title ?? workflow.title, workflowTitle: workflow.title },

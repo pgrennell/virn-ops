@@ -24,7 +24,13 @@ export type RunEngineErrorCode =
 	// Mode-aware launch (Phase 8 step 3) — agent assignment refusals.
 	| "MODE_REQUIRES_AGENT"
 	| "AGENT_NOT_IN_ORG"
-	| "AGENT_INACTIVE";
+	| "AGENT_INACTIVE"
+	// Vendor role-assignment (Phase 8 vendor picker, ADR-007 + D-023).
+	| "VENDOR_NOT_IN_ORG"
+	| "VENDOR_INACTIVE"
+	| "VENDOR_BLACKLISTED"
+	| "VENDOR_CONTACT_NOT_FOUND"
+	| "VENDOR_CONTACT_INACTIVE";
 
 export class RunEngineError extends Error {
 	readonly code: RunEngineErrorCode;

@@ -43,6 +43,13 @@ export interface RoleAssignmentInput {
 	userId?: string | null;
 	guestEmail?: string | null;
 	guestName?: string | null;
+	/** Vendor role assignment (ADR-007 + D-023). When set, both vendorId AND
+	 * vendorContactId must be populated together — the participant CHECK refuses a
+	 * vendor row missing either. launchRun validates the vendor+contact exist in
+	 * the org before snapshotting. Mutually exclusive with userId / guestEmail per
+	 * the launchRun validator. */
+	vendorId?: string | null;
+	vendorContactId?: string | null;
 }
 
 // Definition reads -- moved to queries/workflows.ts (getWorkflowForOrg,
@@ -69,13 +76,17 @@ export interface SnapshotKickoffValue {
 
 export interface SnapshotParticipantRow {
 	tempKey: string; // caller-assigned key so we can wire role/assignee rows after insert
-	/** Discriminator (ADR-006 + D-022). The corresponding identity FK below must be the only
-	 * one populated -- the participant CHECK constraint enforces this at the DB level. */
-	kind: "user" | "guest" | "agent";
+	/** Discriminator (ADR-006 + D-022 agent; ADR-007 + D-023 vendor). The corresponding
+	 * identity FK(s) below must match -- the participant CHECK constraint enforces this
+	 * at the DB level. For kind='vendor' BOTH vendorId AND vendorContactId are required;
+	 * for other kinds they're null. */
+	kind: "user" | "guest" | "agent" | "vendor";
 	userId: string | null;
 	guestEmail: string | null;
 	guestName: string | null;
 	agentId: string | null;
+	vendorId: string | null;
+	vendorContactId: string | null;
 }
 
 export interface SnapshotRoleAssignmentRow {
@@ -169,6 +180,8 @@ export async function insertRunSnapshot(input: {
 						guestEmail: p.guestEmail,
 						guestName: p.guestName,
 						agentId: p.agentId,
+						vendorId: p.vendorId,
+						vendorContactId: p.vendorContactId,
 					})),
 				)
 				.returning({ id: participant.id });
@@ -254,6 +267,8 @@ export async function getRunForOrg(organizationId: string, runId: string) {
 								participant: {
 									with: {
 										agent: true,
+										vendor: true,
+										vendorContact: true,
 									},
 								},
 							},
@@ -264,6 +279,8 @@ export async function getRunForOrg(organizationId: string, runId: string) {
 				participants: {
 					with: {
 						agent: true,
+						vendor: true,
+						vendorContact: true,
 					},
 				},
 				roleAssignments: true,

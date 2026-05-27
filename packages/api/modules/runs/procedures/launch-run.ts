@@ -9,6 +9,12 @@ const roleAssignmentSchema = z.object({
 	userId: z.string().min(1).nullish(),
 	guestEmail: z.string().email().nullish(),
 	guestName: z.string().min(1).nullish(),
+	// Vendor role assignment (Phase 8 vendor picker, ADR-007 + D-023). Both must be
+	// populated together when assigning a vendor; launchRun's INVALID_ROLE_ASSIGNMENT
+	// rejects partial vendor specs. Server-side: existence + isActive + non-blacklisted
+	// checks per VENDOR_* error codes.
+	vendorId: z.string().min(1).nullish(),
+	vendorContactId: z.string().min(1).nullish(),
 });
 
 export const launchRunProc = protectedOrgProcedure

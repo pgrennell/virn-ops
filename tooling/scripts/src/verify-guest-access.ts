@@ -146,8 +146,8 @@ async function main() {
 		steps: bundle.steps,
 		kickoffValues: [{ fieldId: bundle.customerNameFieldId, value: "E2E Guest Verification Inc." }],
 		participants: [
-			{ tempKey: "p_user", kind: "user", userId: user.id, guestEmail: null, guestName: null, agentId: null },
-			{ tempKey: "p_guest", kind: "guest", userId: null, guestEmail: "e2e-guest@example.com", guestName: "E2E Guest User", agentId: null }
+			{ tempKey: "p_user", kind: "user", userId: user.id, guestEmail: null, guestName: null, agentId: null, vendorId: null, vendorContactId: null },
+			{ tempKey: "p_guest", kind: "guest", userId: null, guestEmail: "e2e-guest@example.com", guestName: "E2E Guest User", agentId: null, vendorId: null, vendorContactId: null }
 		],
 		roleAssignments: [
 			{ roleId: operatorRoleId, participantTempKey: "p_user" }

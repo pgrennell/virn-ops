@@ -275,6 +275,125 @@ async function vendorBelongsToOrg(organizationId: string, vendorId: string): Pro
 	return r !== undefined && r !== null;
 }
 
+// ---------------------------------------------------------------------------
+// Launcher-side validation helpers (Phase 8 vendor picker)
+// ---------------------------------------------------------------------------
+
+export interface VendorContactValidationRow {
+	vendorId: string;
+	vendorName: string;
+	vendorStatus: VendorStatus;
+	vendorIsActive: boolean;
+	contactId: string;
+	contactName: string;
+	contactIsActive: boolean;
+}
+
+export interface LauncherVendorRow {
+	id: string;
+	name: string;
+	status: VendorStatus;
+	contacts: Array<{
+		id: string;
+		name: string;
+		email: string;
+		isPrimary: boolean;
+	}>;
+}
+
+/** Launcher-targeted vendor list: returns only the vendors that are assignable to a
+ * run *right now* + their active contacts pre-joined. Filters:
+ *   - vendor.isActive=true (excluded otherwise)
+ *   - vendor.deletedAt IS NULL (excluded otherwise)
+ *   - vendor.status != 'blacklisted' (excluded -- launchRun would refuse anyway)
+ *   - returns vendors with ZERO active contacts as empty `contacts: []` so the picker
+ *     can show them disabled-with-reason ("no active contacts") rather than silently
+ *     hiding -- the rationale parallels the LaunchModePicker's "tell the user WHY".
+ *
+ * For the per-role assignee picker in LauncherForm. Single query + a single follow-on
+ * filter; no N+1 across vendors. */
+export async function listVendorsForLauncher(
+	organizationId: string,
+): Promise<LauncherVendorRow[]> {
+	const rows = await db.query.vendor.findMany({
+		where: (v, { and: andOp, eq: eqOp, isNull: isNullOp, ne: neOp }) =>
+			andOp(
+				eqOp(v.organizationId, organizationId),
+				isNullOp(v.deletedAt),
+				eqOp(v.isActive, true),
+				neOp(v.status, "blacklisted"),
+			),
+		orderBy: (v, { asc: ascOp }) => [ascOp(v.name)],
+		columns: { id: true, name: true, status: true },
+		with: {
+			contacts: {
+				where: (c, { eq: eqOp }) => eqOp(c.isActive, true),
+				columns: { id: true, name: true, email: true, isPrimary: true },
+				orderBy: (c, { desc: descOp, asc: ascOp }) => [
+					descOp(c.isPrimary),
+					ascOp(c.name),
+				],
+			},
+		},
+	});
+	return rows.map((r) => ({
+		id: r.id,
+		name: r.name,
+		status: r.status as VendorStatus,
+		contacts: r.contacts.map((c) => ({
+			id: c.id,
+			name: c.name,
+			email: c.email,
+			isPrimary: c.isPrimary,
+		})),
+	}));
+}
+
+/** Fetch a vendor + contact pair and confirm:
+ *   (a) the vendor is in the given org and not soft-deleted
+ *   (b) the contact belongs to the vendor
+ * Returns the joined view (status, isActive flags on both) for the caller to make
+ * refusal decisions (vendorInactive / contactInactive / blacklisted etc.). Returns
+ * null if either side doesn't exist or the org/parent relationship is wrong.
+ *
+ * Used by launchRun to validate vendor role assignments before snapshotting. The
+ * single query batches both ownership checks (vendor->org, contact->vendor) so the
+ * caller doesn't N+1. */
+export async function getVendorContactForLaunch(
+	organizationId: string,
+	vendorId: string,
+	contactId: string,
+): Promise<VendorContactValidationRow | null> {
+	const v = await db.query.vendor.findFirst({
+		where: (vendorTbl, { and: andOp, eq: eqOp, isNull: isNullOp }) =>
+			andOp(
+				eqOp(vendorTbl.id, vendorId),
+				eqOp(vendorTbl.organizationId, organizationId),
+				isNullOp(vendorTbl.deletedAt),
+			),
+		columns: { id: true, name: true, status: true, isActive: true },
+		with: {
+			contacts: {
+				where: (c, { eq: eqOp }) => eqOp(c.id, contactId),
+				columns: { id: true, name: true, isActive: true },
+				limit: 1,
+			},
+		},
+	});
+	if (!v) return null;
+	const c = v.contacts?.[0];
+	if (!c) return null;
+	return {
+		vendorId: v.id,
+		vendorName: v.name,
+		vendorStatus: v.status as VendorStatus,
+		vendorIsActive: v.isActive,
+		contactId: c.id,
+		contactName: c.name,
+		contactIsActive: c.isActive,
+	};
+}
+
 export interface CreateVendorContactInput {
 	organizationId: string;
 	vendorId: string;

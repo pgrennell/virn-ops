@@ -145,7 +145,7 @@ async function main() {
 		runDueAt: null,
 		steps: bundle.steps,
 		kickoffValues: [{ fieldId: bundle.customerNameFieldId, value: "Acme Corp" }],
-		participants: [{ tempKey: "p_user", kind: "user", userId: user.id, guestEmail: null, guestName: null, agentId: null }],
+		participants: [{ tempKey: "p_user", kind: "user", userId: user.id, guestEmail: null, guestName: null, agentId: null, vendorId: null, vendorContactId: null }],
 		roleAssignments: [{ roleId: operatorRoleId, participantTempKey: "p_user" }],
 		stepAssignments: bundle.steps.map((s) => ({
 			stepId: s.stepId,

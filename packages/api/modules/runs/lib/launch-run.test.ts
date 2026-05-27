@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@virn/database", () => ({
 	getAgentForOrg: vi.fn(),
+	getVendorContactForLaunch: vi.fn(),
 	getWorkflowForOrg: vi.fn(),
 	getLatestPublishedWorkflowVersion: vi.fn(),
 	getWorkflowVersionById: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock("@virn/database", () => ({
 import {
 	getAgentForOrg,
 	getLatestPublishedWorkflowVersion,
+	getVendorContactForLaunch,
 	getVersionLaunchBundle,
 	getWorkflowForOrg,
 	getWorkflowVersionById,
@@ -480,6 +482,225 @@ describe("launchRun -- mode-aware (Phase 8 step 3)", () => {
 		// Both steps assigned to the human (one-handler matches assignedRoleId).
 		expect(arg.stepAssignments).toHaveLength(2);
 		expect(arg.stepAssignments.every((s) => s.participantTempKey === arg.participants[0].tempKey)).toBe(true);
+	});
+});
+
+// ============================================================================
+// Vendor role assignment (Phase 8 vendor picker, ADR-007 + D-023)
+//
+// Per-role vendor assignment is orthogonal to mode: a role can be assigned to a
+// vendor regardless of whether the launch is human / ai_assisted / automated.
+// Each test below confirms one path of the launchRun vendor pipeline.
+// ============================================================================
+
+const ACTIVE_VENDOR_CONTACT = {
+	vendorId: "ven_1",
+	vendorName: "Acme Pest Control",
+	vendorStatus: "active" as const,
+	vendorIsActive: true,
+	contactId: "vc_1",
+	contactName: "Mike Smith",
+	contactIsActive: true,
+};
+
+function mountSingleStepBundleWithRole() {
+	vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+	vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(VERSION_PUBLISHED as never);
+	vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+		steps: [STEP_ROW({ id: "step_a", assignedRoleId: "role_a", type: "task" })],
+		fields: [],
+		deps: [],
+	} as never);
+	vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+		runId: "run_new",
+		runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+	});
+}
+
+describe("launchRun -- vendor role assignment", () => {
+	it("INVALID_ROLE_ASSIGNMENT when vendorId is set but vendorContactId is not", async () => {
+		mountSingleStepBundleWithRole();
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [
+					{ roleId: "role_a", vendorId: "ven_1" /* contactId missing */ },
+				],
+			}),
+		).rejects.toMatchObject({ code: "INVALID_ROLE_ASSIGNMENT" });
+	});
+
+	it("INVALID_ROLE_ASSIGNMENT when an assignment specifies both userId AND vendorId", async () => {
+		mountSingleStepBundleWithRole();
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [
+					{
+						roleId: "role_a",
+						userId: "u_1",
+						vendorId: "ven_1",
+						vendorContactId: "vc_1",
+					},
+				],
+			}),
+		).rejects.toMatchObject({ code: "INVALID_ROLE_ASSIGNMENT" });
+	});
+
+	it("VENDOR_CONTACT_NOT_FOUND when the vendor/contact pair isn't in the org", async () => {
+		mountSingleStepBundleWithRole();
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce(null);
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [
+					{ roleId: "role_a", vendorId: "ven_1", vendorContactId: "vc_1" },
+				],
+			}),
+		).rejects.toMatchObject({ code: "VENDOR_CONTACT_NOT_FOUND" });
+	});
+
+	it("VENDOR_INACTIVE when the vendor is soft-disabled", async () => {
+		mountSingleStepBundleWithRole();
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce({
+			...ACTIVE_VENDOR_CONTACT,
+			vendorIsActive: false,
+		} as never);
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [
+					{ roleId: "role_a", vendorId: "ven_1", vendorContactId: "vc_1" },
+				],
+			}),
+		).rejects.toMatchObject({ code: "VENDOR_INACTIVE" });
+	});
+
+	it("VENDOR_BLACKLISTED when the vendor's status is 'blacklisted'", async () => {
+		mountSingleStepBundleWithRole();
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce({
+			...ACTIVE_VENDOR_CONTACT,
+			vendorStatus: "blacklisted",
+		} as never);
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [
+					{ roleId: "role_a", vendorId: "ven_1", vendorContactId: "vc_1" },
+				],
+			}),
+		).rejects.toMatchObject({ code: "VENDOR_BLACKLISTED" });
+	});
+
+	it("VENDOR_CONTACT_INACTIVE when the contact is disabled", async () => {
+		mountSingleStepBundleWithRole();
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce({
+			...ACTIVE_VENDOR_CONTACT,
+			contactIsActive: false,
+		} as never);
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [
+					{ roleId: "role_a", vendorId: "ven_1", vendorContactId: "vc_1" },
+				],
+			}),
+		).rejects.toMatchObject({ code: "VENDOR_CONTACT_INACTIVE" });
+	});
+
+	it("happy path: snapshots a vendor participant with kind='vendor' + vendorId + vendorContactId", async () => {
+		mountSingleStepBundleWithRole();
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce(ACTIVE_VENDOR_CONTACT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [
+				{ roleId: "role_a", vendorId: "ven_1", vendorContactId: "vc_1" },
+			],
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		expect(arg.participants).toHaveLength(1);
+		const p = arg.participants[0];
+		expect(p.kind).toBe("vendor");
+		expect(p.vendorId).toBe("ven_1");
+		expect(p.vendorContactId).toBe("vc_1");
+		expect(p.userId).toBeNull();
+		expect(p.guestEmail).toBeNull();
+		expect(p.agentId).toBeNull();
+		// Step inherits the vendor participant via the role binding.
+		expect(arg.stepAssignments).toEqual([
+			{ stepId: "step_a", participantTempKey: p.tempKey },
+		]);
+	});
+
+	it("audit row records vendorAssignedRoleCount in changes", async () => {
+		mountSingleStepBundleWithRole();
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce(ACTIVE_VENDOR_CONTACT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [
+				{ roleId: "role_a", vendorId: "ven_1", vendorContactId: "vc_1" },
+			],
+		});
+
+		expect(writeAuditAndActivity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changes: expect.objectContaining({
+					vendorAssignedRoleCount: 1,
+				}),
+			}),
+		);
+	});
+
+	it("mixed: user + vendor in the same launch produces two distinct participants", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(VERSION_PUBLISHED as never);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [
+				STEP_ROW({ id: "step_a", assignedRoleId: "role_a", type: "task" }),
+				STEP_ROW({ id: "step_b", assignedRoleId: "role_b", type: "task", position: 1 }),
+			],
+			fields: [],
+			deps: [],
+		} as never);
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map([
+				["step_a", "rs_a"],
+				["step_b", "rs_b"],
+			]),
+		});
+		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce(ACTIVE_VENDOR_CONTACT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [
+				{ roleId: "role_a", userId: "u_member" },
+				{ roleId: "role_b", vendorId: "ven_1", vendorContactId: "vc_1" },
+			],
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		expect(arg.participants).toHaveLength(2);
+		const userP = arg.participants.find((p) => p.kind === "user");
+		const vendorP = arg.participants.find((p) => p.kind === "vendor");
+		expect(userP).toBeDefined();
+		expect(vendorP).toBeDefined();
+		expect(vendorP?.vendorId).toBe("ven_1");
+		expect(vendorP?.vendorContactId).toBe("vc_1");
+		// Step assignments map: role_a step -> user participant, role_b step -> vendor.
+		expect(arg.stepAssignments).toHaveLength(2);
 	});
 });
 

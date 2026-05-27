@@ -29,6 +29,12 @@ const CODE_MAP: Record<RunEngineErrorCode, "NOT_FOUND" | "FORBIDDEN" | "BAD_REQU
 	MODE_REQUIRES_AGENT: "BAD_REQUEST",
 	AGENT_NOT_IN_ORG: "NOT_FOUND",
 	AGENT_INACTIVE: "BAD_REQUEST",
+	// Phase 8 vendor picker refusals (ADR-007 + D-023).
+	VENDOR_NOT_IN_ORG: "NOT_FOUND",
+	VENDOR_INACTIVE: "BAD_REQUEST",
+	VENDOR_BLACKLISTED: "BAD_REQUEST",
+	VENDOR_CONTACT_NOT_FOUND: "NOT_FOUND",
+	VENDOR_CONTACT_INACTIVE: "BAD_REQUEST",
 };
 
 /** Wraps a lib helper call so any RunEngineError becomes an ORPCError with a sensible

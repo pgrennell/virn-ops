@@ -21,13 +21,6 @@
 
 import { Alert, AlertDescription } from "@virn/ui/components/alert";
 import { Button } from "@virn/ui/components/button";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@virn/ui/components/select";
 import { Spinner } from "@virn/ui/components/spinner";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Play } from "lucide-react";
@@ -44,6 +37,10 @@ import {
 } from "../lib/launcher-validation";
 import type { LaunchMode } from "../lib/launcher-types";
 import { LaunchModePicker } from "./LaunchModePicker";
+import {
+	type AssigneeChoice,
+	RoleAssigneePicker,
+} from "./RoleAssigneePicker";
 
 interface LauncherFormProps {
 	/** The workflow row that the Run action opened the launcher for. The
@@ -90,8 +87,14 @@ export function LauncherForm({
 
 	// Per-field value map; per-role assignee map. Maps (not records) so write
 	// semantics are explicit and we can pass them straight to the validation fn.
+	// Per ADR-007 + D-023 (Phase 8 vendor picker), role assignees are now polymorphic
+	// (user OR vendor+contact). The map's value type is AssigneeChoice | null; the
+	// RoleAssigneePicker handles encode/decode at the UI boundary, and submit translates
+	// each choice into the RoleAssignmentInput shape the server expects.
 	const [fieldValues, setFieldValues] = useState<Map<string, unknown>>(new Map());
-	const [roleAssignments, setRoleAssignments] = useState<Map<string, string | null>>(new Map());
+	const [roleAssignments, setRoleAssignments] = useState<Map<string, AssigneeChoice | null>>(
+		new Map(),
+	);
 	// Phase 8 step 3 launch mode + agent selection. Default 'human' = no behavioral change
 	// from the pre-Pass-B form. Mode + agentId are sent to runs.launch on submit.
 	const [launchMode, setLaunchMode] = useState<LaunchMode>("human");
@@ -121,14 +124,18 @@ export function LauncherForm({
 
 	// Initiator pre-fill: the launching user is auto-assigned to any role flagged
 	// isInitiator. Defaults applied once when the roles + user load; user can
-	// override before submit.
+	// override before submit. Initiator is always a user assignment (vendors can't be
+	// initiators -- they don't have org accounts).
 	useMemo(() => {
 		if (!rolesQuery.data || !currentUserId) return;
 		setRoleAssignments((prev) => {
 			if (prev.size > 0) return prev; // honor existing edits
-			const next = new Map<string, string | null>();
+			const next = new Map<string, AssigneeChoice | null>();
 			for (const role of rolesQuery.data ?? []) {
-				next.set(role.id, role.isInitiator ? currentUserId : null);
+				next.set(
+					role.id,
+					role.isInitiator ? { kind: "user", userId: currentUserId } : null,
+				);
 			}
 			return next;
 		});
@@ -159,13 +166,27 @@ export function LauncherForm({
 			kickoffValues[key] = value;
 		}
 
-		// Build the role assignments array. Only include roles with an actual
-		// userId pick -- unassigned roles are dropped per launchRun's tolerance
-		// ("May omit roles not yet known; matching steps simply launch unassigned").
-		// Guest-at-launch is deferred (S-04); members-only for v1.
-		const roleAssignmentsArr: Array<{ roleId: string; userId: string }> = [];
-		for (const [roleId, userId] of roleAssignments.entries()) {
-			if (userId !== null) roleAssignmentsArr.push({ roleId, userId });
+		// Build the role assignments array. Unassigned roles are dropped per launchRun's
+		// tolerance ("May omit roles not yet known; matching steps simply launch
+		// unassigned"). The server's roleAssignmentSchema accepts either userId OR
+		// (vendorId + vendorContactId); we discriminate on choice.kind here.
+		const roleAssignmentsArr: Array<{
+			roleId: string;
+			userId?: string;
+			vendorId?: string;
+			vendorContactId?: string;
+		}> = [];
+		for (const [roleId, choice] of roleAssignments.entries()) {
+			if (choice === null) continue;
+			if (choice.kind === "user") {
+				roleAssignmentsArr.push({ roleId, userId: choice.userId });
+			} else {
+				roleAssignmentsArr.push({
+					roleId,
+					vendorId: choice.vendorId,
+					vendorContactId: choice.vendorContactId,
+				});
+			}
 		}
 
 		try {
@@ -317,35 +338,28 @@ export function LauncherForm({
 										</span>
 									)}
 								</label>
-								<Select
-									value={roleAssignments.get(role.id) ?? "__none__"}
-									onValueChange={(v) =>
+								<RoleAssigneePicker
+									value={roleAssignments.get(role.id) ?? null}
+									onChange={(next) =>
 										setRoleAssignments((prev) => {
-											const next = new Map(prev);
-											next.set(role.id, v === "__none__" ? null : v);
-											return next;
+											const m = new Map(prev);
+											m.set(role.id, next);
+											return m;
 										})
 									}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Unassigned" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="__none__">Unassigned</SelectItem>
-										{members.map((m) => (
-											<SelectItem key={m.userId} value={m.userId}>
-												{m.name}{" "}
-												<span className="text-foreground/40">({m.email})</span>
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
+									members={members.map((m) => ({
+										userId: m.userId,
+										name: m.name,
+										email: m.email,
+									}))}
+								/>
 							</div>
 						))}
 					</div>
 					<p className="text-[11px] text-foreground/50 mt-2">
 						Roles are optional at launch — unassigned steps can be assigned in the
-						run. Guest assignees aren't supported in the launcher yet.
+						run. Vendor assignees route the step to a specific contact via a
+						tokenized portal link (no login required for the vendor).
 					</p>
 				</section>
 			)}
