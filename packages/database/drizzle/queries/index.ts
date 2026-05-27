@@ -2,6 +2,7 @@ export * from "./agent-credentials";
 export * from "./agents";
 export * from "./config";
 export * from "./datasets";
+export * from "./entitysets";
 export * from "./listings";
 export * from "./notifications";
 export * from "./organizations";

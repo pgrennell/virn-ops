@@ -21,6 +21,7 @@ import {
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
+import { reviewState } from "./entitysets";
 import { id, orgId, softDelete, timestamps, user, workflowType } from "./_shared";
 // Circular import via lazy thunk — see `installedFromListingVersionId` below.
 import { templateListingVersion } from "./library";
@@ -95,6 +96,19 @@ export const workflow = pgTable(
     // Governance: periodic freshness review (SOP mode).
     reviewIntervalDays: integer("review_interval_days"),
     nextReviewAt: timestamp("next_review_at"),
+    // Layer-1 entity-set scope (D-034 / PRD §6.1). Empty array = "applies to any entity"
+    // (preserves pre-v1.5 behavior — runs.launch surfaces the workflow regardless of the
+    // target entity's set memberships). Non-empty array narrows the workflow to runs
+    // launched from an entity whose entity_set memberships intersect this list.
+    // Stored as text[] (cuid2 ids) rather than uuid[] because the rest of the codebase
+    // uses cuid2 PKs; the PRD's uuid[] in §8.1 is illustrative, not a constraint.
+    entitySetIds: text("entity_set_ids").array().notNull().default(sql`'{}'`),
+    // Editorial review state (PRD §6.1, §8.1). Distinct from workflow_version.status —
+    // that's per-version publishing state (draft / published); this is the workflow-as-
+    // artifact review state (draft → in_review → published → archived). Workflows with
+    // at least one published version are backfilled to `published`; everything else
+    // starts at `draft`.
+    reviewState: reviewState("review_state").notNull().default("draft"),
     // Library provenance. The `.references()` is a lazy thunk so workflows.ts and library.ts
     // can have mutually-referential FKs (Drizzle resolves the binding at relation-graph time,
     // not at module-evaluation time).

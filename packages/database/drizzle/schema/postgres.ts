@@ -10,6 +10,7 @@ export * from "./config";
 export * from "./agents";
 export * from "./vendors";
 export * from "./listings";
+export * from "./entitysets";
 export * from "./workflows";
 export * from "./runs";
 export * from "./automation";
