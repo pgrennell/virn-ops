@@ -11,7 +11,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "../client";
-import { agent } from "../schema/postgres";
+import { agent, agentCapability, capability } from "../schema/postgres";
 import {
 	credentialLastFour,
 	generateAgentCredential,
@@ -253,6 +253,15 @@ export interface ResolvedAgent {
 	id: string;
 	organizationId: string;
 	name: string;
+	/** D-027 cross-product origin (e.g. `'virn-pm'`). Null for in-house agents. Audit/
+	 * activity writes triggered by this agent set `crossProductOrigin = originProduct`. */
+	originProduct: string | null;
+	/** Stable capability slugs (`capability.key`) granted to this agent. Empty set = the
+	 * agent has no per-capability grants (in MVP that's the default; downstream phases that
+	 * gate procedures on specific slugs treat empty as "no permission" for those gates).
+	 * Computed by an eager join at credential-resolution time so the middleware doesn't
+	 * fan out per request. */
+	capabilities: Set<string>;
 }
 
 /** Resolve a bearer-credential plaintext to an active, non-soft-deleted agent. Returns null
@@ -266,7 +275,11 @@ export interface ResolvedAgent {
  * key doesn't weaken the scrypt verification that runs after.
  *
  * Safe against early returns leaking timing: the suffix prefilter is structural (not based
- * on the secret), and we always scrypt-verify every candidate before deciding. */
+ * on the secret), and we always scrypt-verify every candidate before deciding.
+ *
+ * Phase 11a.3: eagerly loads `originProduct` + capability slugs in a second query (only
+ * after credential verification succeeds, so the cost is paid once per authentic request,
+ * not per failed brute-force attempt). */
 export async function findActiveAgentByCredential(
 	plaintext: string,
 ): Promise<ResolvedAgent | null> {
@@ -284,14 +297,29 @@ export async function findActiveAgentByCredential(
 			id: true,
 			organizationId: true,
 			name: true,
+			originProduct: true,
 			credentialHash: true,
 		},
 	});
 
 	for (const c of candidates) {
-		if (verifyAgentCredential(plaintext, c.credentialHash)) {
-			return { id: c.id, organizationId: c.organizationId, name: c.name };
-		}
+		if (!verifyAgentCredential(plaintext, c.credentialHash)) continue;
+		// Credential is good -- fetch the granted capability slugs (small join, executed at
+		// most once per authentic request, not per scrypt-failing candidate).
+		const capRows = await db
+			.select({ key: capability.key })
+			.from(agentCapability)
+			.innerJoin(capability, eq(capability.id, agentCapability.capabilityId))
+			.where(
+				and(eq(agentCapability.agentId, c.id), eq(capability.status, "active")),
+			);
+		return {
+			id: c.id,
+			organizationId: c.organizationId,
+			name: c.name,
+			originProduct: c.originProduct,
+			capabilities: new Set(capRows.map((r) => r.key)),
+		};
 	}
 	return null;
 }

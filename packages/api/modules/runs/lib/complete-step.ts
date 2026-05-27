@@ -44,6 +44,10 @@ export interface CompleteStepContext {
 	 * exclusive with `userId` / `participantId`. Agents are never admin/owner and must be a
 	 * pre-existing participant on the run (bound at launch). */
 	agentId?: string;
+	/** Cross-product origin (D-027). Populated when the calling agent's
+	 * `agent.originProduct` is set (e.g. `'virn-pm'`). Threaded into both the step-complete
+	 * audit row and any cascade run-complete audit row. */
+	crossProductOrigin?: string | null;
 	/** True when the caller is an admin/owner of the active org; bypasses the assignee
 	 * check. (D-014.) Always `false` for guest and agent contexts. */
 	isAdminOrOwner: boolean;
@@ -185,6 +189,7 @@ export async function completeRunStep(
 				actorUserId: ctx.userId ?? null,
 				actorKind,
 				actorParticipantId,
+				crossProductOrigin: ctx.crossProductOrigin ?? null,
 				action: "run_step.completed",
 				verb: "completed",
 				entityType: "run_step",
@@ -221,6 +226,7 @@ export async function completeRunStep(
 				actorUserId: ctx.userId ?? null,
 				actorKind,
 				actorParticipantId,
+				crossProductOrigin: ctx.crossProductOrigin ?? null,
 				action: "run.completed",
 				verb: "completed",
 				entityType: "run",

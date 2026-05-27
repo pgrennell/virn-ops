@@ -31,6 +31,13 @@ export const agent = pgTable(
     // Set on creation and on every rotation. Drives "your agent credential is 90 days old"
     // UI in a later pass.
     credentialRotatedAt: timestamp("credential_rotated_at"),
+    // Cross-product origin (D-027, 2026-05-27 cross-repo). Free-text identifier of the
+    // sibling product whose machine principal this agent represents -- e.g. 'virn-pm' when
+    // PM is provisioned as an Ops agent. Audit/activity writes triggered by this agent
+    // propagate `crossProductOrigin = agent.originProduct` so downstream consumers (oncall,
+    // monitor, BI) can distinguish "PM-driven writes" from "in-house agent writes" from
+    // "human writes." Null for in-house agents; the dominant case in v1.
+    originProduct: text("origin_product"),
     // Soft-disable without delete. A disabled agent fails authentication at the MCP boundary
     // (the participant rows remain for historical audit; the agent just can't act).
     isActive: boolean("is_active").notNull().default(true),

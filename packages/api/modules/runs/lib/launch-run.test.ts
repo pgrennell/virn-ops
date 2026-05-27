@@ -832,6 +832,29 @@ describe("launchRun -- agent launcher (Phase 11a.2)", () => {
 		);
 	});
 
+	it("threads ctx.crossProductOrigin into the run.launched audit row (D-027)", async () => {
+		mountSingleStepBundle();
+		vi.mocked(insertRunSnapshot).mockReset();
+		vi.mocked(insertRunSnapshot).mockResolvedValue({
+			runId: "run_new",
+			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+			participantIdByTempKey: new Map([["p_launcher_agent", "part_launcher"]]),
+		});
+
+		await launchRun(
+			{ ...AGENT_CTX, crossProductOrigin: "virn-pm" },
+			{ workflowId: "wf_1", kickoffValues: {}, roleAssignments: [] },
+		);
+
+		expect(writeAuditAndActivity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "run.launched",
+				actorKind: "agent",
+				crossProductOrigin: "virn-pm",
+			}),
+		);
+	});
+
 	it("merges with the mode-assigned agent when launcher and mode-handler are the same agent", async () => {
 		// Workflow with an AI step; agent launches in ai_assisted mode pointing at itself.
 		// Should produce exactly ONE agent participant (not two), and that participant should

@@ -43,6 +43,13 @@
       "when": 1779894935033,
       "tag": "0005_worthless_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779909152647,
+      "tag": "0006_misty_zodiak",
+      "breakpoints": true
     }
   ]
 }

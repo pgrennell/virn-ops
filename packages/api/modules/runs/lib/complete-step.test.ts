@@ -305,6 +305,32 @@ describe("completeRunStep", () => {
 				actorParticipantId: "part_agent_1",
 			});
 		});
+
+		// Phase 11a.3 -- crossProductOrigin (D-027) threads through both the step-complete
+		// audit and the cascade run-complete audit.
+		it("threads ctx.crossProductOrigin into both step + cascade audit rows", async () => {
+			vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_AGENT as never);
+			vi.mocked(findAgentParticipantForRun).mockResolvedValueOnce({
+				id: "part_agent_1",
+			});
+			vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(true);
+
+			await completeRunStep(
+				{ ...AGENT_CTX, crossProductOrigin: "virn-pm" },
+				"rs_1",
+			);
+
+			const calls = vi.mocked(writeAuditAndActivity).mock.calls;
+			expect(calls).toHaveLength(2);
+			expect(calls[0][0]).toMatchObject({
+				action: "run_step.completed",
+				crossProductOrigin: "virn-pm",
+			});
+			expect(calls[1][0]).toMatchObject({
+				action: "run.completed",
+				crossProductOrigin: "virn-pm",
+			});
+		});
 	});
 
 	it("does not emit cascade audit when markRunCompleted loses the race (G3)", async () => {

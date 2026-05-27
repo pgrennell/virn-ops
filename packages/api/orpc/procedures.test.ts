@@ -141,6 +141,8 @@ describe("agentOrUserOrgProcedure", () => {
 			id: "agent_1",
 			organizationId: "org_1",
 			name: "Turnover AI",
+			originProduct: null,
+			capabilities: new Set(),
 		});
 
 		let capturedContext: unknown;
@@ -184,6 +186,8 @@ describe("agentOrUserOrgProcedure", () => {
 			id: "agent_1",
 			organizationId: "org_1",
 			name: "Turnover AI",
+			originProduct: null,
+			capabilities: new Set(),
 		});
 		vi.mocked(auth.api.getSession).mockResolvedValue({
 			user: { id: "user_1" },
@@ -287,5 +291,60 @@ describe("agentOrUserOrgProcedure", () => {
 		).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
 		expect(findActiveAgentByCredential).not.toHaveBeenCalled();
+	});
+
+	// Phase 11a.3 -- originProduct + capabilities surface on principal context.
+	it("surfaces agent.originProduct on the principal context (D-027 cross-product origin)", async () => {
+		vi.mocked(findActiveAgentByCredential).mockResolvedValueOnce({
+			id: "agent_pm",
+			organizationId: "org_1",
+			name: "Virn PM",
+			originProduct: "virn-pm",
+			capabilities: new Set(),
+		});
+
+		let capturedContext: unknown;
+		const testProcedure = agentOrUserOrgProcedure.handler(async ({ context }) => {
+			capturedContext = context;
+			return { ok: true };
+		});
+
+		await call(testProcedure, undefined, {
+			context: { headers: new Headers({ authorization: "Bearer agent_pm_secret" }) },
+		});
+
+		expect(capturedContext).toMatchObject({
+			principal: {
+				kind: "agent",
+				agent: { id: "agent_pm", originProduct: "virn-pm" },
+			},
+		});
+	});
+
+	it("surfaces granted capability slugs on principal.agent.capabilities", async () => {
+		vi.mocked(findActiveAgentByCredential).mockResolvedValueOnce({
+			id: "agent_capable",
+			organizationId: "org_1",
+			name: "Turnover AI",
+			originProduct: null,
+			capabilities: new Set(["workflows.agent_steps", "automation.rules"]),
+		});
+
+		const capturedCaps: { value: Set<string> | null } = { value: null };
+		const testProcedure = agentOrUserOrgProcedure.handler(async ({ context }) => {
+			if (context.principal.kind === "agent") {
+				capturedCaps.value = context.principal.agent.capabilities;
+			}
+			return { ok: true };
+		});
+
+		await call(testProcedure, undefined, {
+			context: { headers: new Headers({ authorization: "Bearer agent_secret" }) },
+		});
+
+		expect(capturedCaps.value).toBeInstanceOf(Set);
+		expect(capturedCaps.value?.has("workflows.agent_steps")).toBe(true);
+		expect(capturedCaps.value?.has("automation.rules")).toBe(true);
+		expect(capturedCaps.value?.has("library.public_listings")).toBe(false);
 	});
 });

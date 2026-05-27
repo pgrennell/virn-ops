@@ -52,6 +52,7 @@ export const launchRunProc = agentOrUserOrgProcedure
 					{
 						organizationId: organization.id,
 						launcherAgentId: principal.agent.id,
+						crossProductOrigin: principal.agent.originProduct,
 					},
 					input,
 				);

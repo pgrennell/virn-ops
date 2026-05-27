@@ -36,6 +36,10 @@ export interface SetFieldValueContext {
 	 * ADR-006). Mutually exclusive with `userId` and `participantId`. Agents are never
 	 * admin/owner, must be a pre-existing participant on the run (bound at launch). */
 	agentId?: string;
+	/** Cross-product origin (D-027). Populated when the calling agent's
+	 * `agent.originProduct` is set (e.g. `'virn-pm'`). Threaded into the audit/activity row
+	 * so downstream consumers can distinguish PM-driven from in-house writes. */
+	crossProductOrigin?: string | null;
 	isAdminOrOwner: boolean;
 }
 
@@ -249,6 +253,7 @@ export async function setRunFieldValue(
 				actorUserId: ctx.userId ?? null,
 				actorKind,
 				actorParticipantId,
+				crossProductOrigin: ctx.crossProductOrigin ?? null,
 				action: "field_value.set",
 				verb: "edited",
 				entityType: "field_value",

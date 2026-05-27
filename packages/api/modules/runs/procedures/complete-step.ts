@@ -24,6 +24,7 @@ export const completeStepProc = agentOrUserOrgProcedure
 					{
 						organizationId: organization.id,
 						agentId: principal.agent.id,
+						crossProductOrigin: principal.agent.originProduct,
 						isAdminOrOwner: false,
 					},
 					input.runStepId,

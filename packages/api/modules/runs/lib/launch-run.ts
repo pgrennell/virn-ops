@@ -80,6 +80,10 @@ export interface LaunchRunContext {
 	 * setFieldValue / completeStep calls by the same agent. Mutually exclusive with
 	 * `userId`. */
 	launcherAgentId?: string;
+	/** Cross-product origin (D-027). Populated when the launching agent's
+	 * `agent.originProduct` is set (e.g. `'virn-pm'`). Threaded into the `run.launched`
+	 * audit row. */
+	crossProductOrigin?: string | null;
 }
 
 export interface LaunchRunResult {
@@ -434,6 +438,7 @@ export async function launchRun(
 		actorUserId: ctx.userId ?? null,
 		actorKind,
 		actorParticipantId: launcherParticipantId,
+		crossProductOrigin: ctx.crossProductOrigin ?? null,
 		action: "run.launched",
 		verb: "launched",
 		entityType: "run",
