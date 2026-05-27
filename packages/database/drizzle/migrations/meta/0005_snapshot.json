@@ -1,5 +1,5 @@
 {
-  "id": "80abbf69-843f-4c94-8156-1e2974e8c2bd",
+  "id": "04810397-89f4-44b7-9a42-067b6699be05",
   "prevId": "69c43e27-8580-4ef3-9f09-a589f0389852",
   "version": "7",
   "dialect": "postgresql",
@@ -3773,7 +3773,7 @@
       "checkConstraints": {
         "participant_identity": {
           "name": "participant_identity",
-          "value": "(\n        (\"participant\".\"kind\" = 'user' and \"participant\".\"user_id\" is not null and \"participant\".\"guest_email\" is null and \"participant\".\"agent_id\" is null and \"participant\".\"vendor_id\" is null and \"participant\".\"vendor_contact_id\" is null) or\n        (\"participant\".\"kind\" = 'guest' and \"participant\".\"guest_email\" is not null and \"participant\".\"user_id\" is null and \"participant\".\"agent_id\" is null and \"participant\".\"vendor_id\" is null and \"participant\".\"vendor_contact_id\" is null) or\n        (\"participant\".\"kind\" = 'agent' and \"participant\".\"agent_id\" is not null and \"participant\".\"user_id\" is null and \"participant\".\"guest_email\" is null and \"participant\".\"vendor_id\" is null and \"participant\".\"vendor_contact_id\" is null) or\n        (\"participant\".\"kind\" = 'vendor' and \"participant\".\"vendor_id\" is not null and \"participant\".\"vendor_contact_id\" is not null and \"participant\".\"user_id\" is null and \"participant\".\"guest_email\" is null and \"participant\".\"agent_id\" is null)\n      )"
+          "value": "(\n        (\"participant\".\"kind\"::text = 'user' and \"participant\".\"user_id\" is not null and \"participant\".\"guest_email\" is null and \"participant\".\"agent_id\" is null and \"participant\".\"vendor_id\" is null and \"participant\".\"vendor_contact_id\" is null) or\n        (\"participant\".\"kind\"::text = 'guest' and \"participant\".\"guest_email\" is not null and \"participant\".\"user_id\" is null and \"participant\".\"agent_id\" is null and \"participant\".\"vendor_id\" is null and \"participant\".\"vendor_contact_id\" is null) or\n        (\"participant\".\"kind\"::text = 'agent' and \"participant\".\"agent_id\" is not null and \"participant\".\"user_id\" is null and \"participant\".\"guest_email\" is null and \"participant\".\"vendor_id\" is null and \"participant\".\"vendor_contact_id\" is null) or\n        (\"participant\".\"kind\"::text = 'vendor' and \"participant\".\"vendor_id\" is not null and \"participant\".\"vendor_contact_id\" is not null and \"participant\".\"user_id\" is null and \"participant\".\"guest_email\" is null and \"participant\".\"agent_id\" is null)\n      )"
         }
       },
       "isRLSEnabled": false

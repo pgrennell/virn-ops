@@ -85,13 +85,21 @@ export const participant = pgTable(
     // Single CHECK enforces both "exactly one identity surface populated" AND "kind
     // matches whichever surface is populated" — four-kind generalization. Vendor case
     // requires BOTH vendorId AND vendorContactId together (anonymous-vendor not allowed).
+    //
+    // **`kind::text` casts on every branch** are required for Postgres compatibility: a
+    // CHECK that compares an enum column directly to a value freshly added to the enum
+    // (`'vendor'` here, added in the same migration via `ALTER TYPE … ADD VALUE`) is
+    // rejected because the new enum OID isn't yet committed. Casting to text compares
+    // text strings without consulting the enum OID cache, side-stepping the restriction.
+    // Applies uniformly to every branch for consistency, and works the same for existing
+    // values that the enum already knows about.
     check(
       "participant_identity",
       sql`(
-        (${t.kind} = 'user' and ${t.userId} is not null and ${t.guestEmail} is null and ${t.agentId} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
-        (${t.kind} = 'guest' and ${t.guestEmail} is not null and ${t.userId} is null and ${t.agentId} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
-        (${t.kind} = 'agent' and ${t.agentId} is not null and ${t.userId} is null and ${t.guestEmail} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
-        (${t.kind} = 'vendor' and ${t.vendorId} is not null and ${t.vendorContactId} is not null and ${t.userId} is null and ${t.guestEmail} is null and ${t.agentId} is null)
+        (${t.kind}::text = 'user' and ${t.userId} is not null and ${t.guestEmail} is null and ${t.agentId} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
+        (${t.kind}::text = 'guest' and ${t.guestEmail} is not null and ${t.userId} is null and ${t.agentId} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
+        (${t.kind}::text = 'agent' and ${t.agentId} is not null and ${t.userId} is null and ${t.guestEmail} is null and ${t.vendorId} is null and ${t.vendorContactId} is null) or
+        (${t.kind}::text = 'vendor' and ${t.vendorId} is not null and ${t.vendorContactId} is not null and ${t.userId} is null and ${t.guestEmail} is null and ${t.agentId} is null)
       )`,
     ),
   ],
