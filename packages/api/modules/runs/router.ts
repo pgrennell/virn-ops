@@ -8,6 +8,7 @@ import { launchRunProc } from "./procedures/launch-run";
 import { listActiveRunsProc } from "./procedures/list-active-runs";
 import { listMyTasksProc } from "./procedures/list-my-tasks";
 import { revokeParticipantTokenProc } from "./procedures/revoke-participant-token";
+import { runSlaSweepNow } from "./procedures/run-sla-sweep-now";
 import { setFieldValueProc } from "./procedures/set-field-value";
 import { setFieldValueAsGuestProc } from "./procedures/set-field-value-as-guest";
 
@@ -21,6 +22,10 @@ export const runsRouter = {
 	listMyTasks: listMyTasksProc,
 	listActiveRuns: listActiveRunsProc,
 	getHomeSummary: getHomeSummaryProc,
+	// Phase 8 step 5: admin-triggered SLA sweep for the active org. Vercel Cron
+	// (apps/saas/app/api/cron/sla-sweep) handles the scheduled platform-wide sweep;
+	// this is the manual trigger surface for dev parity + admin one-offs.
+	runSlaSweepNow,
 	// Phase 3.5: tokenized guest access. Public (token-authed, rate-limited by IP) +
 	// admin-only issue/revoke. See lib/guest.ts for the security boundary.
 	getForGuest: getRunForGuestProc,

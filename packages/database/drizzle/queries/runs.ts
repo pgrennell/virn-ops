@@ -289,6 +289,94 @@ export async function getRunForOrg(organizationId: string, runId: string) {
 	);
 }
 
+// ---------------------------------------------------------------------------
+// SLA sweep — find overdue active runs that haven't been escalated yet
+// (Phase 8 step 5, the property-ops pack's overdue-escalation use case).
+//
+// Idempotency is enforced via the audit_log: a run is "already escalated" iff it has
+// an audit row with action='run.escalated' + entityType='run' + entityId=<run.id>.
+// No new schema needed; the audit_log indexes (idx_audit_log_entity on entity_type +
+// entity_id, idx_audit_log_org) make the antijoin cheap.
+// ---------------------------------------------------------------------------
+
+export interface OverdueRunRow {
+	id: string;
+	organizationId: string;
+	title: string;
+	workflowId: string;
+	dueAt: Date;
+	startedAt: Date;
+	createdBy: string | null;
+}
+
+/** Find active runs whose `dueAt` has passed and which DO NOT yet have a
+ * `run.escalated` audit event. Antijoin against audit_log keys idempotency: callers
+ * can run this every hour without re-firing escalation for runs already escalated.
+ *
+ * Scope:
+ *   - `organizationId === null` -> platform-wide sweep (Vercel Cron variant)
+ *   - `organizationId` set       -> single-org sweep (admin "Run sweep now" button)
+ *
+ * Returns the rows the caller should escalate. The caller is responsible for writing
+ * the escalation audit row + side effects (notifications, automation actions); those
+ * writes flip the antijoin so the next sweep skips the same runs.
+ *
+ * Note (Phase 18 successor): once the full automation_action executor lands, this
+ * sweep migrates to an Inngest scheduled function that emits an SLA-breach event;
+ * automation_rule.triggerType='sla_breach' rules then handle the escalation actions
+ * through the catalog. For v1 the sweep + thin escalation is sufficient. */
+export async function findOverdueRunsToEscalate(
+	organizationId: string | null,
+	now: Date = new Date(),
+): Promise<OverdueRunRow[]> {
+	// Subquery: run ids that already have a run.escalated audit row. We use a NOT IN
+	// (sub-select) against audit_log scoped to action='run.escalated' + entity_type='run'.
+	// The audit_log entity index makes this fast; the result set is small (overdue
+	// runs only, then narrowed to the not-already-escalated ones).
+	const escalatedSubquery = sql<string>`(
+		select ${auditLog.entityId}
+		from ${auditLog}
+		where ${auditLog.action} = 'run.escalated'
+		  and ${auditLog.entityType} = 'run'
+	)`;
+
+	const baseWhere = and(
+		eq(run.status, "active"),
+		lte(run.dueAt, now),
+		sql`${run.id} NOT IN ${escalatedSubquery}`,
+	);
+	const where = organizationId
+		? and(baseWhere, eq(run.organizationId, organizationId))
+		: baseWhere;
+
+	const rows = await db
+		.select({
+			id: run.id,
+			organizationId: run.organizationId,
+			title: run.title,
+			workflowId: run.workflowId,
+			dueAt: run.dueAt,
+			startedAt: run.startedAt,
+			createdBy: run.createdBy,
+		})
+		.from(run)
+		.where(where)
+		.orderBy(run.dueAt);
+
+	// Type narrowing: dueAt is filtered to non-null via the lte() clause but the
+	// schema declares it nullable. Cast away the null type here -- safe because the
+	// WHERE filtered it.
+	return rows.map((r) => ({
+		id: r.id,
+		organizationId: r.organizationId,
+		title: r.title,
+		workflowId: r.workflowId,
+		dueAt: r.dueAt as Date,
+		startedAt: r.startedAt,
+		createdBy: r.createdBy,
+	}));
+}
+
 /** Get all step_dependency rows for the steps referenced by a run's snapshotted steps.
  * Used to compute the `blocked` flag in the view layer. */
 export async function getDependenciesForRunSteps(

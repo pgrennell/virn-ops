@@ -212,19 +212,49 @@ kinds (user, guest, agent, vendor) land in this one migration.**
    `capability_enabled(org, 'agent_steps')` (the existing capability × permission
    gating, no new mechanism).
 
-5. **SLA-driven escalation via Inngest scheduled function** (v1 path, *not* full
+5. **SLA-driven escalation via Vercel Cron** (v1 path, *not* Inngest, *not* full
    SLA event catalog). ADR-003 defers SLA-breach events and the full action
    catalog. But v1 use cases (property-ops pack — e.g. "pest control work order
    not completed within X days, escalate to manager") require basic escalation
-   on overdue runs. Implement via an Inngest scheduled function ("every hour,
-   find runs past their `dueAt`, fire escalation automation actions") rather
-   than as a true SLA event. Cheap, works with existing Inngest infrastructure
-   (already wired for scheduled recurring runs), no schema change. The full SLA
-   event catalog (proper `event` table, `automation_rule` triggers on SLA
-   events, multi-tier breach severities) stays post-v1 per ADR-003 — promote
-   when a vertical actually requires the richer model. For v1 the Inngest sweep
-   covers the property-ops case; the escalation *actions* themselves are
-   existing `automation_action` types (notify, reassign, run_workflow).
+   on overdue runs.
+
+   **Implemented (2026-05-27):** Vercel Cron hits `/api/cron/sla-sweep` hourly
+   (`0 * * * *`) in production. The endpoint authenticates via `Authorization:
+   Bearer ${CRON_SECRET}` and calls `runSlaSweep` (lib) with
+   `organizationId=null` (platform-wide). The sweep finds active runs with
+   `dueAt < now()` that don't yet have a `run.escalated` audit row, then writes
+   one audit + one activity event per escalated run. Idempotency: the audit-log
+   antijoin filters already-escalated runs; re-running the sweep is a no-op.
+
+   **Dev parity:** Vercel Cron doesn't fire locally. Two trigger paths for
+   dev:
+     (a) Admin button "Run sweep now" on `/settings/general` — calls the
+         `runs.runSlaSweepNow` oRPC procedure (adminOrgProcedure; scoped to the
+         active org). Available in prod too as an admin manual-trigger.
+     (b) `pnpm --filter @virn/scripts sla-sweep:dev` — one-shot HTTP fire to
+         the cron endpoint. `sla-sweep:dev:watch` polls on an interval.
+
+   **What "escalate" does in v1 (deliberately thin):** writes one `audit_log`
+   row + one `activity_event` row per overdue run. **No notifications, no
+   `automation_action` invocation yet** — the existing notification enum doesn't
+   have `RUN_OVERDUE` and the automation-action executor is Phase 18. The audit
+   + activity rows are enough for the manager dashboard + the admin UI's
+   success toast.
+
+   **Successor (Phase 18):** when the full automation-action executor + Inngest
+   land, this sweep migrates from a Vercel-Cron HTTP endpoint to an Inngest
+   scheduled function that emits an SLA-breach event; `automation_rule` rows
+   with `triggerType='sla_breach'` then handle the escalation actions through
+   the catalog (notify, reassign, run_workflow). Same business logic, richer
+   reactions. The lib function `runSlaSweep` becomes the body of an Inngest
+   scheduled handler with no other changes.
+
+   **Why Vercel Cron, not Inngest, for v1:** Inngest is a workflow orchestrator
+   we'll want eventually (Phase 18), but pulling it in just to fire an hourly
+   cron in v1 bundles two phases. Vercel Cron is platform-native, free, and
+   keeps Phase 18's "we have a real reason to add Inngest" decision honest. The
+   substantive logic (sweep + escalation writes) is the same regardless of
+   trigger.
 
 ### Phase 9 — Data Sets minimal subset (S-02)
 

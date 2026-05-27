@@ -11,6 +11,8 @@
 		"seed:demo-workflow": "dotenv -c -e ../../.env -- tsx ./src/seed-demo-workflow.ts",
 		"test:config": "dotenv -c -e ../../.env -- tsx ./src/test-config-resolution.ts",
 		"walk:builder": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/walk-builder-publish-launch.ts",
+		"sla-sweep:dev": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/sla-sweep-dev.ts",
+		"sla-sweep:dev:watch": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/sla-sweep-dev.ts --watch",
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
