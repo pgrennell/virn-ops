@@ -10,6 +10,7 @@
 			"@payments/*": ["./modules/payments/*"],
 			"@i18n/*": ["./modules/i18n/*"],
 			"@admin/*": ["./modules/admin/*"],
+			"@agents/*": ["./modules/agents/*"],
 			"@ai/*": ["./modules/ai/*"],
 			"@onboarding/*": ["./modules/onboarding/*"],
 			"@runs/*": ["./modules/runs/*"],

@@ -68,6 +68,7 @@ export const entityType = pgEnum("entity_type", [
   "pack_version",
   "field_definition",
   "role",
+  "agent",
 ]);
 
 // Content-type discriminator (ARCHITECTURE.md §5). Lives here rather than in workflows.ts

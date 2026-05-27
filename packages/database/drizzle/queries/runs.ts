@@ -674,7 +674,8 @@ export async function writeAuditAndActivity(
 			| "solution_pack"
 			| "pack_version"
 			| "field_definition"
-			| "role";
+			| "role"
+			| "agent";
 		entityId: string;
 		changes?: Record<string, unknown>;
 		metadata?: Record<string, unknown>;

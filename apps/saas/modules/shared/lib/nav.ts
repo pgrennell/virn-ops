@@ -22,6 +22,7 @@ export const NAV_AREAS = {
 	// Admin
 	configuration: "configuration",
 	membersAndRoles: "members",
+	agents: "agents",
 	branding: "branding",
 	integrations: "integrations",
 	billing: "billing",
@@ -153,6 +154,13 @@ export const NAV_AREA_DEFINITIONS: Record<NavArea, NavAreaDefinition> = {
 		allowedRoles: [ROLES.admin, ROLES.owner],
 		phase: "now",
 	},
+	[NAV_AREAS.agents]: {
+		area: NAV_AREAS.agents,
+		// Admin/owner only — agents hold credentials that act on org data via the MCP
+		// surface (Phase 11). Per ADR-006 + D-022, agent management is privileged.
+		allowedRoles: [ROLES.admin, ROLES.owner],
+		phase: "now",
+	},
 	[NAV_AREAS.branding]: {
 		area: NAV_AREAS.branding,
 		allowedRoles: [ROLES.admin, ROLES.owner],
@@ -244,6 +252,12 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 				segment: "settings/members",
 				icon: "Users",
 				label: "Members & roles",
+			},
+			{
+				area: NAV_AREAS.agents,
+				segment: "settings/agents",
+				icon: "Bot",
+				label: "Agents",
 			},
 			{
 				area: NAV_AREAS.branding,
