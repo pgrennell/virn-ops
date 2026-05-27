@@ -20,6 +20,9 @@
 	"[prisma]": {
 		"editor.defaultFormatter": "Prisma.prisma"
 	},
+	"[markdown]": {
+		"editor.formatOnSave": false
+	},
 	"tailwindCSS.experimental.classRegex": [["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]],
 	"typescript.preferences.importModuleSpecifier": "non-relative",
 	"typescript.tsdk": "node_modules/typescript/lib",

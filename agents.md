@@ -113,6 +113,7 @@ Turborepo + pnpm monorepo. Workspace scope: `@virn/*`.
   `drizzle-kit` against the pooled URL in production will fail. See `.env.local.example`.
 - After any schema change, run `pnpm --filter database generate` and show the generated SQL.
 - Work in small, reviewable increments. Append notable decisions to `docs/DECISIONS.md`.
+- **Save UI Walkthrough screenshots inside the repo:** When performing E2E walks or UI reviews, copy all screenshots from temporary/brain directories into a dedicated subfolder under `docs/reviews/` (e.g., `docs/reviews/feature-name/`) so they are easily accessible by Claude Code or other workspace agents.
 - Ask before assuming on anything ambiguous.
 
 ---
