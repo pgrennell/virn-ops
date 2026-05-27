@@ -23,7 +23,7 @@ import { Alert, AlertDescription } from "@virn/ui/components/alert";
 import { Button } from "@virn/ui/components/button";
 import { Input } from "@virn/ui/components/input";
 import { Textarea } from "@virn/ui/components/textarea";
-import { MessageSquare, Plus, Trash2 } from "lucide-react";
+import { MessageSquare, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { FieldSaveState, FieldType, RunStatus, RunStepStatus, RunViewMode, StepType } from "../types";
@@ -70,6 +70,14 @@ export interface AuthorPanelCallbacks {
 	onUpdateFieldLabel: (fieldId: string, value: string) => void;
 	onUpdateFieldRequired: (fieldId: string, value: boolean) => void;
 	onDeleteField: (fieldId: string) => void;
+	/** Opens the slide-in config panel for per-step settings (type, role, due rule,
+	 * dependencies, conditions). Optional -- omitting renders no Configure button.
+	 * Wired by BuilderView in Pass 3. */
+	onConfigureStep?: () => void;
+	/** Opens the slide-in config panel for per-field settings (key with lock state,
+	 * type, options, required, help). Optional -- omitting renders no per-field
+	 * Configure affordance. */
+	onConfigureField?: (fieldId: string) => void;
 }
 
 interface RunStepPanelProps {
@@ -189,6 +197,11 @@ export function RunStepPanel({
 								onUpdateLabel={(v) => authorCallbacks.onUpdateFieldLabel(f.id, v)}
 								onUpdateRequired={(v) => authorCallbacks.onUpdateFieldRequired(f.id, v)}
 								onDelete={() => authorCallbacks.onDeleteField(f.id)}
+								onConfigure={
+									authorCallbacks.onConfigureField
+										? () => authorCallbacks.onConfigureField!(f.id)
+										: undefined
+								}
 							/>
 						) : (
 							<RunFieldInput
@@ -259,11 +272,21 @@ export function RunStepPanel({
 
 			{isAuthor && authorCallbacks && (
 				<div className="pt-3 border-t border-border gap-3 flex items-center">
+					{authorCallbacks.onConfigureStep && (
+						<Button
+							variant="secondary"
+							size="sm"
+							onClick={authorCallbacks.onConfigureStep}
+						>
+							<SlidersHorizontal className="size-3.5 mr-1" />
+							Configure step
+						</Button>
+					)}
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={authorCallbacks.onDeleteStep}
-						className="text-destructive hover:text-destructive"
+						className="text-destructive hover:text-destructive ml-auto"
 					>
 						<Trash2 className="size-3.5 mr-1" />
 						Delete step
@@ -346,11 +369,15 @@ function AuthorFieldRow({
 	onUpdateLabel,
 	onUpdateRequired,
 	onDelete,
+	onConfigure,
 }: {
 	field: RunStepPanelFieldRow;
 	onUpdateLabel: (v: string) => void;
 	onUpdateRequired: (v: boolean) => void;
 	onDelete: () => void;
+	/** Open the slide-in config panel scoped to this field. Optional -- Pass 2 didn't
+	 * surface the affordance; Pass 3 wires it via BuilderView. */
+	onConfigure?: () => void;
 }) {
 	const [labelDraft, setLabelDraft] = useState(field.label);
 	useEffect(() => setLabelDraft(field.label), [field.label]);
@@ -401,15 +428,28 @@ function AuthorFieldRow({
 					</label>
 				</div>
 			</div>
-			<Button
-				variant="ghost"
-				size="sm"
-				onClick={onDelete}
-				className="shrink-0 text-foreground/40 hover:text-destructive"
-				aria-label={`Delete field ${field.label}`}
-			>
-				<Trash2 className="size-3.5" />
-			</Button>
+			<div className="shrink-0 flex flex-col gap-1">
+				{onConfigure && (
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={onConfigure}
+						className="text-foreground/40 hover:text-foreground"
+						aria-label={`Configure field ${field.label}`}
+					>
+						<SlidersHorizontal className="size-3.5" />
+					</Button>
+				)}
+				<Button
+					variant="ghost"
+					size="sm"
+					onClick={onDelete}
+					className="text-foreground/40 hover:text-destructive"
+					aria-label={`Delete field ${field.label}`}
+				>
+					<Trash2 className="size-3.5" />
+				</Button>
+			</div>
 		</div>
 	);
 }

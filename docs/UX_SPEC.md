@@ -156,7 +156,9 @@ Each spec: purpose · layout · key elements · states · gating · MVP cut · d
   engine (ADR-003).
 - **Versioning = publish.** Always edit a draft; **Publish** mints a `workflow_version`; runs
   snapshot it; editing the draft never disturbs in-flight runs (invariants #3, #4). The top bar
-  always shows draft-vs-published state. **Preview** launches a throwaway run to test.
+  always shows draft-vs-published state. **Preview** is a no-side-effect dry render — the
+  canvas paints the draft through the same operator primitives without creating a run or
+  any side effect (D-019; verifying real-run behavior happens via Library → Run).
 - **Capability-shaped palette.** Approval steps need governance.approvals; conditions/stop-tasks
   need automation; guest assignees need guests; advanced field types need custom-fields. The
   builder an org sees matches the mode it chose in Configuration.

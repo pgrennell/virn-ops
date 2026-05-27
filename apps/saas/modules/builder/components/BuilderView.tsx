@@ -29,8 +29,10 @@ import { RunStepList, type RunStepListDefinitionStep, type RunStepListItem, type
 import { RunStepPanel, type RunStepPanelFieldRow } from "@runs/components/RunStepPanel";
 
 import type { FieldSaveState as _FieldSaveState } from "@runs/types";
+import { buildGatingSnapshot } from "@shared/lib/gating";
 
 import {
+	useAddStepDependency,
 	useCreateField,
 	useCreateSection,
 	useCreateStep,
@@ -39,14 +41,20 @@ import {
 	useDiscardDraft,
 	useEditPublished,
 	usePublishVersion,
+	useRemoveStepDependency,
+	useRenameField,
 	useReorderSteps,
 	useUpdateField,
 	useUpdateStep,
 } from "../lib/builder-mutations";
+import { computePaletteGates, type PaletteGates } from "../lib/capability-gates";
 import { buildPreviewFromBundle } from "../lib/preview-adapter";
 import { PREVIEW_NOOP_COMPLETE, PREVIEW_NOOP_SET_FIELD } from "../lib/preview-callbacks";
 import type { VersionEditBundleResponse } from "../lib/types";
+import { BuilderConfigPanel } from "./BuilderConfigPanel";
 import { BuilderTopBar } from "./BuilderTopBar";
+import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
+import { StepConfigForm } from "./StepConfigForm";
 
 interface BuilderViewProps {
 	workflowId: string;
@@ -55,9 +63,22 @@ interface BuilderViewProps {
 	 * members see view mode regardless of draft state -- the API's adminOrgProcedure
 	 * refuses non-admin writes anyway, but the UI must not show controls that 403. */
 	isAdminOrOwner: boolean;
+	/** The caller's preset role (Owner/Admin/Builder/Operator/Reviewer). Passed
+	 * through so the client can rebuild a GatingSnapshot for the palette-gating
+	 * helpers (see capability-gates.ts). */
+	role: import("@shared/lib/nav").RoleId;
+	/** Capability keys currently enabled for the active org. Serialized as an array
+	 * because Set doesn't cross the server/client boundary; rebuilt into a Set in
+	 * the snapshot reconstruction below. */
+	enabledCapabilityKeys: readonly string[];
 }
 
-export function BuilderView({ workflowId, isAdminOrOwner }: BuilderViewProps) {
+export function BuilderView({
+	workflowId,
+	isAdminOrOwner,
+	role,
+	enabledCapabilityKeys,
+}: BuilderViewProps) {
 	const queryClient = useQueryClient();
 	const workflowQuery = useQuery(orpc.workflows.get.queryOptions({ input: { workflowId } }));
 
@@ -160,6 +181,15 @@ export function BuilderView({ workflowId, isAdminOrOwner }: BuilderViewProps) {
 		}
 	};
 
+	// Reconstruct the gating snapshot from the serialized props + derive the
+	// per-affordance palette gates the config forms read. Memoized so the gates
+	// object is stable across renders (cheap, but the config forms re-render
+	// pointlessly without it).
+	const gates = useMemo<PaletteGates>(() => {
+		const snapshot = buildGatingSnapshot(role, enabledCapabilityKeys);
+		return computePaletteGates(snapshot);
+	}, [role, enabledCapabilityKeys]);
+
 	return (
 		<BuilderInner
 			bundle={bundle}
@@ -167,6 +197,7 @@ export function BuilderView({ workflowId, isAdminOrOwner }: BuilderViewProps) {
 			forkedFromVersionNumber={forkedFromVersionNumber}
 			isDraft={isDraft}
 			isAdminOrOwner={isAdminOrOwner}
+			gates={gates}
 			previewActive={previewActive}
 			onTogglePreview={() => setPreviewActive((p) => !p)}
 			topLevelError={topLevelError}
@@ -191,6 +222,7 @@ interface BuilderInnerProps {
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
 	isAdminOrOwner: boolean;
+	gates: PaletteGates;
 	previewActive: boolean;
 	onTogglePreview: () => void;
 	topLevelError: string | null;
@@ -208,6 +240,7 @@ function BuilderInner({
 	forkedFromVersionNumber,
 	isDraft,
 	isAdminOrOwner,
+	gates,
 	previewActive,
 	onTogglePreview,
 	topLevelError,
@@ -225,9 +258,14 @@ function BuilderInner({
 	const createField = useCreateField(mutArgs);
 	const updateStep = useUpdateStep(mutArgs);
 	const updateField = useUpdateField(mutArgs);
+	const renameField = useRenameField(mutArgs);
 	const deleteStep = useDeleteStep(mutArgs);
 	const deleteField = useDeleteField(mutArgs);
 	const reorderSteps = useReorderSteps(mutArgs);
+	const addDep = useAddStepDependency(mutArgs);
+	const removeDep = useRemoveStepDependency(mutArgs);
+	// Workflow roles for the step assignee picker. Org-level query, mounted once.
+	const rolesQuery = useQuery(orpc.workflows.listRoles.queryOptions({ input: {} }));
 
 	// Author mode is on when we're an admin/owner AND looking at a draft AND preview
 	// isn't engaged. Non-admin members never enter author mode -- the API's
@@ -243,6 +281,18 @@ function BuilderInner({
 			: "view";
 
 	const [activeStepId, setActiveStepId] = useState<string | null>(() => bundle.steps[0]?.id ?? null);
+
+	// Config-panel focus. Mutually exclusive: either a step's settings are open, OR
+	// a field's, OR the panel's closed. Mode is encoded as `{ kind: "step" | "field",
+	// id }` so the same panel surface handles both.
+	const [panelFocus, setPanelFocus] = useState<
+		| { kind: "step"; stepId: string }
+		| { kind: "field"; fieldId: string }
+		| null
+	>(null);
+	// Server-supplied referencer list when the last rename refused with
+	// FIELD_KEY_LOCKED. Cleared on successful rename or panel close.
+	const [keyRenameRefs, setKeyRenameRefs] = useState<FieldReferencer[] | null>(null);
 
 	// Default to first step (or to the same step across mode toggles when it survives).
 	const activeStep = useMemo(() => {
@@ -356,20 +406,146 @@ function BuilderInner({
 			onDiscard={onDiscard}
 			topLevelError={topLevelError}
 		>
-			<AuthorBody
-				bundle={bundle}
-				activeStepId={activeStepId}
-				onSelectStep={setActiveStepId}
-				fieldsForStep={fieldsForStep}
-				createSection={createSection}
-				createStep={createStep}
-				createField={createField}
-				updateStep={updateStep}
-				updateField={updateField}
-				deleteStep={deleteStep}
-				deleteField={deleteField}
-				reorderSteps={reorderSteps}
-			/>
+			<div className="flex flex-1 min-h-0">
+				<div className="flex-1 min-w-0 flex">
+					<AuthorBody
+						bundle={bundle}
+						activeStepId={activeStepId}
+						onSelectStep={(id) => {
+							setActiveStepId(id);
+							// Selecting a different step closes any open per-field focus -- the
+							// panel still tracks step config if open, but resets the per-step pick.
+							if (panelFocus?.kind === "field") setPanelFocus(null);
+						}}
+						fieldsForStep={fieldsForStep}
+						createSection={createSection}
+						createStep={createStep}
+						createField={createField}
+						updateStep={updateStep}
+						updateField={updateField}
+						deleteStep={deleteStep}
+						deleteField={deleteField}
+						reorderSteps={reorderSteps}
+						onConfigureStep={(stepId) => {
+							setKeyRenameRefs(null);
+							setPanelFocus({ kind: "step", stepId });
+						}}
+						onConfigureField={(fieldId) => {
+							setKeyRenameRefs(null);
+							setPanelFocus({ kind: "field", fieldId });
+						}}
+					/>
+				</div>
+
+				<BuilderConfigPanel
+					open={panelFocus !== null}
+					title={
+						panelFocus?.kind === "step"
+							? "Step settings"
+							: panelFocus?.kind === "field"
+								? "Field settings"
+								: ""
+					}
+					onClose={() => {
+						setPanelFocus(null);
+						setKeyRenameRefs(null);
+					}}
+				>
+					{panelFocus?.kind === "step" &&
+						(() => {
+							const step = bundle.steps.find((s) => s.id === panelFocus.stepId);
+							if (!step) return null;
+							return (
+								<StepConfigForm
+									step={step}
+									allSteps={bundle.steps}
+									dependencies={bundle.dependencies}
+									workflowRoles={rolesQuery.data ?? []}
+									gates={gates}
+									onChangeType={(type) =>
+										updateStep.mutate({ stepId: step.id, type })
+									}
+									onChangeAssignedRole={(roleId) =>
+										updateStep.mutate({ stepId: step.id, assignedRoleId: roleId })
+									}
+									onChangeDueRule={({ dueType, dueOffsetDays }) =>
+										updateStep.mutate({
+											stepId: step.id,
+											dueType,
+											dueOffsetDays,
+										})
+									}
+									onToggleRequired={(value) =>
+										updateStep.mutate({ stepId: step.id, isRequired: value })
+									}
+									onToggleStopTask={(value) =>
+										updateStep.mutate({ stepId: step.id, isStopTask: value })
+									}
+									onAddDependency={(dependsOnStepId) =>
+										addDep.mutate({ stepId: step.id, dependsOnStepId })
+									}
+									onRemoveDependency={(dependsOnStepId) =>
+										removeDep.mutate({ stepId: step.id, dependsOnStepId })
+									}
+								/>
+							);
+						})()}
+
+					{panelFocus?.kind === "field" &&
+						(() => {
+							const f = bundle.fields.find((x) => x.id === panelFocus.fieldId);
+							if (!f) return null;
+							return (
+								<FieldConfigForm
+									field={f}
+									gates={gates}
+									keyRenameRefusalRefs={keyRenameRefs}
+									keyRenamePending={renameField.isPending}
+									onChangeLabel={(label) =>
+										updateField.mutate({ fieldId: f.id, label })
+									}
+									onChangeKey={(key) => {
+										setKeyRenameRefs(null);
+										renameField.mutate(
+											{ fieldId: f.id, key },
+											{
+												onError: (err) => {
+													const data = (
+														err as { data?: { code?: string; referencers?: FieldReferencer[] } }
+													).data;
+													if (data?.code === "FIELD_KEY_LOCKED" && data.referencers) {
+														setKeyRenameRefs(data.referencers);
+													}
+												},
+											},
+										);
+									}}
+									onChangeType={(fieldType) =>
+										updateField.mutate({ fieldId: f.id, fieldType })
+									}
+									onChangeRequired={(isRequired) =>
+										updateField.mutate({ fieldId: f.id, isRequired })
+									}
+									onChangeOptions={(options) =>
+										updateField.mutate({
+											fieldId: f.id,
+											config: { ...(f.config ?? {}), options },
+										})
+									}
+									onChangeHelpText={(helpText) => {
+										const next = { ...(f.config ?? {}) };
+										if (helpText === null || helpText.length === 0) {
+											delete (next as Record<string, unknown>).helpText;
+										} else {
+											(next as Record<string, unknown>).helpText = helpText;
+										}
+										updateField.mutate({ fieldId: f.id, config: next });
+									}}
+								/>
+							);
+						})()}
+				</BuilderConfigPanel>
+			</div>
 		</BuilderShell>
 	);
 }
@@ -491,6 +667,8 @@ function AuthorBody({
 	deleteStep,
 	deleteField,
 	reorderSteps,
+	onConfigureStep,
+	onConfigureField,
 }: {
 	bundle: VersionEditBundleResponse;
 	activeStepId: string | null;
@@ -504,6 +682,12 @@ function AuthorBody({
 	deleteStep: ReturnType<typeof useDeleteStep>;
 	deleteField: ReturnType<typeof useDeleteField>;
 	reorderSteps: ReturnType<typeof useReorderSteps>;
+	/** Opens the slide-in panel for per-step config (type, role, due rule, deps,
+	 * conditions). The panel state itself lives in BuilderInner. */
+	onConfigureStep: (stepId: string) => void;
+	/** Opens the slide-in panel for per-field config (label, key with lock state,
+	 * type, options, required, help). */
+	onConfigureField: (fieldId: string) => void;
 }) {
 	const sections: RunStepListSection[] = bundle.sections;
 	const definitionSteps: RunStepListDefinitionStep[] = bundle.steps.map((s) => ({
@@ -609,6 +793,8 @@ function AuthorBody({
 							onUpdateFieldRequired: (fieldId, value) =>
 								updateField.mutate({ fieldId, isRequired: value }),
 							onDeleteField: (fieldId) => deleteField.mutate({ fieldId }),
+							onConfigureStep: () => onConfigureStep(activeStep.id),
+							onConfigureField: (fieldId) => onConfigureField(fieldId),
 						}}
 					/>
 				) : (

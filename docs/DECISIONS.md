@@ -541,3 +541,107 @@ mutation procedure to forget to check.
   field_value rows reference field rows keyed by the original keys. That single
   test proves the authoring half and the execution half are wired together — if
   it ever fails, the publish-to-launch contract is broken at the field level.
+
+---
+
+## 2026-05-27 — Workflow Builder Preview is a no-side-effect dry render, not a throwaway run
+
+### D-019 — Builder Preview neutralizes mutations rather than launching a real run
+
+**Context:** UX_SPEC §4.3 originally described Preview as *"launches a throwaway run
+to test"* — the intuitive reading of "preview" inherited from many builder tools.
+When Pass 2 of the Workflow Builder shipped (`6ccd5af`), the implementation pivoted
+to a dry render instead: the canvas pivots into a synthesized run-shaped view via a
+small definition→synthetic-run adapter (`buildPreviewFromBundle`) and the same
+`RunStepList` / `RunStepPanel` primitives paint it. The mutation callbacks
+(`onSetFieldValue`, `onCompleteStep`) are wired to `PREVIEW_NOOP_*` -- functions
+exported from `apps/saas/modules/builder/lib/preview-callbacks.ts` that, by
+construction, don't import the oRPC client and can't reach any mutation.
+
+**Decision:** Preview is a dry render. It never calls `runs.launch`,
+`runs.setFieldValue`, `runs.completeStep`, or any other procedure that mutates
+server state. The author sees what the operator will see; nothing reaches Postgres.
+
+**Rationale:**
+
+- The Pass 1 acceptance test + the Pass 2.5 Neon walk already exercise the real
+  launch path against actual Postgres. Preview's job is "what will the operator
+  see?", not "does launch work?" -- the latter is proven elsewhere.
+- A real throwaway run produces side effects that linger: a `run` row, audit
+  entries, activity events, potentially `participant` rows. "Throwaway" implies a
+  cleanup pass that the author has to remember to run -- friction the dry render
+  removes.
+- Authors will preview frequently while iterating on the draft. Each throwaway run
+  would compound audit-log + activity-feed noise in the org's history.
+- The no-side-effect guarantee is testable in isolation: `preview-callbacks.ts`
+  doesn't import `@shared/lib/orpc`, and the BuilderView source's `PreviewBody`
+  branch contains zero mutation references. Three regression tests assert this.
+
+**Consequences:**
+
+- Anything that depends on observing a real run's behavior (run-engine cascade,
+  step_dependency resolution at run time, audit + activity writes) is NOT covered
+  by Preview. Authors who need to verify that behavior launch via the Library's
+  Run action, same as an operator.
+- UX_SPEC §4.3's "throwaway run" phrasing is superseded by this decision. The
+  spec is updated in the same change set; this entry is the authoritative record
+  of the pivot.
+- If a future feature genuinely needs a "throwaway run" surface (e.g. a dedicated
+  "rehearsal mode" with full automation firing), introduce it under a different
+  name -- don't conflate it with Preview.
+
+---
+
+## 2026-05-27 — @virn/api wildcard export is a temporary scaffolding, not a contract
+
+### D-020 — Replace `@virn/api` wildcard subpath export with curated entries
+
+**Context:** When the Pass 2.5 Neon walk script needed to call the Workflow Builder
+lib functions directly (bypassing the oRPC HTTP layer because the alternative was a
+browser-side session cookie the script can't acquire), I added an `exports` field
+to `packages/api/package.json`:
+
+```json
+"exports": {
+  ".": "./index.ts",
+  "./modules/workflows/lib": "./modules/workflows/lib/index.ts",
+  "./*": "./*.ts",
+  "./*.ts": "./*.ts"
+}
+```
+
+The first two entries are curated subpath exports. The wildcard `./*` exists ONLY
+because adding any `exports` field turns it into an allowlist -- without the
+wildcard, existing saas-side deep imports (`@virn/api/orpc/router`,
+`@virn/api/modules/payments/procedures/list-purchases`) would have broken at
+type-check time. The wildcard was added reactively to avoid bundling a saas-wide
+import refactor into the walk-script change.
+
+**Decision:** The wildcard is intentional scaffolding, not a permanent
+architectural choice. Before more code accretes deep imports against it, replace
+it with curated subpath exports covering exactly what saas + tooling/scripts
+legitimately need, then migrate the existing deep imports to use those entries.
+The end state is an `exports` field that documents the package's public surface
+explicitly rather than re-exposing the entire internal directory.
+
+**Rationale:**
+
+- The wildcard nullifies the encapsulation the `exports` field is supposed to
+  buy. Any deep import inside `@virn/api` -- private helpers, test fixtures,
+  internal lib modules -- becomes a publicly reachable contract by default.
+- Deep-import surfaces are easy to open and painful to close. Each consumer that
+  starts depending on a wildcard-exposed path becomes a migration step later.
+- The legitimate consumers are small and known today: saas's `orpc/router` +
+  `payments/procedures/list-purchases`, plus tooling/scripts' Builder lib +
+  launch-run. A curated exports map of ~5 entries covers them.
+
+**Concrete cleanup:**
+
+1. Audit current `@virn/api/...` deep imports across saas + tooling/scripts.
+2. Add a curated subpath export entry per legitimate consumer path.
+3. Drop the `./*` / `./*.ts` wildcards.
+4. Re-run `pnpm safety-check` to confirm nothing else was leaning on the
+   wildcards quietly.
+
+**Status:** Not a blocker. The wildcard works today and the Pass 3 build is green
+with it in place. Logged here so the cleanup doesn't drift into ambient debt.

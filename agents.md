@@ -38,6 +38,18 @@ auth/org schema files, or `packages/payments/**` — **read `docs/AUTH_CONTRACT.
 documents what Supastarter/Better Auth ships, what Virn extends, and the pinned invariants that
 must not silently change. Use its §8 pre-merge checklist before requesting review.
 
+## Read before scope or prioritization decisions
+
+For any **product, scope, or prioritization** call — "should we build X now, defer it, or cut
+it?", "what does this screen need to be competitive?", "are we feature-matching or
+differentiating?", "is this feature in or out of MVP?" — **read `docs/STRATEGY.md` first**. It
+holds the competitive positioning, the ranked gaps vs. the reference set
+(Manifestly / Process Street / SweetProcess / Tallyfy), and the live S-0x strategic bets that
+should inform build sequencing. It is *subordinate to* `ARCHITECTURE.md` — a bet may argue for
+promoting a reserved seam, but it can never override an Invariant (§3) or an ADR. When a bet is
+acted on, record the implementation in `docs/DECISIONS.md` referencing the bet (e.g.,
+`per STRATEGY S-02`), and update `docs/BUILD_PLAN.md` if the phase ordering changes.
+
 ## Two safety-check tiers
 
 - `pnpm safety-check` — fast tier (type-check + vitest across the workspace, ~15–20s). Run this

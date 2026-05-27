@@ -30,9 +30,20 @@ export default async function WorkflowBuilderPage({
 	const { organizationSlug, workflowId } = await params;
 	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.library);
 
+	// Serialize the snapshot to the client: Sets don't cross the server/client
+	// boundary cleanly, so we hand over the enabled-capability array; BuilderView
+	// reconstructs a snapshot client-side via buildGatingSnapshot for the palette
+	// gates (UX_SPEC §4.3).
+	const enabledCapabilityKeys = [...snapshot.enabledCapabilities];
+
 	return (
 		<div className="h-full min-h-0 p-4">
-			<BuilderView workflowId={workflowId} isAdminOrOwner={snapshot.isAdminSuperset} />
+			<BuilderView
+				workflowId={workflowId}
+				isAdminOrOwner={snapshot.isAdminSuperset}
+				role={snapshot.role}
+				enabledCapabilityKeys={enabledCapabilityKeys}
+			/>
 		</div>
 	);
 }

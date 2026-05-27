@@ -178,4 +178,22 @@ describe("builder-mutations: split optimistic strategy", () => {
 		expect(body!).not.toMatch(/key:\s*input\.key/);
 		expect(body!).toMatch(/label:\s*input\.label/); // label IS optimistically patched
 	});
+
+	it("useRenameField is AWAIT (no onMutate) -- D-017 + Pass-3 memory: server may collision-resolve", () => {
+		const body = extract("useRenameField");
+		expect(body, "useRenameField should be exported").not.toBeNull();
+		// The whole point of the separate rename hook is await-only semantics. If a
+		// future change reintroduces optimistic patching on the key, this catches it.
+		expect(body!).not.toMatch(/onMutate/);
+		expect(body!).toMatch(/onSuccess/);
+	});
+
+	it("useAddStepDependency / useRemoveStepDependency are AWAIT (low-frequency, refetch picks up edges)", () => {
+		for (const name of ["useAddStepDependency", "useRemoveStepDependency"]) {
+			const body = extract(name);
+			expect(body, `${name} should be exported`).not.toBeNull();
+			expect(body!).not.toMatch(/onMutate/);
+			expect(body!).toMatch(/onSuccess/);
+		}
+	});
 });

@@ -77,6 +77,13 @@ import type { ProfileCapabilityKey } from "@virn/database";
 export const CAPABILITIES = {
 	automationRules: "automation.rules",
 	integrationsWebhooks: "integrations.webhooks",
+	// Workflow Builder palette gates (UX_SPEC §4.3): each authoring affordance
+	// (approval step type, condition + stop-task, guest assignee, advanced field
+	// types) is gated on the org having the matching capability enabled. The
+	// resolver fans these out via PROFILES in @virn/database/queries/config.ts.
+	governanceApprovals: "governance.approvals",
+	guestParticipants: "workflows.guest_participants",
+	fieldsCustomDefinitions: "fields.custom_definitions",
 } as const satisfies Record<string, ProfileCapabilityKey>;
 
 export type CapabilityKey = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];

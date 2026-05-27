@@ -104,6 +104,27 @@ export function useUpdateStep(args: VersionBundleQueryArgs) {
 	return mutation;
 }
 
+/**
+ * Field-key rename. AWAIT, not optimistic -- the server may collision-resolve
+ * (`name` -> `name_2`) and we wait for the real value rather than briefly painting
+ * the wrong key. Same reason creates await. When the server refuses with
+ * FIELD_KEY_LOCKED, the error's `data.referencers` array drives the "clear these
+ * references first" affordance in the field config form (D-017).
+ *
+ * Separate from useUpdateField (which is optimistic for label/required/etc. but
+ * explicitly skips `key` in its optimistic patch) so the await semantics live in
+ * exactly one place and can't drift.
+ */
+export function useRenameField(args: VersionBundleQueryArgs) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.workflows.updateField.mutationOptions(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: bundleKey(args) });
+		},
+	});
+}
+
 export function useUpdateField(args: VersionBundleQueryArgs) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -217,6 +238,30 @@ export function useCreateField(args: VersionBundleQueryArgs) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		...orpc.workflows.createField.mutationOptions(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: bundleKey(args) });
+		},
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Step dependencies (AWAIT -- low-frequency; refetch picks up the new edges)
+// ---------------------------------------------------------------------------
+
+export function useAddStepDependency(args: VersionBundleQueryArgs) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.workflows.addStepDependency.mutationOptions(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: bundleKey(args) });
+		},
+	});
+}
+
+export function useRemoveStepDependency(args: VersionBundleQueryArgs) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.workflows.removeStepDependency.mutationOptions(),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: bundleKey(args) });
 		},
