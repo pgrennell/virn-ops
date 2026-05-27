@@ -55,6 +55,8 @@ import type { VersionEditBundleResponse } from "../lib/types";
 import { BuilderConfigPanel } from "./BuilderConfigPanel";
 import { BuilderTopBar } from "./BuilderTopBar";
 import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
+import { KickoffPanel } from "./KickoffPanel";
+import { KickoffRailEntry } from "./KickoffRailEntry";
 import { StepConfigForm } from "./StepConfigForm";
 
 interface BuilderViewProps {
@@ -104,6 +106,15 @@ export function BuilderView({
 	const editPublishedMutation = useEditPublished();
 	const publishMutation = usePublishVersion();
 	const discardMutation = useDiscardDraft();
+
+	// Reconstruct the gating snapshot from the serialized props + derive the
+	// per-affordance palette gates the config forms read. Memoized so the gates
+	// object is stable across renders (cheap, but the config forms re-render
+	// pointlessly without it).
+	const gates = useMemo<PaletteGates>(() => {
+		const snapshot = buildGatingSnapshot(role, enabledCapabilityKeys);
+		return computePaletteGates(snapshot);
+	}, [role, enabledCapabilityKeys]);
 
 	if (workflowQuery.isLoading) {
 		return <CenteredSpinner label="Loading workflow…" />;
@@ -181,15 +192,6 @@ export function BuilderView({
 			setTopLevelError(err instanceof Error ? err.message : "Couldn't discard the draft.");
 		}
 	};
-
-	// Reconstruct the gating snapshot from the serialized props + derive the
-	// per-affordance palette gates the config forms read. Memoized so the gates
-	// object is stable across renders (cheap, but the config forms re-render
-	// pointlessly without it).
-	const gates = useMemo<PaletteGates>(() => {
-		const snapshot = buildGatingSnapshot(role, enabledCapabilityKeys);
-		return computePaletteGates(snapshot);
-	}, [role, enabledCapabilityKeys]);
 
 	return (
 		<BuilderInner
@@ -283,10 +285,18 @@ function BuilderInner({
 			: "view";
 
 	const [activeStepId, setActiveStepId] = useState<string | null>(() => bundle.steps[0]?.id ?? null);
+	// Kickoff selection is mutually exclusive with a step selection -- the canvas
+	// has one "active editor target" at a time (UX_SPEC §4.3 rail = kickoff + sections
+	// + steps; selecting any of them swaps the center editor). Selecting kickoff clears
+	// activeStepId; selecting a step clears kickoffActive. The wiring below enforces
+	// that pairwise.
+	const [kickoffActive, setKickoffActive] = useState(false);
 
 	// Config-panel focus. Mutually exclusive: either a step's settings are open, OR
 	// a field's, OR the panel's closed. Mode is encoded as `{ kind: "step" | "field",
-	// id }` so the same panel surface handles both.
+	// id }` so the same panel surface handles both. (No "kickoff" kind here -- the
+	// kickoff section's *form* lives in the center editor, not in the slide-in panel;
+	// individual kickoff field config opens via { kind: "field" } same as step fields.)
 	const [panelFocus, setPanelFocus] = useState<
 		| { kind: "step"; stepId: string }
 		| { kind: "field"; fieldId: string }
@@ -383,6 +393,9 @@ function BuilderInner({
 	}
 
 	// AUTHOR -- only reached when isAdminOrOwner && isDraft && !previewActive.
+	// Kickoff fields = field.stepId IS NULL (collected at run start).
+	// Step fields = field.stepId === activeStepId.
+	const kickoffFields = bundle.fields.filter((f) => f.stepId === null);
 	const fieldsForStep = activeStepId
 		? bundle.fields.filter((f) => f.stepId === activeStepId)
 		: [];
@@ -413,10 +426,16 @@ function BuilderInner({
 					<AuthorBody
 						bundle={bundle}
 						activeStepId={activeStepId}
+						kickoffActive={kickoffActive}
+						kickoffFields={kickoffFields}
 						onSelectStep={(id) => {
 							setActiveStepId(id);
-							// Selecting a different step closes any open per-field focus -- the
-							// panel still tracks step config if open, but resets the per-step pick.
+							setKickoffActive(false); // mutually exclusive with kickoff
+							if (panelFocus?.kind === "field") setPanelFocus(null);
+						}}
+						onSelectKickoff={() => {
+							setKickoffActive(true);
+							setActiveStepId(null); // mutually exclusive with step
 							if (panelFocus?.kind === "field") setPanelFocus(null);
 						}}
 						fieldsForStep={fieldsForStep}
@@ -664,7 +683,10 @@ function BuilderShell({
 function AuthorBody({
 	bundle,
 	activeStepId,
+	kickoffActive,
+	kickoffFields,
 	onSelectStep,
+	onSelectKickoff,
 	fieldsForStep,
 	createSection,
 	createStep,
@@ -679,7 +701,18 @@ function AuthorBody({
 }: {
 	bundle: VersionEditBundleResponse;
 	activeStepId: string | null;
+	/** When true, the kickoff form is the active editor target (mutually exclusive
+	 * with activeStepId). UX_SPEC §4.3: kickoff form is a peer of sections + steps
+	 * in the rail; the center swaps to KickoffPanel when this is set. */
+	kickoffActive: boolean;
+	/** Kickoff field rows (field.stepId === null). Sorted by position inside the
+	 * panel; passed in pre-filtered by BuilderInner so this component doesn't
+	 * re-derive. */
+	kickoffFields: VersionEditBundleResponse["fields"];
 	onSelectStep: (stepId: string | null) => void;
+	/** Select the kickoff form as the active editor target. Parent ensures
+	 * mutually-exclusive selection (clears activeStepId). */
+	onSelectKickoff: () => void;
 	fieldsForStep: VersionEditBundleResponse["fields"];
 	createSection: ReturnType<typeof useCreateSection>;
 	createStep: ReturnType<typeof useCreateStep>;
@@ -727,7 +760,15 @@ function AuthorBody({
 
 	return (
 		<div className="flex flex-1 min-h-0">
-			<aside className="w-64 shrink-0 border-r border-border bg-muted/30 overflow-y-auto">
+			<aside className="w-64 shrink-0 border-r border-border bg-muted/30 overflow-y-auto p-2">
+				{/* Kickoff entry above sections + steps per UX_SPEC §4.3.
+				    Composed at AuthorBody level (not inside RunStepList) so the
+				    rail-list primitive stays focused on sections + steps. */}
+				<KickoffRailEntry
+					active={kickoffActive}
+					kickoffFieldCount={kickoffFields.length}
+					onSelect={onSelectKickoff}
+				/>
 				<RunStepList
 					sections={sections}
 					definitionSteps={definitionSteps}
@@ -756,7 +797,27 @@ function AuthorBody({
 				/>
 			</aside>
 			<div className="flex-1 min-w-0 overflow-y-auto">
-				{activeStep ? (
+				{kickoffActive ? (
+					<KickoffPanel
+						kickoffFields={kickoffFields}
+						onAddField={() =>
+							createField.mutate({
+								workflowVersionId: bundle.version.id,
+								stepId: null,
+								label: "Untitled kickoff field",
+								fieldType: "text",
+							})
+						}
+						onUpdateFieldLabel={(fieldId, value) =>
+							updateField.mutate({ fieldId, label: value })
+						}
+						onUpdateFieldRequired={(fieldId, value) =>
+							updateField.mutate({ fieldId, isRequired: value })
+						}
+						onDeleteField={(fieldId) => deleteField.mutate({ fieldId })}
+						onConfigureField={(fieldId) => onConfigureField(fieldId)}
+					/>
+				) : activeStep ? (
 					<RunStepPanel
 						data={{
 							runStepId: activeStep.id,
