@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 
+import { handleMcpRequest } from "./mcp";
 import { openApiHandler, rpcHandler } from "./orpc/handler";
 
 export { router } from "./orpc/router";
@@ -31,6 +32,29 @@ export const app = new Hono()
 	.post("/webhooks/payments", (c) => paymentsWebhookHandler(c.req.raw))
 	// Health check
 	.get("/health", (c) => c.text("OK"))
+	// Phase 11b — MCP endpoint (JSON-RPC over POST). Bearer credential auth flows
+	// through the same agentOrUserOrgProcedure middleware as oRPC; this route is just a
+	// protocol translator. Notifications (requests without an id) return 204.
+	.post("/mcp", async (c) => {
+		let body: unknown;
+		try {
+			body = await c.req.json();
+		} catch {
+			return c.json(
+				{
+					jsonrpc: "2.0",
+					id: null,
+					error: { code: -32700, message: "Parse error: invalid JSON body." },
+				},
+				{ status: 400 },
+			);
+		}
+		const result = await handleMcpRequest(body, c.req.raw.headers);
+		if (result === null) {
+			return c.body(null, 204);
+		}
+		return c.json(result);
+	})
 	// oRPC handlers (for RPC and OpenAPI)
 	.use("*", async (c, next) => {
 		const context = {
