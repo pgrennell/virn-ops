@@ -25,6 +25,7 @@ describe("computePaletteGates -- capability -> palette flag mapping (UX_SPEC §4
 		const gates = computePaletteGates(snapshotWith([]));
 		expect(gates).toEqual({
 			approvalStepType: false,
+			aiStepType: false,
 			conditionEditor: false,
 			stopTaskEditor: false,
 			guestAssignees: false,
@@ -37,6 +38,12 @@ describe("computePaletteGates -- capability -> palette flag mapping (UX_SPEC §4
 		expect(gates.approvalStepType).toBe(true);
 		expect(gates.conditionEditor).toBe(false);
 		expect(gates.stopTaskEditor).toBe(false);
+	});
+
+	it("AI step type unlocks with workflows.agent_steps (Phase 8 step 4 lift)", () => {
+		const gates = computePaletteGates(snapshotWith(["workflows.agent_steps"]));
+		expect(gates.aiStepType).toBe(true);
+		expect(gates.approvalStepType).toBe(false);
 	});
 
 	it("automation.rules unlocks BOTH conditionEditor and stopTaskEditor (one cap, two affordances)", () => {
@@ -58,11 +65,12 @@ describe("computePaletteGates -- capability -> palette flag mapping (UX_SPEC §4
 	});
 });
 
-describe("getStepTypeOptions -- approval gates on governance.approvals", () => {
+describe("getStepTypeOptions -- approval + ai gate on their capabilities; code stays reserved", () => {
 	const allOff = computePaletteGates(snapshotWith([]));
 	const allOn = computePaletteGates(
 		snapshotWith([
 			"governance.approvals",
+			"workflows.agent_steps",
 			"automation.rules",
 			"workflows.guest_participants",
 			"fields.custom_definitions",
@@ -81,15 +89,24 @@ describe("getStepTypeOptions -- approval gates on governance.approvals", () => {
 		expect(getStepTypeOptions(allOn).find((o) => o.value === "approval")?.enabled).toBe(true);
 	});
 
+	it("ai is DISABLED when workflows.agent_steps is off, ENABLED when on (Phase 8 step 4 lift)", () => {
+		expect(getStepTypeOptions(allOff).find((o) => o.value === "ai")?.enabled).toBe(false);
+		expect(getStepTypeOptions(allOn).find((o) => o.value === "ai")?.enabled).toBe(true);
+	});
+
 	it("disabled options carry an actionable disabledReason (not silently hidden)", () => {
 		const approval = getStepTypeOptions(allOff).find((o) => o.value === "approval");
 		expect(approval?.disabledReason).toMatch(/Governance/i);
 		expect(approval?.disabledReason).toMatch(/Configuration/);
+
+		const ai = getStepTypeOptions(allOff).find((o) => o.value === "ai");
+		expect(ai?.disabledReason).toMatch(/AI Agent Steps/i);
+		expect(ai?.disabledReason).toMatch(/Configuration/);
 	});
 
-	it("code / ai are always reserved (capability-independent)", () => {
+	it("code stays always reserved (no script-execution capability today)", () => {
 		expect(getStepTypeOptions(allOn).find((o) => o.value === "code")?.enabled).toBe(false);
-		expect(getStepTypeOptions(allOn).find((o) => o.value === "ai")?.enabled).toBe(false);
+		expect(getStepTypeOptions(allOff).find((o) => o.value === "code")?.enabled).toBe(false);
 	});
 });
 

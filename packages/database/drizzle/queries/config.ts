@@ -35,11 +35,16 @@ export type EnablementProfile = "checklist" | "sop" | "automation";
  * `applyEnablementProfile`, so org-level custom overrides outside profile scope survive.
  */
 export const PROFILES = {
-	checklist: ["workflows.recurring_runs", "workflows.kickoff_forms"],
+	checklist: [
+		"workflows.recurring_runs",
+		"workflows.kickoff_forms",
+		"workflows.agent_steps",
+	],
 	sop: [
 		"workflows.recurring_runs",
 		"workflows.kickoff_forms",
 		"workflows.guest_participants",
+		"workflows.agent_steps",
 		"governance.approvals",
 		"governance.acknowledgments",
 		"governance.suggestions",
@@ -50,6 +55,7 @@ export const PROFILES = {
 		"workflows.recurring_runs",
 		"workflows.kickoff_forms",
 		"workflows.guest_participants",
+		"workflows.agent_steps",
 		"governance.approvals",
 		"governance.acknowledgments",
 		"governance.suggestions",

@@ -37,6 +37,14 @@ const CAPABILITIES: CapabilitySeed[] = [
 		sortOrder: 30,
 	},
 	{
+		key: "workflows.agent_steps",
+		name: "AI agent steps",
+		description:
+			"Lift step.type=ai from reserved to live -- authors can mark steps as agent actions (one of the three S-07 modes: human / AI-assisted / automated). Per the 2026-05-26 pivot, AI is v1; default ON across all profiles.",
+		defaultEnabled: true,
+		sortOrder: 35,
+	},
+	{
 		key: "automation.rules",
 		name: "Automation rules",
 		description:

@@ -80,11 +80,16 @@ export const CAPABILITIES = {
 	integrationsWebhooks: "integrations.webhooks",
 	// Workflow Builder palette gates (UX_SPEC §4.3): each authoring affordance
 	// (approval step type, condition + stop-task, guest assignee, advanced field
-	// types) is gated on the org having the matching capability enabled. The
-	// resolver fans these out via PROFILES in @virn/database/queries/config.ts.
+	// types, AI step type) is gated on the org having the matching capability
+	// enabled. The resolver fans these out via PROFILES in
+	// @virn/database/queries/config.ts.
 	governanceApprovals: "governance.approvals",
 	guestParticipants: "workflows.guest_participants",
 	fieldsCustomDefinitions: "fields.custom_definitions",
+	// Lifts step.type=ai from reserved to live (Phase 8 step 4). Default ON across
+	// all profiles per the 2026-05-26 pivot — AI is v1, not a deferred power-user
+	// feature.
+	agentSteps: "workflows.agent_steps",
 } as const satisfies Record<string, ProfileCapabilityKey>;
 
 export type CapabilityKey = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];

@@ -8,6 +8,7 @@
 //
 // Per-affordance capability mapping (confirmed against UX_SPEC §4.3):
 //   - approval step type        -> governance.approvals
+//   - AI step type              -> workflows.agent_steps  (lifted from reserved, Phase 8 step 4)
 //   - conditions (show-when)    -> automation.rules
 //   - stop-tasks (Blocked-by)   -> automation.rules
 //   - guest assignees           -> workflows.guest_participants
@@ -28,6 +29,7 @@ import type { FieldType, StepType } from "@runs/types";
 
 export interface PaletteGates {
 	approvalStepType: boolean;
+	aiStepType: boolean;
 	conditionEditor: boolean;
 	stopTaskEditor: boolean;
 	guestAssignees: boolean;
@@ -37,6 +39,7 @@ export interface PaletteGates {
 export function computePaletteGates(snapshot: GatingSnapshot): PaletteGates {
 	return {
 		approvalStepType: isEnabled(CAPABILITIES.governanceApprovals, snapshot),
+		aiStepType: isEnabled(CAPABILITIES.agentSteps, snapshot),
 		conditionEditor: isEnabled(CAPABILITIES.automationRules, snapshot),
 		stopTaskEditor: isEnabled(CAPABILITIES.automationRules, snapshot),
 		guestAssignees: isEnabled(CAPABILITIES.guestParticipants, snapshot),
@@ -53,7 +56,8 @@ export interface StepTypeOption {
 	label: string;
 	description: string;
 	/** True when the org's capability set permits this type today; false ones render
-	 * disabled with a "needs X" hint. Reserved types (code, ai) are always disabled. */
+	 * disabled with a "needs X" hint. `code` stays always-reserved (no script-execution
+	 * yet); `ai` now gates on workflows.agent_steps (Phase 8 step 4 lift). */
 	enabled: boolean;
 	disabledReason?: string;
 }
@@ -76,6 +80,16 @@ export function getStepTypeOptions(gates: PaletteGates): StepTypeOption[] {
 				: "Needs the Governance — Approvals capability. Turn it on in Settings → Configuration.",
 		},
 		{
+			value: "ai",
+			label: "AI",
+			description:
+				"Handled by an agent at run time. Assignment is the agent picked at launch (Mode-aware launch — Phase 8 step 3).",
+			enabled: gates.aiStepType,
+			disabledReason: gates.aiStepType
+				? undefined
+				: "Needs the AI Agent Steps capability. Turn it on in Settings → Configuration.",
+		},
+		{
 			value: "heading",
 			label: "Heading",
 			description: "A section label; not actionable.",
@@ -93,13 +107,6 @@ export function getStepTypeOptions(gates: PaletteGates): StepTypeOption[] {
 			description: "Reserved — coming soon.",
 			enabled: false,
 			disabledReason: "Reserved step type — coming with the script-execution capability.",
-		},
-		{
-			value: "ai",
-			label: "AI",
-			description: "Reserved — coming soon.",
-			enabled: false,
-			disabledReason: "Reserved step type — coming with the AI capability.",
 		},
 	];
 }
