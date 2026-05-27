@@ -19,15 +19,23 @@ UI/UX and navigation specification for Virn Ops.
 
 ## 1. Scope & principles
 
-- **End goal:** balanced for builders and operators. **Current focus:** admin + builder screens.
-  Operator screens are deferred but reachable by admins for testing.
-- **Synthesis, not copy.** Best of Manifestly (recurring runs), Process Street (unified
-  library + My Work), SweetProcess (SOP/policy reading & governance), Tallyfy (process builder
-  + automation). The result is one coherent IA, not any single tool reproduced.
+- **End goal:** balanced for builders and operators. Post-pivot (D-021), **both admin/builder
+  and operator screens are in v1 scope** — vertical-first (property ops) launch requires
+  execution surfaces, not just authoring. The operator screens in §5 are no longer "build
+  deferred."
+- **Coherent IA, vertical-anchored.** The information architecture synthesizes the
+  data-shape lessons of the original four reference products (Manifestly recurring runs,
+  Process Street library + My Work, SweetProcess SOP governance, Tallyfy guest model +
+  inline conditions — see STRATEGY Appendix A for the historical analysis), but the v1
+  product story is **one authored procedure → three execution modes** (STRATEGY S-07).
+  Screens reflect that wedge: every run launch carries a mode (`human | ai_assisted |
+  automated`); the Run view shows where agents act and where humans take over.
 - **Aesthetic:** flat, clean, generous whitespace, native-feeling B2B SaaS. Sentence case
   throughout. Tokens come from the `frontend-design` skill at build time.
 - **Wireframes:** static mockups, one HTML file per screen, in `docs/wireframes/`. Linked from
-  each screen spec below. Reference only — not production markup.
+  each screen spec below. Reference only — not production markup. Existing wireframes
+  predate the pivot; refresh as each screen is built to reflect mode-aware launch + run
+  surfaces.
 
 ---
 
@@ -64,12 +72,15 @@ This is the spine of the whole product — Configuration (capabilities) and Memb
 
 | Group | Items | Typical roles | Phase |
 |---|---|---|---|
-| Operate | Home · My work · Runs | Operator, Admin (Builder monitors) | `[DESIGNED · build deferred]` |
-| Build | Library · Templates · Automations¹ | Builder, Admin | `[NOW]` |
-| Understand | Reports | Builder, Admin | `[DEFER]` |
-| Admin | Settings → Configuration · Members & roles · Branding · Integrations¹ · Billing · Org general | Admin/Owner | `[NOW]` |
+| Operate | Home · My work · Runs | Operator, Admin (Builder monitors) | `[NOW · v1 per D-021]` |
+| Build | Library · Templates · Automations¹ · KB (reader)² | Builder, Admin | `[NOW]` |
+| Understand | Monitor³ · Reports | Builder, Admin | `[NOW (thin) · v1]` / `[DEFER (full Reports)]` |
+| Admin | Settings → Configuration · Members & roles · Branding · Integrations¹ · Billing · Org general · Compliance/Evidence⁴ | Admin/Owner | `[NOW]` |
 
 ¹ Automations and Integrations are gated by the automation/integrations capability.
+² Reader-facing KB surface (S-03) — distinct from the builder Library; v1 per D-021.
+³ Lightweight monitor (S-06 thin) — per-workflow runs index + org-level rollups; v1 per D-021. Full Reports is post-v1.
+⁴ Thin compliance/evidence surface (S-10) — v1 per D-021; gated by a `compliance-pack` capability.
 
 ---
 
@@ -189,10 +200,20 @@ Each spec: purpose · layout · key elements · states · gating · MVP cut · d
 
 ---
 
-## 5. Operator screens `[DESIGNED · build deferred]`
+## 5. Operator screens `[NOW · v1 per D-021]`
 
-Designed; build comes after the admin + builder set (they need the run engine, Phase 3). Admins
-can reach them now for testing. These are the runtime mirror of the build screens.
+Per the pivot (DECISIONS.md D-021), operator screens are **in v1**, not deferred. The
+vertical-first launch (property ops) is a runtime-heavy use case — housekeepers,
+inspectors, vendors, and property managers live in the run/checklist surfaces every day.
+Build order: Phase 7 in BUILD_PLAN.md (after the builder + library set already shipped).
+These are the runtime mirror of the build screens; admins can reach them for testing in
+the meantime.
+
+**Mode-aware launch + run surfaces.** Per STRATEGY S-07, `runs.launch` carries a mode hint
+(`human | ai_assisted | automated`). The Run / Checklist view (§5.3) surfaces which steps
+an agent will handle and where the handoff points are. The Guest run view (§5.4) is human
+mode only by definition. The mode selector and agent-step affordances are added when
+Phase 8 (S-07 wedge) lands; the screens below specify the human-mode baseline.
 
 ### 5.1 Home — bridge dashboard
 
@@ -309,18 +330,46 @@ can reach them now for testing. These are the runtime mirror of the build screen
 
 ## 8. Build-order tie-in
 
-UI is BUILD_PLAN Phase 5, on top of the config system (Phase 2), run engine (Phase 3), and oRPC
-(Phase 4). Within the UI phase, build in this order: app shell + gating helper → Configuration →
-Members & Roles → Library → Workflow Builder. Operator screens follow once the run engine UI is
-needed.
+Per BUILD_PLAN.md v2 (post-pivot, D-021). Foundation phases 0–4 are complete; the
+Workflow Builder (Pass 1–3) and Library (Pass 1) are shipped. The v1 phases ahead, in
+order:
+
+7. Operator surfaces (Home / My Work / Run view / Guest run view) — §5 above.
+8. One-procedure-three-modes wedge (S-07) — agent assignee model + mode selector on launch.
+9. Data Sets minimal subset (S-02).
+10. Reader-facing KB surface (S-03) — *not* specified in this UX_SPEC yet; add when built.
+11. MCP agent surface (S-01a) — backend; UI implications are the agent-assignee
+    affordances in §5.3 (Run view).
+12. AI authoring (S-01b/c) — adds prompt/doc ingress to the Builder's create flow.
+13. Tango/Scribe import (S-01d) — adds an import-from-export option in the Library + Builder.
+14. Lightweight monitor (S-06) — Understand nav group, thin Reports.
+15. Thin compliance / evidence surface (S-10) — Admin nav, gated by capability.
+16. Governance flows (approval/review/acknowledge/suggestion UIs).
+17. Property-ops pack — content + seeded templates, no new UI surfaces beyond default-populated content.
+18. Automation execution — backend; UI implications are in the Builder + Run view.
+19. v1 polish + launch readiness.
+
+Reader-KB (Phase 10), agent-step affordances in Run view (Phase 8 + 11), mode selector on
+launch (Phase 8), and prompt/doc/import paths on Create (Phases 12–13) are the
+UX-relevant additions this spec needs to absorb as those phases are built. Add screen
+specs incrementally rather than predicting them.
 
 ---
 
 ## 9. Open / reserved
 
-- All screens now specified (admin, builder, operator, guest, onboarding) — next is implementation.
+- Admin / builder / operator / guest / onboarding screens all specified — next is
+  implementation per BUILD_PLAN.md v2.
+- **Specs to add as phases land (post-pivot, D-021):**
+  - Reader-facing KB surface (Phase 10 — S-03).
+  - Mode selector on `runs.launch` + agent-step affordances in Run view (Phase 8 — S-07).
+  - Prompt → workflow create flow + doc-import (Phase 12 — S-01b/c).
+  - Tango/Scribe import flow (Phase 13 — S-01d).
+  - Monitor / per-workflow runs index (Phase 14 — S-06 thin).
+  - Compliance / evidence surface (Phase 15 — S-10).
 - Library grid view + saved/multi-filter views.
 - Granular per-action permission matrix UI (area-level ships first).
 - Branding / white-label settings screen (premium tier; see BRANDING.md).
-- Reports / analytics screens.
+- Full Reports / analytics screens (post-v1; thin monitor in v1 covers the immediate need).
 - "View as role" admin preview switcher.
+- Slack/Teams in-flow delivery surfaces (post-v1 — S-09).

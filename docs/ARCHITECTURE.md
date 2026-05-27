@@ -2,7 +2,7 @@
 
 Foundational architecture decision record for the Virn Ops codebase.
 
-**Status:** Draft v2 · **Date:** 2026-05-25 · **Owner:** Paul
+**Status:** Draft v3 (post-pivot framing — see DECISIONS.md D-021) · **Date:** 2026-05-26 · **Owner:** Paul
 
 > **For AI agents (Claude Code, etc.):** Load this file into context for any task that
 > touches schema, tenancy, configuration, automation, or product structure. The
@@ -14,11 +14,21 @@ Foundational architecture decision record for the Virn Ops codebase.
 
 ## 1. Vision
 
-**Virn Ops** is an enterprise-grade, multi-tenant **platform** for recurring checklists, living
-SOP/policy knowledge bases, and no-code workflow automation. It is configured into distinct
-**process-shaped products** — marketing-agency ops, STR turnover & housekeeping, compliance SOPs,
-generic business processes — via solution packs, not code forks (the ServiceNow model, where
-process applications are configuration and data on a shared core).
+**Virn Ops** is the **operating system for property operations** — turnover, inspections,
+maintenance routing, vendor & tenant onboarding — built on a substrate where **one authored
+procedure runs three ways**: as a human checklist, an AI-assisted checklist, or a fully
+automated agent run. Same content, same audit trail, the operator chooses the execution mode
+per run.
+
+The **v1 product** is the property-ops vertical, with STR turnover & housekeeping as the
+concrete first shape. The **underlying engine** is enterprise-grade, multi-tenant
+infrastructure for recurring checklists, living SOP/policy knowledge bases, no-code workflow
+automation, and an **agent-native action surface** (MCP) — all on a single content-object
+substrate. The engine is **architected to support** distinct process-shaped products
+(marketing ops, agency client ops, compliance SOPs, HR ops) via solution packs the same
+ServiceNow way — but that platform-of-products moat is a **long-term destination**, not the
+v1 public story. Win property ops first; the pack model repeats the win post-v1. See
+`STRATEGY.md` §1 (the bet) and S-11 (the long-term moat preserved as architecture).
 
 ### Scope of the platform model — what consolidates and what does not
 
@@ -30,22 +40,30 @@ own databases** that share the platform *foundation* (identity, billing, org mod
 conventions, and optionally the Ops workflow engine for their process features such as work orders,
 turnover, and inspections) — but they are **not** packs on Ops. The end state is a **product family
 on a shared foundation**, not a single app. Even within one industry the line holds: property
-*operations* (turnover, maintenance, inspections) is process-shaped and Ops-appropriate; property
-*records* (GL, leases, invoices) are ERP-shaped and belong to the separate app.
+*operations* (turnover, maintenance, inspections) is process-shaped and Ops-appropriate (and is
+Virn Ops's v1 focus); property *records* (GL, leases, invoices) are ERP-shaped and belong to
+Virn PM.
 
 ### Guiding principles
 
-1. **Ambitious model, narrow first build.** The data model reserves the extensibility for a
-   platform-of-products. The MVP exercises exactly one slice of it (kernel + workflow engine +
-   config + one pack + library). Do not build the generic meta-platform before one real vertical is
-   in users' hands.
-2. **Configuration over code — for process-shaped products.** A new process vertical or customer
+1. **Vertical-first, then platform.** Win property operations decisively before leaning on the
+   platform-of-products mechanic. The data model reserves the extensibility; the v1 build
+   exercises *one* slice (kernel + workflow engine + config + the property-ops pack + library +
+   reader-KB + agent surface). The platform-of-products moat (S-11) matures post-v1.
+2. **Agent-native by construction.** Org-scoping, append-only audit, definition/execution split,
+   and stable field keys are not just hygiene — they are the substrate that makes a safe
+   agent action surface (MCP, S-01a) tractable. Treat the invariants in §3 as the foundation of
+   the unfair advantage, not just correctness plumbing.
+3. **One content object, many views.** Procedures, KB articles, training guides, and agent
+   instructions are different *views* of the same `workflow_version` substrate (`workflow.type`
+   discriminator). No new content-object table without an ADR (STRATEGY S-08).
+4. **Configuration over code — for process-shaped products.** A new process vertical or customer
    customization is a bundle of configuration (capabilities, settings, templates, taxonomies, field
    definitions, roles) — never a fork. ERP-class verticals are separate apps on the shared
    foundation, not configurations.
-3. **Metadata-driven extensibility.** Customers and verticals extend the data model through
+5. **Metadata-driven extensibility.** Customers and verticals extend the data model through
    registered definitions + validated JSONB, not new hand-written tables.
-4. **Strict tenancy.** Everything a customer runs is org-scoped. The only deliberate cross-tenant
+6. **Strict tenancy.** Everything a customer runs is org-scoped. The only deliberate cross-tenant
    exceptions are the publishable library and platform-owned packs.
 
 ---
@@ -141,6 +159,68 @@ Four layers, top configures down, each rests on the one below.
 - **Now:** an `entitlement`/plan → capability-grant mapping. **Defer:** usage metering, multiple
   separately-billed products.
 
+### ADR-006 — Agent principals: org-scoped identity + per-run participant binding
+
+- **Context.** STRATEGY S-01 (agent-native action surface via MCP) and S-07
+  (one-procedure-three-modes: human / AI-assisted / automated) require a third actor
+  kind alongside `user` and `guest`. An agent (an AI principal that drives runs via the
+  MCP surface) needs identity (name, credentials, capability grants), org scope, and a
+  way to be assigned to `run_step` rows. Today's `participant` table is per-run scoped —
+  a participant row exists in the context of a specific run — which fits humans and
+  guests but doesn't fit agents (long-lived, used across many runs over months). The
+  open question (resolved here) was whether to add agents as a `participant.kind` value
+  only, add a separate `agent` table only, or hybridize.
+- **Decision.** **Hybrid.** A new org-scoped `agent` table holds the long-lived identity
+  (name, description, credential hash, capability grants, `isActive`, audit metadata).
+  The existing `participant` table gains a third kind: `participant.kind ∈ {user, guest,
+  agent}`, with a new nullable `agentId` FK pointing at `agent`. `run_step_assignee`
+  is unchanged — it continues to FK to `participant.id` regardless of kind. The MCP
+  server authenticates an incoming agent action via the credential, resolves to
+  `agent.id`, finds-or-creates the `participant` row for the target run with
+  `kind=agent` + `agentId` set, then writes through the **same** oRPC procedures the
+  human UI uses (no parallel write path — STRATEGY S-01a). Agent actions land in
+  `audit_log` with a new `actor_kind ∈ {user, guest, agent}` enum populated from the
+  acting participant.
+- **Why hybrid, not either pure option.** `participant`-only conflates per-run binding
+  with long-lived org identity, has no natural home for credentials, and forces agents
+  to either churn participant rows or warp the per-run scoping. Separate-`agent`-only
+  forks the assignee model — `run_step_assignee` becomes polymorphic across two FK
+  targets, doubling the join complexity of every assignment query. The hybrid keeps
+  the assignee infrastructure intact (one assignee model, three principal kinds via
+  the existing `participant` row) and gives credentials / capability grants a proper
+  home on `agent` (the GitHub-App / AWS-service-account shape). One assignee model
+  in the runtime, one identity table in the control plane.
+- **Capability composition.** Agent capability grants compose into the existing
+  two-axis gating (capability × permission, UX_SPEC §2). An agent only sees / acts on
+  workflows where `capability_enabled(org) ∧ agent_has_capability(agentId, capability)`.
+  Agents are subject to the same `capability` gates as humans — a workflow type the org
+  hasn't enabled is unreachable for any agent in that org. Per-agent grants are an
+  *additional* narrowing on top of the org-level capability (an agent may be granted
+  fewer capabilities than the org has enabled; never more).
+- **Now:** the `agent` table (Phase 8 — `cuid` id, `organizationId NOT NULL`,
+  `name`, `description`, `credentialHash`, `isActive`, timestamps); `participant.kind`
+  enum extended to include `agent`; nullable `participant.agentId` FK with a CHECK
+  enforcing `kind='agent' ⇔ agentId IS NOT NULL`; `audit_log.actorKind` enum column;
+  per-agent capability grants reusing the existing `capability` catalog via an
+  `agent_capability` join. **Defer:** cross-org agents, agent-to-agent delegation,
+  agent OAuth flows (v1 uses opaque API-key-shaped credentials), agent fine-grained
+  ACLs beyond capability gating.
+- **Rationale.** This is the load-bearing actor decision that S-01 (MCP) and S-07
+  (three-mode runs) sit on. Getting it wrong is expensive — every assignment query,
+  every audit-log read, every capability gate threads through it. The hybrid is the
+  shape every mature system converged on once service-account-like principals
+  appeared (GitHub Apps, AWS IAM roles, Slack bots). It also keeps Invariant #1
+  (`organizationId NOT NULL` on tenant-owned rows) clean — `agent` is org-scoped at
+  the top level, `participant` already is, and the join chain to `run_step_assignee`
+  is unchanged.
+- **Consequences.** Phase 8 (S-07 wedge) lands the `agent` table + `participant` /
+  `audit_log` migrations in one schema change before any agent-aware code ships.
+  Phase 11 (MCP) layers on top: the MCP server is the credential-validating front
+  door that resolves an incoming request to an `agent.id` + capability set. The
+  existing `run_step_assignee` join, the existing audit pattern, and the existing
+  capability resolver all work unchanged for agent principals — only the writers
+  (`assignAgent`, `launchRunWithMode`) need to know about the new kind.
+
 ---
 
 ## 5. Domain-core decisions (carried forward)
@@ -184,29 +264,38 @@ Four layers, top configures down, each rests on the one below.
 
 ---
 
-## 7. MVP scope
+## 7. MVP scope (post-pivot — see DECISIONS.md D-021 and BUILD_PLAN.md)
 
-| Area | In v1 | Reserved (seam only) | Deferred |
+| Area | In v1 | Reserved (seam only) | Deferred (v1.1+) |
 |---|---|---|---|
 | Tenancy / auth | Org-scoped, Better Auth, custom org procedures | Business-unit hierarchy | Hard domain separation |
-| RBAC | Org roles + custom roles + basic ACL | Groups | ABAC |
-| Config | Capability/setting system + 1 pack | Pack marketplace | Third-party packs |
+| RBAC | Org roles + custom roles + basic ACL + agent principals | Groups | ABAC |
+| Config | Capability/setting system + 1 pack (property-ops) | Pack marketplace | Third-party packs |
 | Workflow core | Definition/execution split, versioning, snapshot | — | — |
 | Automation | Run-level rules on the general engine | Non-run events | SLA engine, full action catalog |
 | Fields | `field` + `field_definition` registry (JSONB) | `object_type` | No-code object builder |
-| Governance | Approvals, reviews, acknowledgments | — | General approval engine |
+| Governance | Approvals, reviews, acknowledgments + thin evidence surface (S-10) | — | General approval engine; property-ops compliance flavors |
 | Library | Private/org/public listings, install-as-clone, first-party seed | Reviews | Monetized marketplace |
-| Data sets | — | Schema reserved | Full build |
-| Billing | Entitlement → capability grants | Usage metering | Multi-product billing |
-| Integrations | Outbound webhooks + Inngest | Connection registry | iPaaS hub |
-| Analytics | `activity_event` stream + run/step status | Saved views | BI / dashboards |
-| Platform | — | — | Multi-region / data residency |
+| **Reader-facing KB (S-03)** | Read/search/acknowledge over `workflow.type ∈ {document, policy}` | Slack/Teams delivery (S-09) | — |
+| **Data sets (S-02 minimal)** | `data_set` + single-field `data_set_record` + `lookup` field type | Multi-field records, full builder | Full build |
+| **AI authoring (S-01b/c)** | Prompt→workflow + doc→workflow → draft `workflow_version` | — | Scribe Optimize-style "what should we automate" |
+| **AI agent surface (S-01a, MCP)** | MCP server exposing workflow/run procedures; agent principal kind; audited via `audit_log` | Agent-driven cross-org orchestration | — |
+| **Tango/Scribe import (S-01d)** | Import their export formats as draft `workflow_version` | — | Native screen-recording capture |
+| **Three execution modes (S-07)** | `runs.launch` mode selector (`human \| ai_assisted \| automated`); `step.type=ai` lifted from reserved | — | — |
+| **Operator surfaces (UX_SPEC §5)** | Home, My Work, Run view, Guest run view | — | — |
+| **Monitor (S-06 thin)** | Per-workflow runs index + org-level rollups | — | Full Reports / BI |
+| Billing | Entitlement → capability grants; single property-ops plan | Usage metering | Multi-product billing |
+| Integrations | Outbound webhooks + Inngest + vertical-targeted (Hostfully/Guesty/Airbnb/Stripe/Twilio) | Connection registry | iPaaS hub |
+| Analytics | `activity_event` stream + run/step status + thin monitor (S-06) | Saved views | BI / dashboards |
+| Platform | — | — | Multi-region / data residency, white-label |
 
-**First Ops vertical (pack):** pick a genuinely **process-shaped** one and build it end-to-end. STR
-turnover & housekeeping is the natural first pack — it's pure process work, leverages your
-operational knowledge, and is self-dogfoodable. (Full property management is **not** a pack — that's
-Virn PM, the separate app. Only its process slices, e.g. turnover/work orders, are Ops-appropriate.)
-Prove one pack; further process verticals become a packaging exercise.
+**v1 vertical (pack):** Property operations. Concrete first shape: **STR turnover &
+housekeeping**. Concentric expansion *within* property ops post-v1 (inspections,
+maintenance routing, vendor/tenant/owner onboarding) before any second-vertical pack.
+**This is locked**, no longer an open question — see STRATEGY S-04 and D-021. Full
+property management remains a separate app (Virn PM) on the shared foundation; only
+its process slices are Ops-appropriate. Prove one pack on one vertical deeply; the
+pack model repeats post-v1.
 
 ---
 
@@ -220,10 +309,24 @@ Turborepo + pnpm, `@virn/*` scope. Fresh Supastarter clone with the Propvana KEE
 
 ## 9. Open questions
 
-- First Ops vertical (pack): STR turnover vs. marketing ops vs. compliance SOPs (all process-shaped).
+**Resolved by the pivot (D-021):** First Ops vertical is **locked to property operations**
+with STR turnover & housekeeping as the concrete first shape — was previously an open
+question, no longer is.
+
+**Still open:**
+
 - Custom-object framework depth for MVP: JSONB-on-core-records only, or a minimal `object_type` +
   generic `record` table from the start?
 - How far to take the shared **foundation** between Ops and Virn PM (shared identity now; shared
-  workflow engine for PM's process features later?).
+  workflow engine for PM's process features later?). Especially relevant now that both target
+  property — Virn Ops (operations) and Virn PM (records / accounting) on the same property data.
 - Approval engine: per-feature now, or one generalized engine sooner than planned?
 - Library monetization: free-only at launch, or reserve `template_purchase` from day one?
+- AI sequencing within v1: MCP (S-01a) first or prompt→workflow (S-01b) first? See
+  STRATEGY §8 — working assumption is MCP first.
+- Data Sets minimal-subset boundary: confirm the single-field `data_set_record` shape per
+  STRATEGY §8 working assumption.
+- ~~Agent principal model: should `participant.kind = agent` be a first-class participant
+  kind, or a separate `agent` table?~~ **Resolved by ADR-006 (2026-05-27): hybrid —
+  org-scoped `agent` table for identity/credentials + `participant.kind=agent` +
+  `participant.agentId` FK for per-run binding. `run_step_assignee` unchanged.**

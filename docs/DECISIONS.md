@@ -645,3 +645,241 @@ explicitly rather than re-exposing the entire internal directory.
 
 **Status:** Not a blocker. The wildcard works today and the Pass 3 build is green
 with it in place. Logged here so the cleanup doesn't drift into ambient debt.
+
+---
+
+## 2026-05-26 — Hard pivot: vertical-first property ops + AI-credible v1
+
+### D-021 — Pivot from "platform of process-shaped products" lead to "property-ops OS" lead; AI moves from deferred to in-scope for v1
+
+**Context:** STRATEGY.md v1 (drafted same day) anchored to four reference products
+(Manifestly, Process Street, SweetProcess, Tallyfy), framed the public story as
+"platform of process-shaped products," and parked AI (S-01), Data Sets (S-02),
+reader-KB (S-03), and the agent-native MCP surface (S-01a) in the reserved /
+deferred column. A growth-scorecard competitive read prepared 2026-05-26 sharpened
+the picture: the four reference products are flat-or-fading (Process Street's last
+raise was 2020; SweetProcess is a $2.8M / 13-year lifestyle business), while the
+capital and mindshare in the category have moved decisively to two cohorts — the
+AI-native orchestrators (n8n at $2.5B / $40M+ ARR / 10× usage YoY; Gumloop;
+Lindy) and the AI-powered capture / "what should we automate" tier (Scribe at
+$1.3B / 78K paying orgs / 2× rev YoY; Tango; Guidde). The category has moved while
+we were architecting against the wrong anchors. Continuing on the v1 plan would
+ship a 2026 product that looks like 2023.
+
+**Decision:** A hard pivot — narrowed positioning, re-anchored competitive frame,
+re-sequenced build plan. Four interlocking moves:
+
+1. **Lock the vertical.** Property operations (STR turnover & housekeeping as
+   the concrete first shape; expanding to inspections, maintenance routing,
+   vendor/tenant onboarding). Stops being "the natural first pack among
+   several" — becomes *the product* for the next 12 months. Ties directly into
+   Virn PM as adjacent product.
+2. **Re-anchor the competitive frame.** Demote Manifestly / Process Street /
+   SweetProcess / Tallyfy to *data-shape lessons* — they are no longer the
+   strategic competitors. Promote the AI-native cohort (Scribe, Tango, n8n,
+   Lindy, Gumloop) to the strategic frame. We do not try to be n8n; we win the
+   property-ops vertical decisively on an *AI-credible* substrate.
+3. **Promote the wedge.** S-07 (one authored procedure → three execution modes:
+   human checklist / AI-assisted / fully automated) becomes the headline
+   product story. This is the unclaimed white space — only Tango (in capture)
+   is gesturing at it, and our single-content-object substrate (Invariants
+   #2–#5) is what makes it tractable for us and hard for incumbents to
+   retrofit. Distinct framing from "we have AI features."
+4. **Re-sequence the build.** AI authoring + the agent-native MCP surface +
+   Data Sets (minimal subset) + reader-facing KB + operator surfaces +
+   lightweight monitor view + thin compliance/evidence surface all move from
+   "deferred" / "v1.1 fast-follow" into **v1 completeness**. Partner (not
+   build) for screen-capture authoring — import a Tango/Scribe export as a
+   draft `workflow_version`. See BUILD_PLAN.md for the new phase order.
+
+**Rationale:** Two facts forced the call. **First**, the four reference products
+were the wrong strategic anchors — the market has moved past them, and a v1 that
+benchmarks against them ships looking a generation behind. **Second**, our
+architecture is uniquely positioned for the AI-native turn: strict org-scoping,
+append-only audit, definition/execution split, stable field keys, and a clean
+oRPC procedure layer are *exactly* the shape a safe, auditable agent action
+surface needs — the incumbents would have to retrofit it; we already have it.
+Combining the vertical-first discipline with the AI-credible substrate is a
+defensible position; doing neither is not.
+
+The "platform of process-shaped products" framing is not deleted — it remains the
+long-term architectural truth (packs/config/RBAC/data-model machinery is
+preserved verbatim). It moves from *public lead* to *long-term moat behind the
+vertical win*. The win condition is: prove the vertical, then the pack model
+repeats it cheaply.
+
+**Consequences:**
+
+- **STRATEGY.md** is rewritten — §1 bet, §2 reference set, §4 gap ranking,
+  §5 bets re-sequenced, §6 scorecard reframed. The four-product table moves to
+  an appendix labeled "data-shape lessons (historical)." S-01, S-02, S-03,
+  S-07 are promoted from "reserved/deferred" to "v1." S-04 (narrow-first) is
+  tightened: the vertical is locked, not still being chosen.
+- **BUILD_PLAN.md** is re-sequenced. AI authoring (prompt→workflow + Tango/
+  Scribe import) + the MCP agent surface + Data Sets minimal subset
+  (`data_set` reference lists + `lookup` field type) + reader-KB surface +
+  operator surfaces (My Work / Run view) + a thin run-summary view all enter
+  v1. Pack marketplace and Slack/Teams delivery (S-09) remain post-v1.
+- **ARCHITECTURE.md** §1 vision is reframed to lead with property ops. The
+  platform mechanic is preserved as the *layered* architecture — it is no
+  longer the headline of the Vision section. §7 MVP scope shifts accordingly
+  (Data Sets moves from "Reserved" to "In v1"; AI authoring + MCP move from
+  implicit-deferred to "In v1"). Invariants (§3) are unchanged. ADRs are
+  unchanged. The foundation is the substrate that makes the pivot *possible*.
+- **agents.md** Part 1 "what this is" is rewritten to lead with property ops
+  and the one-procedure-three-modes wedge. Part 2 (framework conventions) is
+  unchanged.
+- **BRANDING.md**: Virn Ops is described as the property-ops OS (with the
+  long-term platform moat noted). The product-family architecture (Virn Ops +
+  Virn PM on a shared foundation) is unchanged.
+- **UX_SPEC.md**: §1 reference-set sentence is rewritten. §3 nav phase tags
+  shift — operator screens (§5) move from `[DESIGNED · build deferred]` to
+  `[NOW]` because vertical-first means execution surfaces are launch-critical,
+  not v1.1.
+- **SCRATCHPAD.md**: the pause-and-reconsider entry is marked acted-on
+  (pointing at this decision); the marketing-copy draft is marked superseded
+  (vertical-first lead, not platform-first).
+- **Memory**: the project memory "AI work (S-01) is deferred — focus is
+  non-AI core" is deleted as stale. A new memory records the pivot direction.
+- **Shipped foundation code is untouched.** D-001 through D-020 stand. The
+  pivot is in framing, sequencing, and *what we build next* — not in unwinding
+  what's already built. The pack mechanism, RBAC scaffolding, content-object
+  model, snapshot isolation, two-axis gating, governance data model all carry
+  forward as-is.
+
+**No-going-back stance.** Per the user's explicit direction (2026-05-26),
+this is a hard pivot, not a tentative direction. References to the
+four-reference-product framing, "AI deferred," and "platform-of-process-products"
+as the lead positioning are removed from forward-looking docs. The historical
+context survives in this entry, in the SCRATCHPAD competitive-read excerpts, and
+in git history — but it does not appear in any doc that drives future build
+decisions.
+
+---
+
+## 2026-05-27 — Agent principal model: implementation specifics for ADR-006
+
+### D-022 — Agent table + participant kind extension + audit attribution
+
+**Context:** ARCHITECTURE.md ADR-006 (2026-05-27) locks the *shape* of the agent
+principal model — hybrid: org-scoped `agent` table + `participant.kind=agent` +
+`participant.agentId` FK, with `run_step_assignee` unchanged. This entry locks the
+*implementation specifics* — concrete column shapes, the migration sequence, the
+credential storage choice, and the audit-attribution column — so Phase 8 (S-07
+wedge) has a deterministic target to land against.
+
+**Decision:** Phase 8 ships these schema changes in a single migration (no agent-aware
+code lands until the schema is in place):
+
+1. **New file `drizzle/schema/agents.ts`.** Holds the `agent` table + an
+   `agent_capability` join (per-agent capability grants). One file per domain group
+   (D-001 convention).
+
+2. **`agent` table — org-scoped, top-level (D-006 convention).** Columns:
+   - `id text PK` (`cuid()` via the shared helper, D-007).
+   - `organizationId text NOT NULL REFERENCES organization(id)` (Invariant #1, top-level
+     entity per D-006).
+   - `name text NOT NULL` — human-readable name for the agent ("Turnover AI", "Inspection
+     Drafter"). Unique per org via `UNIQUE(organizationId, name)`.
+   - `description text` — what this agent does (helps humans assigning it work).
+   - `credentialHash text NOT NULL` — bcrypt/argon2 hash of the API-key-shaped credential.
+     **Never store the plaintext.** The plaintext is shown once on creation and never again
+     (the standard service-account pattern). Credential format TBD in Phase 11 (MCP) — the
+     hash column is shape-agnostic.
+   - `credentialLastFour text` — last 4 chars of the plaintext credential for UI display
+     ("…a3f9"). Convenience only; not a secret.
+   - `credentialRotatedAt timestamp` — set on creation and on every rotation. Drives
+     "your agent credential is 90 days old, consider rotating" UI later.
+   - `isActive boolean NOT NULL DEFAULT true` — soft-disable without delete. A disabled
+     agent fails authentication at the MCP boundary (the participant rows remain for
+     historical audit, but the agent can't act).
+   - `createdByUserId text REFERENCES user(id)` — which human created the agent (audit
+     attribution for the creation event).
+   - `timestamps` (createdAt + updatedAt, shared helper).
+   - `deletedAt timestamp` — three-bucket soft delete (D-006 convention), since an agent
+     is user-deletable. Historical `participant` rows pointing at a soft-deleted agent
+     still join correctly; new authentication fails.
+
+3. **`agent_capability` join table.** Per-agent capability grants composed with org-level
+   capabilities (ADR-006 capability composition):
+   - `id text PK`
+   - `agentId text NOT NULL REFERENCES agent(id) ON DELETE CASCADE`
+   - `capabilityId text NOT NULL REFERENCES capability(id)`
+   - `UNIQUE(agentId, capabilityId)`
+   - `createdAt timestamp`
+   - No `organizationId` (descendant table per D-006 — derives through `agent.organizationId`).
+   - No `deletedAt` — grants are added/removed, not soft-deleted.
+
+4. **`participant.kind` enum extension.** Currently `{user, guest}`; add `agent`. This is
+   an `ALTER TYPE … ADD VALUE` migration on the existing pgEnum.
+
+5. **`participant.agentId text` column.** Nullable; `REFERENCES agent(id) ON DELETE
+   RESTRICT` (an agent with any historical participant rows can't be hard-deleted; it gets
+   soft-deleted via `agent.deletedAt`). CHECK constraint:
+   `(kind = 'agent') = (agentId IS NOT NULL)` — kind and FK presence stay in lockstep,
+   same shape as the existing `userId`/`email` discriminator.
+
+6. **`audit_log.actorKind` enum + column.** New pgEnum `actor_kind ∈ {user, guest, agent}`.
+   `audit_log.actorKind` is `NOT NULL`. Backfill all existing rows to `'user'` in the same
+   migration (the only writers today are human-triggered). Going forward, every audit
+   write sets `actorKind` from the acting participant's kind (or `'user'` when the action
+   has no participant context, e.g. org-config writes by an admin acting *as themselves*
+   outside any run). The existing `actorUserId` column stays — it's populated for `'user'`
+   actors; nullable for `'agent'` / `'guest'` actors (the actor identity for those is in
+   the participant row, which the audit row already links via `entityId` when relevant or
+   via a new optional `actorParticipantId` column for cross-entity actions).
+   - **Open detail:** whether to add `audit_log.actorParticipantId text NULLABLE
+     REFERENCES participant(id)` in this same migration, or defer to Phase 11 when the
+     MCP write path actually populates it. Working assumption: **add it now** so the
+     schema is complete and Phase 11 is purely behavioral.
+
+7. **Activity event mirror.** `activity_event` gets the same `actorKind` enum column
+   (parallel to D-011's separation — `activity_event` is the user-facing timeline; agents
+   need to be visible there too: "Turnover AI completed Step 3").
+
+**Why these specifics:**
+
+- **Top-level org-scoping on `agent` (not on `agent_capability`)** follows D-006 — only
+  the entry point of an entity chain carries `organizationId`. `agent_capability` derives
+  through `agent.organizationId` via FK chain, and the capability resolver already joins
+  through the parent for tenant filtering.
+- **Credential as a hash, not plaintext** is the only correct answer for any secret stored
+  server-side. The plaintext is shown once on creation (the standard service-account
+  pattern that every infra tool uses) and the user is responsible for storing it. Hashing
+  algorithm: argon2id via the same library Better Auth uses for password hashing if exposed,
+  otherwise `@node-rs/argon2`. Decide in Phase 11 — the column is shape-agnostic.
+- **`UNIQUE(organizationId, name)`** prevents two agents in the same org sharing a name —
+  the name is the human's primary handle ("which agent is acting?"), so collisions would
+  confuse the assignment + audit UI. Cross-org collisions are fine (each org has its own
+  namespace).
+- **`audit_log.actorKind` denormalized, not derived via join.** Audit reads are
+  high-volume (every admin view of a run pulls the audit feed); deriving `actor_kind`
+  via a join through `actorParticipantId → participant.kind` per row would multiply
+  the query cost. Denormalize the kind onto `audit_log` itself; the participant FK is
+  still there for the full identity join when needed.
+- **Soft-delete on `agent`, hard-CASCADE on `agent_capability`.** Agents are
+  user-deletable but their historical participant rows reference them — `ON DELETE
+  RESTRICT` on `participant.agentId` enforces this. Capability *grants* have no
+  historical-reference concern (revoking a capability doesn't unwind any past action),
+  so cascade-on-delete is fine for the join.
+- **No `agent`-scoped audit attribution column on `agent` itself** — every agent action
+  is audited via the existing `audit_log` (with `actorKind='agent'` + the participant
+  FK). Agent *creation/modification* events are audited the same way, with
+  `actorKind='user'` + `actorUserId` set to the admin who did it. Don't introduce a
+  parallel `agent_event` table.
+
+**Consequences:**
+
+- Phase 8 (BUILD_PLAN.md) ships exactly this migration before any agent-aware code
+  lands. The `participant.kind` enum extension is an `ALTER TYPE ADD VALUE` —
+  consistent with D-003's stance on extending enums up front while data volume is low.
+- Phase 11 (MCP) layers the credential validation + the actual write path (find-or-create
+  the per-run participant row, set `actorKind='agent'` on every audit/activity write).
+  No additional schema; the foundation is already in place from Phase 8.
+- The existing audit infrastructure (`writeAuditAndActivity`) needs one parameter
+  addition: `actorKind: 'user' | 'guest' | 'agent'` (default `'user'` to preserve current
+  call sites). All existing callers default-thread through unchanged; only the new MCP
+  write path and the run-engine assignee handling need to pass `'agent'`.
+- **Out of scope, decide later:** agent-to-agent delegation; cross-org agents (a Virn-owned
+  "platform agent" usable across tenants); agent OAuth flows for action-on-behalf-of a
+  user; agent fine-grained ACLs beyond capability gating. ADR-006 explicitly defers these.

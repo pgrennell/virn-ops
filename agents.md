@@ -11,15 +11,29 @@ UI / forms / i18n patterns inherited from the supastarter base.
 
 ## What this is
 
-**Virn Ops** is an enterprise, multi-tenant SaaS platform for recurring checklists, living
-SOP/policy knowledge bases, and no-code workflow automation — configured into **process-shaped
-products** (marketing-agency ops, STR turnover & housekeeping, compliance SOPs, …) via
-**solution packs**, not code forks. A ServiceNow-style platform-of-products: ambitious data model,
-narrow first build.
+**Virn Ops** is the **operating system for property operations** — turnover, inspections,
+maintenance routing, vendor & tenant onboarding — built on a substrate where **one
+authored procedure runs three ways**: as a human checklist, an AI-assisted checklist, or a
+fully automated agent run. Same content, same audit trail, the operator chooses the mode
+per run. This — one procedure, three execution modes (STRATEGY S-07) — is the headline
+product story.
 
-ERP-class apps like **Virn PM** (property management, formerly Propvana) are *separate apps on the
-shared foundation*, not packs on Ops. See `docs/ARCHITECTURE.md` §1 and `docs/BRANDING.md` for the
-product family layout.
+The **v1 vertical is locked to property operations**, with STR turnover & housekeeping as
+the concrete first shape. Concentric expansion within property ops (inspections,
+maintenance, onboarding) comes before any second-vertical jump. See DECISIONS.md D-021
+for the pivot rationale; do not treat "marketing ops" or "compliance SOPs" as v1 packs —
+they are post-v1 (STRATEGY S-11).
+
+The **engine underneath** is enterprise-grade, multi-tenant infrastructure for recurring
+checklists, SOP/policy knowledge bases, workflow automation, and an **agent-native action
+surface (MCP)**. It is architected to support multiple process-shaped products (marketing
+ops, agency ops, compliance, HR) as solution packs the ServiceNow way — but that
+platform-of-products moat is **long-term destination**, not v1 public framing. Win
+property ops first; the pack model repeats the win post-v1.
+
+ERP-class apps like **Virn PM** (property management, formerly Propvana) are *separate
+apps on the shared foundation*, not packs on Ops. See `docs/ARCHITECTURE.md` §1 and
+`docs/BRANDING.md` for the product family layout.
 
 ## Read before working (in order)
 
@@ -43,12 +57,14 @@ must not silently change. Use its §8 pre-merge checklist before requesting revi
 For any **product, scope, or prioritization** call — "should we build X now, defer it, or cut
 it?", "what does this screen need to be competitive?", "are we feature-matching or
 differentiating?", "is this feature in or out of MVP?" — **read `docs/STRATEGY.md` first**. It
-holds the competitive positioning, the ranked gaps vs. the reference set
-(Manifestly / Process Street / SweetProcess / Tallyfy), and the live S-0x strategic bets that
-should inform build sequencing. It is *subordinate to* `ARCHITECTURE.md` — a bet may argue for
-promoting a reserved seam, but it can never override an Invariant (§3) or an ADR. When a bet is
-acted on, record the implementation in `docs/DECISIONS.md` referencing the bet (e.g.,
-`per STRATEGY S-02`), and update `docs/BUILD_PLAN.md` if the phase ordering changes.
+holds the competitive positioning (the AI-native cohort + property-vertical comps that
+matter today — *not* the legacy four-product reference set that's now demoted to historical
+data-shape lessons in Appendix A) and the live S-0x strategic bets that should inform build
+sequencing. It is *subordinate to* `ARCHITECTURE.md` — a bet may argue for promoting a
+reserved seam, but it can never override an Invariant (§3) or an ADR. When a bet is acted on,
+record the implementation in `docs/DECISIONS.md` referencing the bet (e.g., `per STRATEGY
+S-02`), and update `docs/BUILD_PLAN.md` if the phase ordering changes. The 2026-05-26 pivot
+that re-anchored both is recorded as **D-021**.
 
 ## Two safety-check tiers
 

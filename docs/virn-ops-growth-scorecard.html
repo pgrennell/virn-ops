@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Growth Scorecard — Process & Workflow Automation Landscape</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0d10;
+    --bg2:#111319;
+    --panel:rgba(255,255,255,0.025);
+    --line:rgba(255,255,255,0.08);
+    --ink:#f4f1ea;
+    --muted:#8d8b83;
+    --muted2:#67655e;
+    --t1:#c4f230;   /* hypergrowth - electric lime */
+    --t2:#34d399;   /* strong - emerald */
+    --t3:#f5b73b;   /* steady - amber */
+    --t4:#ef6f6f;   /* fading - soft red */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:
+      radial-gradient(1100px 600px at 85% -5%, rgba(196,242,48,0.07), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(52,211,153,0.06), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Hanken Grotesk',sans-serif;
+    line-height:1.5;
+    padding:clamp(20px,4vw,52px);
+    min-height:100vh;
+  }
+  .grain{position:fixed;inset:0;pointer-events:none;opacity:0.035;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+  .wrap{max-width:1020px;margin:0 auto;position:relative}
+
+  /* ---- header ---- */
+  .kicker{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.32em;
+    text-transform:uppercase;color:var(--t1);margin-bottom:18px;
+    opacity:0;animation:rise .7s .05s ease both}
+  h1{font-family:'Fraunces',serif;font-weight:500;font-size:clamp(30px,5.4vw,52px);
+    line-height:1.02;letter-spacing:-0.01em;max-width:14ch;
+    opacity:0;animation:rise .7s .12s ease both}
+  h1 em{font-style:italic;color:var(--muted)}
+  .sub{color:var(--muted);font-size:15px;margin-top:16px;max-width:62ch;
+    opacity:0;animation:rise .7s .2s ease both}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted2);
+    margin-top:14px;letter-spacing:0.04em;
+    opacity:0;animation:rise .7s .28s ease both}
+
+  /* ---- legend ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:18px 26px;margin:30px 0 8px;
+    padding:16px 20px;border:1px solid var(--line);border-radius:14px;
+    background:var(--panel);
+    opacity:0;animation:rise .7s .34s ease both}
+  .lg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .arr{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px}
+
+  /* ---- tier band ---- */
+  .tier{margin-top:34px}
+  .tier-head{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;padding-bottom:10px;
+    border-bottom:1px solid var(--line)}
+  .tier-tag{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+    letter-spacing:0.18em;text-transform:uppercase;padding:4px 9px;border-radius:6px}
+  .tier-name{font-family:'Fraunces',serif;font-size:18px;font-weight:500}
+  .tier-note{font-size:12.5px;color:var(--muted2);margin-left:auto;font-family:'JetBrains Mono',monospace}
+
+  /* ---- row ---- */
+  .row{display:grid;grid-template-columns:1.55fr 2fr 0.95fr;gap:18px;align-items:center;
+    padding:17px 4px;border-bottom:1px solid rgba(255,255,255,0.05);
+    opacity:0;animation:rise .6s ease both}
+  .row:last-child{border-bottom:none}
+  .name-cell{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .pname{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-0.01em}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .cat{font-size:12px;color:var(--muted);letter-spacing:0.01em}
+
+  .sig{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);
+    line-height:1.55;letter-spacing:-0.01em}
+  .sig b{color:var(--ink);font-weight:500}
+
+  .score-cell{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+  .score-top{display:flex;align-items:baseline;gap:7px}
+  .score-num{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:21px;letter-spacing:-0.02em}
+  .track{width:100%;height:6px;border-radius:99px;background:rgba(255,255,255,0.07);overflow:hidden}
+  .fill{height:100%;border-radius:99px;transform-origin:left;
+    animation:grow 1.15s cubic-bezier(.2,.7,.2,1) both}
+
+  /* ---- footer read ---- */
+  .read{margin-top:42px;padding:26px clamp(20px,3vw,32px);border-radius:18px;
+    border:1px solid var(--line);
+    background:linear-gradient(150deg,rgba(196,242,48,0.06),rgba(255,255,255,0.015) 45%);
+    opacity:0;animation:rise .7s .2s ease both}
+  .read h2{font-family:'Fraunces',serif;font-weight:500;font-size:21px;margin-bottom:4px}
+  .read .rk{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.28em;
+    text-transform:uppercase;color:var(--t1);margin-bottom:14px}
+  .read p{font-size:14.5px;color:#d6d3ca;margin-top:11px;max-width:78ch}
+  .read p b{color:var(--ink);font-weight:700}
+  .read .acc{color:var(--t1)}
+
+  .foot{margin-top:26px;font-family:'JetBrains Mono',monospace;font-size:10.5px;
+    color:var(--muted2);line-height:1.7;letter-spacing:0.02em}
+
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+  @media(max-width:680px){
+    .row{grid-template-columns:1fr;gap:11px;padding:18px 2px}
+    .score-cell{align-items:flex-start}
+    .score-cell .track{order:-1}
+    .tier-note{display:none}
+    .legend{gap:12px 18px}
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap">
+
+  <div class="kicker">Growth Scorecard · Competitive Intelligence</div>
+  <h1>The process &amp; workflow automation <em>landscape</em></h1>
+  <p class="sub">Where the capital, usage and mindshare are flowing across the tools adjacent to Virn Ops — and where they're draining out. The energy has moved decisively from static checklist/SOP tools to AI-native automation and AI-powered capture.</p>
+  <p class="meta">COMPILED MAY 2026 · 13 PRODUCTS · MOMENTUM = DIRECTIONAL SYNTHESIS OF FUNDING, VALUATION, USAGE &amp; CATEGORY HEAT (0–100), NOT AUDITED FINANCIALS</p>
+
+  <div class="legend">
+    <div class="lg"><span class="arr" style="color:var(--t1)">↑↑↑</span> Hypergrowth</div>
+    <div class="lg"><span class="arr" style="color:var(--t2)">↑↑</span> Strong momentum</div>
+    <div class="lg"><span class="arr" style="color:var(--t2)">↑</span> Rising</div>
+    <div class="lg"><span class="arr" style="color:var(--t3)">→</span> Steady / defending</div>
+    <div class="lg"><span class="arr" style="color:var(--t4)">↓</span> Losing relative mindshare</div>
+  </div>
+
+  <!-- TIER 1 -->
+  <div class="tier">
+    <div class="tier-head">
+      <span class="tier-tag" style="background:rgba(196,242,48,0.16);color:var(--t1)">Tier 1</span>
+      <span class="tier-name">Hypergrowth — the AI-native breakout</span>
+      <span class="tier-note">unicorns &amp; fresh mega-rounds</span>
+    </div>
+
+    <div class="row" style="animation-delay:.40s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t1)"></span>n8n</div><div class="cat">Workflow automation / AI agent orchestration</div></div>
+      <div class="sig"><b>$2.5B</b> valuation · <b>$180M</b> Series C (Oct '25, Accel + Nvidia)<br>ARR <b>&gt;$40M</b> · usage <b>10× YoY</b> · ~951 staff</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t1)">↑↑↑</span><span class="score-num" style="color:var(--t1)">98</span></div><div class="track"><div class="fill" style="width:98%;background:var(--t1);animation-delay:.5s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.46s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t1)"></span>Scribe</div><div class="cat">SOP capture — "Workflow AI" (most relevant to you)</div></div>
+      <div class="sig"><b>$1.3B</b> unicorn · <b>$75M</b> Series C (Nov '25) · <b>$130M</b> total<br>revenue <b>2×+</b> YoY · <b>78K</b> paying orgs · 5M users</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t1)">↑↑↑</span><span class="score-num" style="color:var(--t1)">96</span></div><div class="track"><div class="fill" style="width:96%;background:var(--t1);animation-delay:.56s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.52s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t1)"></span>Gumloop</div><div class="cat">No-code AI workflow / agent builder</div></div>
+      <div class="sig"><b>~$70M</b> raised · Series B led by <b>Benchmark</b><br>bedroom startup — SF rocket (YC W24)</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t1)">↑↑↑</span><span class="score-num" style="color:var(--t1)">88</span></div><div class="track"><div class="fill" style="width:88%;background:var(--t1);animation-delay:.62s"></div></div></div>
+    </div>
+  </div>
+
+  <!-- TIER 2 -->
+  <div class="tier">
+    <div class="tier-head">
+      <span class="tier-tag" style="background:rgba(52,211,153,0.15);color:var(--t2)">Tier 2</span>
+      <span class="tier-name">Strong momentum</span>
+      <span class="tier-note">well-funded, climbing</span>
+    </div>
+
+    <div class="row" style="animation-delay:.58s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t2)"></span>Lindy</div><div class="cat">"AI employee" agents across your stack</div></div>
+      <div class="sig"><b>~$50M</b> raised (Menlo, Series B)<br>product-led growth · viral onboarding</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t2)">↑↑</span><span class="score-num" style="color:var(--t2)">80</span></div><div class="track"><div class="fill" style="width:80%;background:var(--t2);animation-delay:.66s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.62s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t2)"></span>Guidde</div><div class="cat">AI video + text documentation capture</div></div>
+      <div class="sig"><b>~$81M</b> raised · video-first guide generation</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t2)">↑↑</span><span class="score-num" style="color:var(--t2)">74</span></div><div class="track"><div class="fill" style="width:74%;background:var(--t2);animation-delay:.7s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.66s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t2)"></span>Tango</div><div class="cat">In-app guides · machine-readable / AI-executable SOPs</div></div>
+      <div class="sig"><b>$20M</b> raised · <b>400K+</b> Chrome installs<br>building toward agent-executable docs</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t2)">↑↑</span><span class="score-num" style="color:var(--t2)">72</span></div><div class="track"><div class="fill" style="width:72%;background:var(--t2);animation-delay:.74s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.70s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t2)"></span>Relay.app</div><div class="cat">Human-in-the-loop AI workflows</div></div>
+      <div class="sig">clean builder · used by <b>Cursor, Ramp, Motion</b></div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t2)">↑</span><span class="score-num" style="color:var(--t2)">66</span></div><div class="track"><div class="fill" style="width:66%;background:var(--t2);animation-delay:.78s"></div></div></div>
+    </div>
+  </div>
+
+  <!-- TIER 3 -->
+  <div class="tier">
+    <div class="tier-head">
+      <span class="tier-tag" style="background:rgba(245,183,59,0.15);color:var(--t3)">Tier 3</span>
+      <span class="tier-name">Steady / defending</span>
+      <span class="tier-note">mature, holding ground</span>
+    </div>
+
+    <div class="row" style="animation-delay:.74s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t3)"></span>Trainual</div><div class="cat">Onboarding &amp; training-led SOPs</div></div>
+      <div class="sig"><b>$27M</b> raised · established niche · adding AI</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t3)">→</span><span class="score-num" style="color:var(--t3)">58</span></div><div class="track"><div class="fill" style="width:58%;background:var(--t3);animation-delay:.82s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.78s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t3)"></span>Process Street</div><div class="cat">Repositioned: "compliance ops" + AI agents (Cora)</div></div>
+      <div class="sig"><b>~$13M</b> raised · last round <b>2020</b> · ~55 staff<br>defending vs AI-native via repositioning</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t3)">→</span><span class="score-num" style="color:var(--t3)">52</span></div><div class="track"><div class="fill" style="width:52%;background:var(--t3);animation-delay:.86s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.82s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t3)"></span>Whale</div><div class="cat">SOP + training delivery in the flow of work</div></div>
+      <div class="sig">private · modest scale · solid SMB niche</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t3)">→</span><span class="score-num" style="color:var(--t3)">46</span></div><div class="track"><div class="fill" style="width:46%;background:var(--t3);animation-delay:.9s"></div></div></div>
+    </div>
+  </div>
+
+  <!-- TIER 4 -->
+  <div class="tier">
+    <div class="tier-head">
+      <span class="tier-tag" style="background:rgba(239,111,111,0.15);color:var(--t4)">Tier 4</span>
+      <span class="tier-name">Flat / losing relative mindshare</span>
+      <span class="tier-note">stable but bypassed</span>
+    </div>
+
+    <div class="row" style="animation-delay:.86s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t4)"></span>SweetProcess</div><div class="cat">Simple SOP docs · no automation layer</div></div>
+      <div class="sig">bootstrapped · <b>~$2.8M</b> rev over <b>13 yrs</b><br>profitable, deliberately minimal</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t3)">→</span><span class="score-num" style="color:var(--t4)">38</span></div><div class="track"><div class="fill" style="width:38%;background:var(--t4);animation-delay:.94s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.90s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t4)"></span>Tallyfy</div><div class="cat">BPM-style checklists / approvals</div></div>
+      <div class="sig">bootstrapped / VC-independent · niche footprint</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t4)">↓</span><span class="score-num" style="color:var(--t4)">32</span></div><div class="track"><div class="fill" style="width:32%;background:var(--t4);animation-delay:.98s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:.94s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t4)"></span>Manifestly</div><div class="cat">Recurring checklists</div></div>
+      <div class="sig">small indie tool · narrow recurring-checklist niche</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t4)">↓</span><span class="score-num" style="color:var(--t4)">28</span></div><div class="track"><div class="fill" style="width:28%;background:var(--t4);animation-delay:1.02s"></div></div></div>
+    </div>
+  </div>
+
+  <!-- STRATEGIC READ -->
+  <div class="read">
+    <div class="rk">What this means for Virn Ops</div>
+    <h2>The static SOP/checklist tier is being commoditized from above.</h2>
+    <p>Every dollar and every headline is flowing to two places: <b class="acc">AI-native orchestration</b> (n8n, Gumloop, Lindy) and <b class="acc">AI-powered capture + "what should we automate" intelligence</b> (Scribe). Your four named comps sit in the slow lane — Process Street is repositioning to compliance to survive, and Tallyfy / SweetProcess / Manifestly are stable small businesses the category has simply grown past.</p>
+    <p>The sharpest signal is <b>Scribe Optimize</b>: capture the work, then tell the customer <b>where AI/agents should take over</b>. That's the exact bridge between your KB + SOP layer and the automation layer — and it's the highest-value real estate on this board.</p>
+    <p>Implication: don't build "a better checklist." Build the layer that turns a captured SOP into something a <b>human runs, an AI assists, or an agent executes</b> — and win a vertical (property ops) before the horizontal giants notice.</p>
+  </div>
+
+  <p class="foot">
+    SOURCES: company funding announcements, PitchBook / Crunchbase / Tracxn profiles, TechCrunch, Fortune, and 2026 category roundups (G2/Capterra-cited).<br>
+    METHOD: momentum scores are a directional synthesis of recent funding, valuation trajectory, disclosed usage/revenue growth and category mindshare — they are estimates for comparison, not audited metrics. Private-company figures vary by source.
+  </p>
+
+</div>
+</body>
+</html>
