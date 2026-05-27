@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
+import { deriveRunMode } from "../lib/derive-run-mode";
 import type { FieldSaveState, FieldType, RunStatus, RunStepStatus, StepType } from "../types";
 import { RunHeader } from "./RunHeader";
 import {
@@ -190,7 +191,7 @@ export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProp
 
 	const assigneeDisplay = (() => {
 		if (!activeRunStep) return null;
-		const ids = activeRunStep.assignees
+		const labels = activeRunStep.assignees
 			.map((a) => a.participant)
 			.map((p) => {
 				if (p.userId) {
@@ -200,11 +201,40 @@ export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProp
 					const matchingP = data.participants.find((dp) => dp.agentId === p.agentId);
 					return matchingP?.agent?.name ?? p.agent?.name ?? "Agent";
 				}
+				// Vendor participant (ADR-007 + D-023 + Phase 8 vendor picker). The
+				// participant joins `vendor` + `vendorContact` eagerly via
+				// getRunForOrg, so the display name is "Acme Pest Control — Mike Smith"
+				// rather than the raw FKs. Falls through to the guest label only if
+				// the joined rows aren't there (defensive; shouldn't happen for live
+				// data).
+				if (p.vendorId && p.vendorContactId) {
+					const matchingP = data.participants.find(
+						(dp) => dp.vendorId === p.vendorId && dp.vendorContactId === p.vendorContactId,
+					);
+					const vendorName = matchingP?.vendor?.name ?? p.vendor?.name ?? "Vendor";
+					const contactName =
+						matchingP?.vendorContact?.name ?? p.vendorContact?.name ?? null;
+					return contactName ? `${vendorName} — ${contactName}` : vendorName;
+				}
 				return p.guestName ?? p.guestEmail ?? "Guest";
 			});
-		if (ids.length === 0) return null;
-		return ids.slice(0, 2).join(", ") + (ids.length > 2 ? ` +${ids.length - 2}` : "");
+		if (labels.length === 0) return null;
+		return labels.slice(0, 2).join(", ") + (labels.length > 2 ? ` +${labels.length - 2}` : "");
 	})();
+
+	// Mode derivation (Phase 7 post-pivot threading). Surfaced via the RunHeader
+	// badge so the operator/admin sees the run's intended execution shape at a
+	// glance. Vendors don't affect mode classification -- mode is the agent
+	// dimension only (STRATEGY S-07).
+	const runMode = deriveRunMode(
+		data.steps.map((s) => ({ assignees: s.assignees.map((a) => ({ participant: { id: a.participant.id } })) })),
+		data.participants.map((p) => ({ id: p.id, kind: p.kind })),
+	);
+	// Lightweight participants summary for the header: how many distinct vendors +
+	// agents (humans implied from the difference). Keeps the header informative
+	// without rendering a full participants list.
+	const vendorParticipantCount = data.participants.filter((p) => p.kind === "vendor").length;
+	const agentParticipantCount = data.participants.filter((p) => p.kind === "agent").length;
 
 	return (
 		<div className="rounded-lg border border-border bg-background overflow-hidden flex flex-col h-full min-h-0">
@@ -215,6 +245,9 @@ export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProp
 				totalCount={totalCount}
 				startedAt={data.startedAt}
 				dueAt={data.dueAt}
+				mode={runMode}
+				vendorParticipantCount={vendorParticipantCount}
+				agentParticipantCount={agentParticipantCount}
 			/>
 			<div className="flex flex-1 min-h-0">
 				<aside className="w-56 shrink-0 border-r border-border bg-muted/30 overflow-y-auto">
