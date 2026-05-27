@@ -30,18 +30,54 @@ Each product app sets, for **production only** (leave dev on localhost):
 - Marketing / docs URLs — `https://virn.com`, `https://docs.virn.com`.
 - Better Auth `baseURL` + trusted origins include its own subdomain.
 
-## Shared sign-in (deferred)
+## Shared sign-in (roadmap)
 
-One Virn account across products via a `.virn.com` cookie domain. Deferred: the apps currently have
-separate Neon databases, so true single-account SSO needs a shared auth store or OAuth federation
-first. Configure per-app auth for now.
+One Virn account across products via a `.virn.com` cookie domain. **Promoted from
+"deferred" to "roadmap commitment" 2026-05-27** (see `docs/DECISIONS.md` D-031). The
+2026-05-27 worked example (pest control service request: tenant → PM → Ops → vendor → PM
+→ manager) surfaced the two-account UX cost as real, not theoretical. Apps currently
+have separate Neon databases, so true single-account SSO needs a shared auth store or
+OAuth federation first. Two shapes recorded; pick at trigger:
 
-## White-label / custom domains (deferred, premium tier)
+- **(a) Shared auth store** — one Better Auth instance behind both `pm.virn.com` +
+  `ops.virn.com`, org membership tagged per product. Cleaner UX, more migration work.
+- **(b) OAuth federation** — independent Better Auth instances per app, each trusts
+  the other as OIDC provider. More decoupled, more UX surface.
 
-Customers point `app.<theirdomain>.com` via CNAME at a Virn target; managed per-hostname certs via
-Cloudflare for SaaS or Vercel custom domains; middleware resolves hostname → org; per-org branding
-(logo, colors, app name) via the org-settings system. Needs an `organization_domain` table + a
-branding settings group.
+**Trigger:** first paying customer using both products, OR customer-facing UX research
+flagging two-account UX as a sales blocker, OR first cross-product feature beyond PM's
+Service Request Router that requires a single signed-in identity across the boundary.
+Configure per-app auth for now.
+
+## White-label / custom domains (roadmap, premium tier — asymmetric scope per product)
+
+**Promoted from "deferred indefinitely" to "roadmap commitment" 2026-05-27** (see
+`docs/DECISIONS.md` D-032). PM sells branded experiences to PMs' customers (owners,
+tenants); "Powered by Virn" badges are a real sales objection. Ops's typical customer
+(internal operations team) is less brand-sensitive but enterprise Ops customers still
+expect their internal tools to wear their own brand. Scope is **asymmetric** between the
+two products:
+
+- **Virn PM scope (broader):** the staff app itself (e.g. `staff.acmepm.com` themed
+  end-to-end with no "Virn" mark on the staff surface), owner portal, tenant portal,
+  outbound email sender domains (`mail.acmepm.com`), generated PDFs (lease docs, owner
+  statements, work-order summaries).
+- **Virn Ops scope (narrower):** operator dashboards, run editor, settings UI. No SoR
+  or portal layer to brand. Optional: outbound email + emitted artifacts (run reports,
+  KB excerpts).
+
+Shared primitives (both products implement):
+- `organization_domain(id, organizationId, hostname, certStatus, isPrimary)` per-org
+  hostnames table.
+- Hostname → org middleware (active-org pattern extends to "hostname OR URL slug").
+- `branding_settings` group under the data-driven settings registry (`logo_url`,
+  `primary_color`, `display_name`, `sender_name`, `email_footer_html`, etc.).
+- Cert provisioning via Cloudflare for SaaS or Vercel custom domains.
+- Outbound email sender domain via Resend's verified-domains API per-org.
+
+**Trigger:** first customer who pushes back on Virn branding in a surface they control,
+OR first sales conversation where white-label is the deciding feature. Likely fires in
+PM first.
 
 ## How the products relate
 

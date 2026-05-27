@@ -161,6 +161,13 @@ kinds (user, guest, agent, vendor) land in this one migration.**
      `audit_log.actorParticipantId text NULLABLE REFERENCES participant(id)` in
      this same migration (working assumption per D-022, so Phase 11 is purely
      behavioral).
+   - **Per D-027 (cross-repo, 2026-05-27):** also add
+     `audit_log.crossProductOrigin text NULLABLE` and
+     `activity_event.crossProductOrigin text NULLABLE` in this same migration. Values
+     are not enum-constrained (free text: `virn-pm`, `virn-ops`, future third-party
+     identifiers). Set when a write originated from an inbound cross-product webhook or
+     a sibling-product call through the Action API. Symmetric with PM's identical
+     additive migration. Cheap, additive, no UI surfacing needed in v1.
 
    **Wiring:**
    - Wire both `agents.ts` and `vendors.ts` into the `postgres.ts` barrel; run
@@ -279,7 +286,27 @@ possible others.
   `agentId` set (ADR-006). Subsequent writes use the same participant id.
 - **Audit attribution.** Every agent action writes an `audit_log` row with
   `actor_kind='agent'`, `actorParticipantId` set to the participant row, and no
-  `actorUserId`. Activity events mirror this for the user-facing run timeline.
+  `actorUserId`. When the agent represents a sibling product (Virn PM
+  authenticating as a machine principal per D-025), the same write additionally
+  sets `crossProductOrigin='virn-pm'` (D-027). Activity events mirror this for
+  the user-facing run timeline.
+- **Outbound webhook deliveries from Ops → PM (per D-025).** The
+  `automation_action.actionType='call_webhook'` execution path handles delivery
+  of cross-product events to PM's `/api/webhooks/virn-ops/[orgSlug]` endpoint.
+  Each delivery carries an HMAC-SHA256 signature over body + timestamp using a
+  per-org shared secret. Per-org PM endpoint URL + secret configured at link
+  time. **v1 event catalog (cross-repo agreement, D-025):** `run.state_changed`,
+  `run.completed`, `vendor.upserted`. Everything else (escalations,
+  agent-generated artifacts, comments, etc.) deferred — additions require mutual
+  cross-repo agreement.
+- **`runs.launch` accepts the snapshot payload from PM (per D-029).** Standard
+  shape includes `workflowSlug`, `mode`, `participant: { kind, vendorId,
+  vendorContactId }`, `kickoff` data (property / unit / tenant / access /
+  description / severity / R2 photo keys), `callback.pmServiceRequestId` (echoed
+  in every webhook delivery so PM routes callbacks without an extra DB lookup),
+  `callback.webhookEvents` filter. PM is responsible for find-or-creating the
+  Ops vendor before launch (one-time setup per vendor via the action surface's
+  vendor procedures).
 
 **Sub-phase 11b — Thin MCP wrapper (good-citizen alternative).**
 
@@ -303,6 +330,15 @@ PM calls these same oRPC procedures (directly, not via MCP) to launch
 work-order runs from tenant service requests. One contract, multiple consumers
 (humans-via-UI, agents-via-credential, sibling-product-via-credential, MCP-hosts-
 via-wrapper).
+
+**Asymmetry note (D-033, 2026-05-27 cross-repo).** This phase ships Ops's Action
+API + MCP wrapper. **PM does not ship a symmetric `Virn PM Action API` in v1** —
+PM's inbound surface is webhook-only (per D-025). The integration is
+one-directional initiation: PM initiates work in Ops (`runs.launch`); Ops reports
+back to PM via webhook. The symmetric "Virn PM Action API" + "Virn PM MCP"
+together complete the "Virn MCP family" at PM v1.1+, when a concrete
+bidirectional-live-query use case emerges (e.g. Ops needs to query PM live for "is
+this vendor on AP hold right now").
 
 ### Phase 12 — AI authoring (S-01b/c) — kill the blank page
 
@@ -411,7 +447,26 @@ automated runs.
 - **Full Reports / BI stack** — saved views, dashboards, exports.
 - **iPaaS hub** — broader integration catalog beyond the property-ops-relevant
   set in v1.
-- **White-label / custom domains** — premium tier (BRANDING.md).
+- **White-label / custom domains** — premium tier, roadmap commitment per D-032
+  (2026-05-27). Ops scope is **narrower** than Virn PM's: operator dashboards, run
+  editor, settings UI. No SoR or portal layer to brand on the Ops side. Optional:
+  outbound email + emitted artifacts (run reports, KB excerpts). Shared primitives
+  with PM: `organization_domain` table, hostname→org middleware, `branding_settings`
+  group under the data-driven settings registry, Cloudflare-for-SaaS / Vercel
+  custom-domain cert provisioning, Resend verified-domains per-org. Trigger: first
+  customer who pushes back on Virn branding in an Ops surface they control. Likely
+  fires in PM first (residential / commercial PM market is more brand-conscious).
+  See `docs/BRANDING.md` for full scope split.
+- **Virn PM Action API + MCP wrapper symmetric to Ops's** — per D-033 (2026-05-27,
+  cross-repo). Together with Ops's Action API + MCP forms the "Virn MCP family."
+  Trigger: concrete bidirectional-live-query use case (e.g. Ops needs to query PM
+  live for "is this vendor on AP hold right now," not just receive PM-pushed
+  webhook updates). PM-side build; Ops-side has nothing to do here beyond
+  consuming PM's API as a machine principal when it lands.
+- **Ops-side BACKLOG.md (potential)** — Virn PM has a BACKLOG.md as its tracking
+  surface for triggered work; Ops currently uses this v1.1+ list. If Ops's
+  post-v1 backlog grows, migrate this list into a dedicated BACKLOG.md at that
+  point. Not urgent — the v1.1+ list here covers the current surface.
 - **Scribe Optimize-style intelligence** — "what should we automate" derived from
   run analytics + agent attempt logs.
 - **Full Data Sets** — multi-field records, the full data-set builder.

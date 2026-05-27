@@ -1078,3 +1078,336 @@ agent, vendor) land in **one** migration; no second migration churn.
   property-management-company-owned "approved-vendor list" shared across the
   PMC's managed orgs); vendor invoicing flows in Ops (these stay in PM / AP
   systems); vendor performance analytics beyond raw run history.
+
+---
+
+## 2026-05-27 — Cross-repo decisions from virn-pm session
+
+This block originates from a virn-pm session reconciling the 2026-05-26/27 Ops pivot
+(D-021, ADR-006, ADR-007, D-022, D-023) against PM's local state. Cross-repo subset of
+PM's 2026-05-27 DECISIONS.md entry "Virn Ops integration pivot: PM-side decisions +
+cross-repo agreements." PM-internal decisions stay in PM's repo and are NOT included
+here.
+
+### D-024 — Mutually-standalone principle (PM ↔ Ops symmetry)
+
+**Context:** Ops's 2026-05-27 Principle #5 (Product independence with linking) committed
+Ops to working without PM. PM reciprocates the principle, with PM-side rationale: PM has
+standalone-PM customers (small residential PMs who never adopt Ops); Ops has
+standalone-Ops customers (IT MSPs, marketing agencies, compliance teams). Designing
+either side as dependent on the other forfeits a standalone market.
+
+**Decision:** Mutually-standalone. Every cross-product link is nullable on both sides.
+Each product's runtime must function with no outbound calls to the other (degraded paths
+for AI features that draw on cross-product data, fallback flows for service-request
+dispatch, etc.). Neither product depends on the other being reachable at request time.
+The principle as stated by Ops on 2026-05-27 is also stated as-is by PM, paired in PM's
+ARCHITECTURE.md §1.
+
+**Rationale:** Foundation principle that gates every cross-product mechanism below. If
+either product later coupled itself to the other at runtime, every subsequent decision
+needs rework.
+
+**Consequences:** All cross-product writes are best-effort and asynchronous wherever
+feasible. Inbound webhook receivers buffer rather than block. Outbound API calls have
+fallback paths. Recorded in PM DECISIONS.md 2026-05-27 §A and PM ARCHITECTURE.md §1
+Principle #6.
+
+### D-025 — PM ↔ Ops integration mechanism: outbound credentials + HMAC webhooks
+
+**Context:** PM needs to authenticate to Ops's Action API to launch runs and resolve
+vendor data. Ops needs to push state changes to PM (run state, completions, vendor
+upserts). Two distinct authentication surfaces, each per-org.
+
+**Decision:**
+
+- **PM → Ops (outbound).** PM stores per-org credentials in a new PM-side table
+  `organization_outbound_credentials(id, organizationId, system='virn-ops',
+  credentialHash, capabilitiesGrantedByRemote jsonb, status, rotatedAt)`. PM
+  authenticates to Ops's Action API using its credential. Ops side: PM authenticates
+  as an `agent` row in Ops's `agent` table (per ADR-006), one row per linked PM org,
+  capability-gated.
+- **Ops → PM (inbound).** PM exposes `/api/webhooks/virn-ops/[orgSlug]`. HMAC-SHA256
+  signature over body + timestamp using a per-org shared secret. Secret stored
+  alongside the outbound credential as `inboundSecretHash` on the same row. Ops side:
+  webhook delivery follows Ops's standard outbound `automation_action` shape (per
+  ADR-003); per-org PM endpoint URL and secret configured at link time.
+- **v1 event catalog:** `run.state_changed`, `run.completed`, `vendor.upserted`.
+  Everything else (escalations, agent-generated artifacts, comments) deferred. Both
+  sides should agree on the catalog before v1.
+
+**Rationale:** HMAC over body+timestamp with per-org secrets is the well-trodden path;
+no need for JWT/OAuth at this surface since both sides are first-party. Per-org secrets
+give per-tenant blast-radius isolation if a secret leaks. Outbound credentials as a
+typed table (not inline on the org row) matches Stripe Connect-style precedent.
+
+**Consequences:** Ops adds a per-PM-org delivery configuration alongside its
+automation_action catalog. PM ships a webhook receiver + signature middleware in its
+first cross-product release. The shared event-type catalog needs maintenance across
+repos — propose: add events only by mutual agreement, version-stamp the catalog in both
+DECISIONS.md files. Recorded in PM DECISIONS.md 2026-05-27 §D + §E.
+
+### D-026 — Cross-product entity linking: asymmetric storage is fine
+
+**Context:** ADR-007 (Ops) added `vendor.linkedPmVendorId text NULLABLE` as a typed
+column for storing the PM-side vendor reference. PM has the polymorphic
+`external_identifiers` table (from PM's pre-existing schema, used for Yardi/MRI/QBO
+migration IDs) and chooses to record the Ops link there.
+
+**Decision:** Each product stores cross-product references in whichever shape fits its
+existing pattern. Ops uses typed `linkedPmVendorId text` per ADR-007. PM uses
+`external_identifiers(organizationId, entityType='vendor', entityId=<PM cuid>,
+system='virn-ops', externalId=<Ops cuid>)`. Asymmetry is fine: the link's payload (just
+the cross-cuid) is the same on both sides; storage shape is each product's local choice.
+Future cross-linked entities (location, tenant, work_order, service_request) follow the
+same pattern on each side — Ops adds typed columns as needed, PM reuses
+external_identifiers.
+
+**Rationale:** Forcing PM to add typed columns per cross-linked entity violates PM's
+existing column-creep-avoidance pattern (PM's 2026-05-24 entry §E established
+external_identifiers explicitly to prevent this). Forcing Ops to use a polymorphic table
+when its data model is happier with typed columns adds friction with no payoff. The
+product layer abstracts both: lookups go through helpers on each side, return the same
+shape.
+
+**Consequences:** Cross-product writes work as long as both sides resolve the link via
+their own helper layer. Either side can move to the other's pattern later without
+coordination — only the local helper changes. Recorded in PM DECISIONS.md 2026-05-27 §F1
+and PM ARCHITECTURE.md ADR-007.
+
+### D-027 — `actorKind` + `crossProductOrigin` attribution columns on audit + activity
+
+**Context:** Ops's ADR-006 introduced an `actor_kind` enum on `audit_log` +
+`activity_event` for cheap attribution queries. PM has equivalent `audit_log` +
+`activity_events` tables (per PM 2026-05-14 §F) that need to record the same attribution
+dimension, plus the cross-product-origin dimension for inbound-webhook writes.
+
+**Decision:** Both products' audit + activity tables carry two columns:
+
+- `actorKind text` — nullable. Values: `user | guest | agent | vendor`. The four-kind
+  principal model from ADR-006/ADR-007.
+- `crossProductOrigin text` — nullable. Values: `virn-pm`, `virn-ops`, (future)
+  third-party agent identifiers. Set when a write originated from an inbound
+  cross-product webhook or Action API call.
+
+PM lands both columns now (additive migration) before any cross-product write happens.
+Ops should mirror — likely already covered by ADR-006's `actor_kind` for the first
+column; `crossProductOrigin` is the cross-repo addition.
+
+**Rationale:** Forward-compatible attribution. PM doesn't have a participant table yet
+(PM's existing assignee FKs cover residential v1 — see PM DECISIONS.md 2026-05-27 §B),
+so the audit-row-level attribution is the load-bearing piece for cross-product
+traceability. Cheap, additive, immediately useful.
+
+**Consequences:** When an Ops webhook writes to PM, the audit row records
+`actorKind='agent', crossProductOrigin='virn-ops'`. Symmetric when PM writes to Ops via
+the Action API. UI surfacing of the new columns is deferred on both sides. Recorded in
+PM DECISIONS.md 2026-05-27 §F2. Ops-side action item: extend D-022's Phase-8 migration
+spec to add `crossProductOrigin text NULLABLE` to `audit_log` and `activity_event`
+alongside the already-specified `actor_kind` enum column. BUILD_PLAN.md Phase 8 updated
+in the same change set as this paste-back commit.
+
+### D-028 — Vendor sync surface + LWW + bootstrap flow
+
+**Context:** Per ADR-007, both products have complete vendor models. Sync needs explicit
+field-level ownership boundaries and a conflict-resolution policy.
+
+**Decision:** Outbound `vendor.upserted` webhook events from each side. Receivers apply
+LWW (last-write-wins) using `sourceUpdatedAt` in the payload — if the local row is more
+recent, the inbound is logged as `vendor.sync_skipped_stale` and not applied. Sync
+surface (fields written by both, replicated):
+
+- **Synced both ways (LWW):** `name`, `legalName`, `primaryEmail`, `primaryPhone`,
+  `website`, address fields, `status` (slug-mapped between products' enums),
+  `serviceCategories` (slugs from a shared canonical list — depends on PM's
+  controlled-vocabulary promotion, see PM BACKLOG).
+- **PM-owned only (never synced from Ops):** `taxId`, `preferred`, `rating`, COI /
+  insurance certs, AP / payment terms / W-9 / 1099.
+- **Ops-owned only (never synced from PM):** vendor capability grants (Ops's
+  `vendor_capability` junction), performance / SLA history, run-participation history.
+
+Bootstrap: explicit "Link to a Virn Ops vendor?" / "Link to a Virn PM vendor?" toggle on
+each side's vendor form. Selecting "yes" calls the other product's `vendors.findOrCreate`
+and records the link (PM via `external_identifiers`, Ops via `linkedPmVendorId`).
+
+**Rationale:** Sync only what both products legitimately write. LWW is the cheap
+reversible default. Linking is opt-in — preserves the standalone-product principle.
+
+**Consequences:** PM's `vendors.serviceCategories` controlled-vocabulary BACKLOG entry
+has a new trigger (cross-product sync requires Ops-slug agreement). Both sides need a
+per-org "linked Ops org" identity to scope sync correctly — PM resolves this via
+`organization_outbound_credentials` + `external_identifiers` on the organization itself.
+Recorded in PM DECISIONS.md 2026-05-27 §G.
+
+### D-029 — `runs.launch` payload from PM: snapshot pattern, specific PM-data shape
+
+**Context:** When PM calls Ops's Action API to launch a run, what does the payload
+contain?
+
+**Decision:** PM passes a self-contained snapshot of all PM-side context the run will
+need. No live references back to PM. Consistent with Ops's Invariant #4
+(workflow_version is self-contained — same logic applies to launch payloads). Standard
+shape:
+
+```
+{
+  workflowSlug: string,
+  mode: "manual" | "ai_assisted" | "fully_automated",
+  participant: { kind: "vendor", vendorId, vendorContactId },
+  kickoff: {
+    propertyName, propertyAddress, unitLabel, tenantDisplayName,
+    leaseId, accessInstructions, requestDescription, severity,
+    photoR2Keys: string[],   // R2 keys resolvable to signed URLs by Ops
+  },
+  callback: {
+    pmServiceRequestId: string,   // echoed in webhook deliveries
+    webhookEvents: ["run.state_changed", "run.completed"],
+  },
+}
+```
+
+`callback.pmServiceRequestId` is echoed by Ops in every webhook delivery for the run, so
+PM routes callbacks without a database lookup keyed on the Ops run id.
+
+**Rationale:** Snapshot pattern preserves the standalone-Ops-run property — Ops can
+complete the run even if PM is unreachable. `photoR2Keys` instead of pre-resolved signed
+URLs because R2 keys remain valid longer than signed URLs; Ops resolves them via its own
+R2 client.
+
+**Consequences:** Photos uploaded to PM's `propvana-documents` bucket need to be
+readable by Ops's R2 client. Either: (a) shared bucket with shared credential — simpler;
+(b) cross-account copy at launch time — heavier but stricter isolation. Operational
+decision deferred; recommend (a) for v1. Recorded in PM DECISIONS.md 2026-05-27 §H.
+
+### D-030 — work_order ↔ Ops run boundary
+
+**Context:** PM has a `work_orders` table (SoR for any property work: vendor assignment,
+labor/parts/invoice line items, GL postings). Ops has `run` (the workflow execution
+shape). Both can represent "this vendor is fixing the ants in unit 3B" — what's the
+boundary?
+
+**Decision:** Two distinct entities, 1:1-linked via cross-product reference (PM's
+`external_identifiers`):
+
+- **PM `work_orders`** — SoR. Owns: vendor assignment, financial line items (labor,
+  parts, vendor invoices), GL postings (when accounting M4 lands), historical record.
+- **Ops `run`** — execution. Owns: SOP choreography, vendor-portal interaction
+  (tokenized link, vendor confirms/schedules/uploads photos/marks complete), SLA timer,
+  escalation logic, AI agent steps.
+
+When PM dispatches work that needs operational choreography, PM creates a work_order
+then optionally launches an Ops run via `runs.launch` (D-029). Status updates flow Ops →
+PM via webhook; PM mirrors selected fields onto its `work_orders.status`. Cost actuals
+flow the other way at completion time — Ops's run completion data + PM's
+vendor-portal-equivalent provide the inputs that land in PM's `work_order_details`
+(labor / parts / vendor invoices).
+
+**Rationale:** Conflating breaks the standalone-product principle (PM can't run
+accounting without Ops; Ops can't run process without PM). The 1:1 link + asymmetric
+ownership (each product owns its own dimensions) is the precise mechanism.
+
+**Consequences:** Staff-handled in-house work that doesn't need an Ops run skips the
+launch — PM's work_order stands alone. Ops's run can also be created without a PM-side
+work_order (e.g. a standalone-Ops customer running property ops without PM) — in which
+case `linkedPmWorkOrderId` is null on Ops's side. Recorded in PM DECISIONS.md 2026-05-27
+§J. Ops-side note: `linkedPmWorkOrderId` joins the family of cross-product link columns
+on Ops `run`; specify in a future ADR when the `run`-side schema change actually lands
+(not in Phase 8 — `run` schema is shipped; this is post-v1 additive).
+
+### D-031 — Shared sign-in: roadmap commitment with explicit shape
+
+**Context:** BRANDING.md (shared across PM + Ops repos) had shared sign-in as
+"deferred." The 2026-05-27 worked example (pest control service request involving a
+property manager flowing PM → Ops → PM) surfaces the two-account UX cost as real, not
+theoretical.
+
+**Decision:** Shared sign-in across PM + Ops is promoted from "deferred" to **roadmap
+commitment**, not yet v1. Both apps update their BRANDING.md accordingly. Shape recorded
+(pick at trigger):
+
+- **(a) Shared auth store** — one Better Auth instance behind both `pm.virn.com` +
+  `ops.virn.com`, org membership tagged per product.
+- **(b) OAuth federation** — independent Better Auth instances per app, each trusts the
+  other as OIDC provider.
+
+(a) is cleaner UX, more migration work; (b) is more decoupled, more UX surface.
+
+**Trigger:** first paying customer using both products, OR customer-facing UX research
+flagging two-account UX as a sales blocker, OR first cross-product feature beyond PM's
+Service Request Router that requires a single signed-in identity across the boundary.
+
+**Rationale:** The worked example makes it real, but solo dogfooding + first-customer
+phase tolerates two accounts. Promoting from "deferred" to "roadmap" with a specific
+trigger prevents the question being re-litigated every session.
+
+**Consequences:** Both repos' BRANDING.md updated to "Shared sign-in (roadmap)" not
+"(deferred)." Recorded in PM DECISIONS.md 2026-05-27 §L + PM BRANDING.md. Ops-side
+action: BRANDING.md updated in the same change set as this paste-back commit.
+
+### D-032 — White-label scope cross-repo: PM = full app + portals + email + PDFs; Ops = narrower (operator dashboards + run editor + settings)
+
+**Context:** BRANDING.md (shared) had white-label as "deferred, premium tier."
+Property-management customers sell branded experiences to their own customers (owners +
+tenants); "Powered by Virn PM" badges are a real sales objection. Ops's typical customer
+(internal operations team) is less brand-sensitive.
+
+**Decision:** White-label is promoted from "deferred indefinitely" to **roadmap
+commitment** in both products, with asymmetric scope:
+
+- **Virn PM scope (broader):** the staff app itself (e.g. `staff.acmepm.com` themed
+  end-to-end with no "Virn" mark on the staff surface), owner portal, tenant portal,
+  outbound email sender domains (`mail.acmepm.com`), generated PDFs (lease docs, owner
+  statements, work-order summaries).
+- **Virn Ops scope (narrower):** operator dashboards, run editor, settings UI. No SoR
+  or portal layer to brand. Optional: outbound email + emitted artifacts (run reports,
+  KB excerpts).
+
+Both products implement the same primitives:
+
+- `organization_domain(id, organizationId, hostname, certStatus, isPrimary)` table for
+  per-org hostnames.
+- Hostname → org middleware (active-org pattern extends to "hostname OR URL slug").
+- `branding_settings` group under the data-driven settings registry (`logo_url`,
+  `primary_color`, `display_name`, `sender_name`, `email_footer_html`, etc.).
+- Cert provisioning via Cloudflare for SaaS or Vercel custom domains.
+- Outbound email sender domain via Resend's verified-domains API per-org.
+
+**Trigger:** first customer who pushes back on Virn branding in a surface they control,
+OR first sales conversation where white-label is the deciding feature. Likely fires in
+PM first (residential / commercial PM market is more brand-conscious).
+
+**Rationale:** PM sells branded experiences to PMs' customers; Ops sells internal-tools
+to operators. Both still merit white-label for enterprise (an Ops customer running
+internal Ops at scale will want their internal-tools domain). Recording the asymmetric
+scope prevents Ops over-engineering portal-theming primitives that have no Ops consumer.
+
+**Consequences:** Both repos' BRANDING.md updated. Each repo's BACKLOG.md gets an entry
+with its scope. Per-org settings registry (already in both products under different
+names) gets a `branding_settings` group. Recorded in PM DECISIONS.md 2026-05-27 §M + PM
+BACKLOG.md + PM BRANDING.md. Ops-side action: BRANDING.md updated + BUILD_PLAN.md v1.1+
+section updated to reflect the narrower Ops scope (Ops does not currently maintain a
+BACKLOG.md — the v1.1+ list in BUILD_PLAN.md is the equivalent surface here; if a
+separate BACKLOG.md is desired for Ops in the future, the v1.1+ items can be migrated
+there).
+
+### D-033 — Virn PM Action API deferred to v1.1+; Ops's Action API is the v1 cross-product interface
+
+**Context:** Ops's S-01a (agent-safe action surface, protocol-agnostic, MCP wrapper)
+ships in v1. Should PM ship a symmetric Action API in v1?
+
+**Decision:** No. PM does **not** ship its own Action API in v1. PM's inbound surface
+for v1 is webhook-only (per D-025). The PM Action API + MCP wrapper (naming: "Virn PM
+Action API" + "Virn PM MCP", together with Ops's surface forming the "Virn MCP family")
+ships at v1.1+ when a real second use case appears beyond status callbacks — e.g. Ops
+needs to query PM live for "is this vendor on AP hold right now," not just receive
+PM-pushed updates.
+
+**Rationale:** Asymmetry is fine because the integration is one-directional initiation.
+PM initiates work in Ops (launching runs). Ops reports back via webhook. No concrete v1
+use case for Ops querying PM live; building a symmetric API speculatively wastes effort.
+
+**Consequences:** Ops's Action API design proceeds without expecting a symmetric PM
+Action API. PM's BACKLOG carries a "Virn PM Action API + MCP wrapper" entry with the
+trigger spelled out. If a real bidirectional-live-query use case emerges before v1
+ships, this decision gets revisited. Recorded in PM DECISIONS.md 2026-05-27 §N + PM
+BACKLOG.md.
