@@ -19,8 +19,11 @@
 // surfaces archived state.
 
 /** Re-export of the @virn/database WorkflowListRow shape, narrowed for the resolver.
- * Trimmed to just the fields the resolver reads so future payload extensions don't
- * require resolver changes. */
+ * Trimmed to just the fields the resolver + row painter read so future payload
+ * extensions don't require resolver changes. `latestPublishedVersionId` is read by
+ * the Launcher (pinned in launch call to close the publish-during-fill-window race
+ * per D-018) but NOT by the resolver itself -- included here because the row
+ * fixture is shared. */
 export interface WorkflowListRow {
 	id: string;
 	type: "procedure" | "document" | "policy" | "form";
@@ -31,6 +34,7 @@ export interface WorkflowListRow {
 	updatedAt: Date | string;
 	hasDraft: boolean;
 	latestPublishedVersionNumber: number | null;
+	latestPublishedVersionId: string | null;
 	latestPublishedAt: Date | string | null;
 }
 

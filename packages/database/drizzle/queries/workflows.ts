@@ -61,6 +61,13 @@ export interface WorkflowListRow {
 	updatedAt: Date;
 	hasDraft: boolean;
 	latestPublishedVersionNumber: number | null;
+	/** The workflow_version.id of the latest published version. Pinned in the payload
+	 * so the Launcher can pass an EXPLICIT versionId to runs.launch -- closes the
+	 * publish-during-fill-window race (form rendered from v3, a v4 publish lands
+	 * while user fills, server-resolve would snapshot v4 with v3's filled fields).
+	 * D-018: published versions are immutable, so a pinned id is always launch-safe;
+	 * launchRun already validates an explicit versionId is published. */
+	latestPublishedVersionId: string | null;
 	latestPublishedAt: Date | null;
 }
 
@@ -99,6 +106,7 @@ export async function listWorkflowsForOrg(input: {
 	const ids = visible.map((r) => r.id);
 	const versions = await db
 		.select({
+			id: workflowVersion.id,
 			workflowId: workflowVersion.workflowId,
 			status: workflowVersion.status,
 			versionNumber: workflowVersion.versionNumber,
@@ -108,7 +116,10 @@ export async function listWorkflowsForOrg(input: {
 		.where(inArray(workflowVersion.workflowId, ids));
 
 	const draftSet = new Set<string>();
-	const latestPub = new Map<string, { versionNumber: number; publishedAt: Date | null }>();
+	const latestPub = new Map<
+		string,
+		{ id: string; versionNumber: number; publishedAt: Date | null }
+	>();
 	for (const v of versions) {
 		if (v.status === "draft") {
 			draftSet.add(v.workflowId);
@@ -116,6 +127,7 @@ export async function listWorkflowsForOrg(input: {
 			const cur = latestPub.get(v.workflowId);
 			if (!cur || v.versionNumber > cur.versionNumber) {
 				latestPub.set(v.workflowId, {
+					id: v.id,
 					versionNumber: v.versionNumber,
 					publishedAt: v.publishedAt,
 				});
@@ -135,6 +147,7 @@ export async function listWorkflowsForOrg(input: {
 			updatedAt: r.updatedAt,
 			hasDraft: draftSet.has(r.id),
 			latestPublishedVersionNumber: pub?.versionNumber ?? null,
+			latestPublishedVersionId: pub?.id ?? null,
 			latestPublishedAt: pub?.publishedAt ?? null,
 		};
 	});

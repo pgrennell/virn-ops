@@ -34,8 +34,17 @@ import {
 	type LibraryTypeTab,
 } from "../lib/library-types";
 import { CreateWorkflowMenu } from "./CreateWorkflowMenu";
+import { LauncherPanel } from "./LauncherPanel";
 import { LibraryEmptyState } from "./LibraryEmptyState";
 import { LibraryRow } from "./LibraryRow";
+
+/** Workflow context for the launcher panel -- the pinned versionId is what closes
+ * the publish-during-fill-window race (D-018 + Launcher plan integrity #1). */
+interface LauncherTarget {
+	id: string;
+	title: string;
+	latestPublishedVersionId: string;
+}
 
 interface LibraryViewProps {
 	organizationSlug: string;
@@ -54,6 +63,7 @@ export function LibraryView({
 }: LibraryViewProps) {
 	const [activeTabId, setActiveTabId] = useState<LibraryTypeTab["id"]>("all");
 	const [topLevelError, setTopLevelError] = useState<string | null>(null);
+	const [launcherTarget, setLauncherTarget] = useState<LauncherTarget | null>(null);
 
 	// limit=100 covers a comfortable org-shape for Pass 1; pagination is a Pass-2+
 	// optimization. The list query is org-scoped server-side; safe to call.
@@ -80,88 +90,98 @@ export function LibraryView({
 	const totalRows = listQuery.data?.length ?? 0;
 
 	return (
-		<div className="rounded-lg border border-border bg-background overflow-hidden flex flex-col h-full min-h-0">
-			<header className="px-4 py-3 border-b border-border gap-3 flex items-center">
-				<div className="flex-1 min-w-0">
-					<h1 className="font-medium text-sm">Library</h1>
-					<p className="text-xs text-foreground/60 mt-0.5">
-						Workflows, SOPs, policies, and forms — one store, filtered by type.
-					</p>
-				</div>
-				{isAdminOrOwner && (
-					<CreateWorkflowMenu
+		<div className="rounded-lg border border-border bg-background overflow-hidden flex h-full min-h-0">
+			<div className="flex-1 min-w-0 flex flex-col">
+				<header className="px-4 py-3 border-b border-border gap-3 flex items-center">
+					<div className="flex-1 min-w-0">
+						<h1 className="font-medium text-sm">Library</h1>
+						<p className="text-xs text-foreground/60 mt-0.5">
+							Workflows, SOPs, policies, and forms — one store, filtered by type.
+						</p>
+					</div>
+					{isAdminOrOwner && (
+						<CreateWorkflowMenu
+							organizationSlug={organizationSlug}
+							onError={setTopLevelError}
+						/>
+					)}
+				</header>
+
+				{topLevelError && (
+					<div className="px-4 py-2">
+						<Alert variant="error">
+							<AlertDescription className="text-xs">{topLevelError}</AlertDescription>
+						</Alert>
+					</div>
+				)}
+
+				{totalRows === 0 ? (
+					<LibraryEmptyState
+						isAdminOrOwner={isAdminOrOwner}
 						organizationSlug={organizationSlug}
 						onError={setTopLevelError}
 					/>
+				) : (
+					<>
+						<nav
+							className="px-4 border-b border-border gap-1 flex items-center overflow-x-auto"
+							aria-label="Library type tabs"
+						>
+							{LIBRARY_TYPE_TABS.map((tab) => {
+								const count =
+									tab.includes === null
+										? totalRows
+										: filterRowsByTab(listQuery.data ?? [], tab.id).length;
+								return (
+									<button
+										key={tab.id}
+										type="button"
+										onClick={() => setActiveTabId(tab.id)}
+										aria-current={tab.id === activeTabId ? "page" : undefined}
+										className={cn(
+											"px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
+											tab.id === activeTabId
+												? "border-primary text-foreground font-medium"
+												: "border-transparent text-foreground/60 hover:text-foreground",
+										)}
+									>
+										{tab.label}{" "}
+										<span className="text-[11px] text-foreground/40">({count})</span>
+									</button>
+								);
+							})}
+						</nav>
+
+						<div className="flex-1 min-h-0 overflow-y-auto">
+							{filteredRows.length === 0 ? (
+								<div className="px-5 py-10 text-sm text-foreground/60 text-center">
+									No items in this view.
+								</div>
+							) : (
+								<ul>
+									{filteredRows.map((row) => (
+										<LibraryRow
+											key={row.id}
+											row={row}
+											perms={perms}
+											organizationSlug={organizationSlug}
+											onError={setTopLevelError}
+											onOpenLauncher={setLauncherTarget}
+										/>
+									))}
+								</ul>
+							)}
+						</div>
+					</>
 				)}
-			</header>
+			</div>
 
-			{topLevelError && (
-				<div className="px-4 py-2">
-					<Alert variant="error">
-						<AlertDescription className="text-xs">{topLevelError}</AlertDescription>
-					</Alert>
-				</div>
-			)}
-
-			{totalRows === 0 ? (
-				<LibraryEmptyState
-					isAdminOrOwner={isAdminOrOwner}
-					organizationSlug={organizationSlug}
-					onError={setTopLevelError}
-				/>
-			) : (
-				<>
-					<nav
-						className="px-4 border-b border-border gap-1 flex items-center overflow-x-auto"
-						aria-label="Library type tabs"
-					>
-						{LIBRARY_TYPE_TABS.map((tab) => {
-							const count =
-								tab.includes === null
-									? totalRows
-									: filterRowsByTab(listQuery.data ?? [], tab.id).length;
-							return (
-								<button
-									key={tab.id}
-									type="button"
-									onClick={() => setActiveTabId(tab.id)}
-									aria-current={tab.id === activeTabId ? "page" : undefined}
-									className={cn(
-										"px-3 py-2 text-sm border-b-2 -mb-px transition-colors",
-										tab.id === activeTabId
-											? "border-primary text-foreground font-medium"
-											: "border-transparent text-foreground/60 hover:text-foreground",
-									)}
-								>
-									{tab.label}{" "}
-									<span className="text-[11px] text-foreground/40">({count})</span>
-								</button>
-							);
-						})}
-					</nav>
-
-					<div className="flex-1 min-h-0 overflow-y-auto">
-						{filteredRows.length === 0 ? (
-							<div className="px-5 py-10 text-sm text-foreground/60 text-center">
-								No items in this view.
-							</div>
-						) : (
-							<ul>
-								{filteredRows.map((row) => (
-									<LibraryRow
-										key={row.id}
-										row={row}
-										perms={perms}
-										organizationSlug={organizationSlug}
-										onError={setTopLevelError}
-									/>
-								))}
-							</ul>
-						)}
-					</div>
-				</>
-			)}
+			<LauncherPanel
+				open={launcherTarget !== null}
+				workflow={launcherTarget}
+				organizationSlug={organizationSlug}
+				onClose={() => setLauncherTarget(null)}
+			/>
 		</div>
 	);
 }

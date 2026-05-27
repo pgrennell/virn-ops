@@ -31,9 +31,23 @@ interface LibraryRowProps {
 	perms: RowPermissions;
 	organizationSlug: string;
 	onError: (message: string) => void;
+	/** Open the launcher drawer scoped to this workflow. The Library's `run` action
+	 * routes here (NOT to /runs?launch=...) -- the row's responsibility is to surface
+	 * the affordance; LibraryView owns the panel state + the actual launch. */
+	onOpenLauncher: (workflow: {
+		id: string;
+		title: string;
+		latestPublishedVersionId: string;
+	}) => void;
 }
 
-export function LibraryRow({ row, perms, organizationSlug, onError }: LibraryRowProps) {
+export function LibraryRow({
+	row,
+	perms,
+	organizationSlug,
+	onError,
+	onOpenLauncher,
+}: LibraryRowProps) {
 	const router = useRouter();
 	const action = resolveLibraryRowAction(row, perms);
 	const pill = deriveStatusPill(row);
@@ -62,9 +76,19 @@ export function LibraryRow({ row, perms, organizationSlug, onError }: LibraryRow
 	};
 
 	const handleRun = () => {
-		// Run lands on the Run-view at the workflow level. The actual launch flow
-		// (kickoff field collection, role assignments) is the Run view's job.
-		router.push(`/${organizationSlug}/runs?launch=${row.id}`);
+		// Opens the launcher drawer. The resolver's `run` kind only fires for rows
+		// with latestPublishedVersionId !== null (it requires latestPublishedVersionNumber
+		// to be non-null, and the payload fills both together), so the assertion is
+		// safe by construction; the bang acknowledges that.
+		if (row.latestPublishedVersionId === null) {
+			onError("Workflow has no published version to launch.");
+			return;
+		}
+		onOpenLauncher({
+			id: row.id,
+			title: row.title,
+			latestPublishedVersionId: row.latestPublishedVersionId,
+		});
 	};
 
 	const handleOpen = () => {
@@ -149,7 +173,7 @@ function RowAction({
 				<div className="gap-1 flex items-center shrink-0">
 					<Button variant="secondary" size="sm" onClick={onRun}>
 						<Play className="size-3.5 mr-1.5" />
-						Run
+						Run…
 					</Button>
 					{action.secondary === "continue-edit" && (
 						<SecondaryKebab
@@ -170,7 +194,7 @@ function RowAction({
 						title="Workflow is inactive — reactivate to launch new runs."
 					>
 						<Play className="size-3.5 mr-1.5" />
-						Run
+						Run…
 					</Button>
 					{action.secondary === "continue-edit" && (
 						<SecondaryKebab

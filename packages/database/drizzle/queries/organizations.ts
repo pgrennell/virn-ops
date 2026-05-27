@@ -1,8 +1,8 @@
-import { and, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { db } from "../client";
-import { member, organization } from "../schema/postgres";
+import { member, organization, user } from "../schema/postgres";
 import type { OrganizationUpdateSchema } from "../zod";
 
 export async function getOrganizations({
@@ -111,4 +111,39 @@ export async function updateOrganization(
 		.update(organization)
 		.set(updatedOrganization)
 		.where(eq(organization.id, updatedOrganization.id));
+}
+
+export interface OrgMemberRow {
+	userId: string;
+	name: string;
+	email: string;
+	image: string | null;
+	role: string;
+}
+
+/** List members of an org for picker UIs. Returns ONLY the four fields the picker
+ * needs -- id, name, email, image, plus the Better Auth role for tooltip display.
+ * Held minimal on purpose (the day a consumer needs filter-by-role is the day it
+ * gets one; not before -- D-020 wildcard-export lesson, applied to a different
+ * surface). Org-scoped: caller passes the orgId; no cross-tenant traversal. */
+export async function listMembersForOrg(organizationId: string): Promise<OrgMemberRow[]> {
+	const rows = await db
+		.select({
+			userId: user.id,
+			name: user.name,
+			email: user.email,
+			image: user.image,
+			role: member.role,
+		})
+		.from(member)
+		.innerJoin(user, eq(user.id, member.userId))
+		.where(eq(member.organizationId, organizationId))
+		.orderBy(asc(user.name));
+	return rows.map((r) => ({
+		userId: r.userId,
+		name: r.name,
+		email: r.email,
+		image: r.image ?? null,
+		role: r.role,
+	}));
 }

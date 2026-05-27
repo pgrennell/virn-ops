@@ -24,6 +24,7 @@ const baseRow: WorkflowListRow = {
 	updatedAt: new Date("2026-05-26"),
 	hasDraft: false,
 	latestPublishedVersionNumber: null,
+	latestPublishedVersionId: null,
 	latestPublishedAt: null,
 };
 
