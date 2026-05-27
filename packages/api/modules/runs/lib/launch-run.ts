@@ -71,7 +71,15 @@ export interface LaunchRunInput {
 
 export interface LaunchRunContext {
 	organizationId: string;
-	userId: string;
+	/** Better Auth user id when a logged-in human launches the run. Mutually exclusive
+	 * with `launcherAgentId`. */
+	userId?: string;
+	/** Agent id when an agent launches the run via the action surface (Phase 11a.2,
+	 * ADR-006). The launching agent is unconditionally added as a `participant` row on the
+	 * new run so 11a.1's "must be a pre-existing participant" check passes for subsequent
+	 * setFieldValue / completeStep calls by the same agent. Mutually exclusive with
+	 * `userId`. */
+	launcherAgentId?: string;
 }
 
 export interface LaunchRunResult {
@@ -339,6 +347,33 @@ export async function launchRun(
 			vendorContactId: null,
 		});
 	}
+	// Launcher-agent participant (Phase 11a.2). When an agent launches the run via the
+	// action surface, we unconditionally add the launching agent as a participant on the
+	// new run -- this is the "bind at launch" hook that 11a.1's findAgentParticipantForRun
+	// check relies on for subsequent setFieldValue / completeStep calls by the same agent.
+	// If the launcher is ALSO the mode-assigned agent (ctx.launcherAgentId === input.agentId
+	// and a step-handling participant was just added above), skip the second row -- one
+	// participant per agent per run is the model.
+	let launcherAgentParticipantTempKey: string | null = null;
+	if (ctx.launcherAgentId) {
+		const alreadyAdded =
+			agentParticipantTempKey !== null && input.agentId === ctx.launcherAgentId;
+		if (alreadyAdded) {
+			launcherAgentParticipantTempKey = agentParticipantTempKey;
+		} else {
+			launcherAgentParticipantTempKey = "p_launcher_agent";
+			participants.push({
+				tempKey: launcherAgentParticipantTempKey,
+				kind: "agent",
+				userId: null,
+				guestEmail: null,
+				guestName: null,
+				agentId: ctx.launcherAgentId,
+				vendorId: null,
+				vendorContactId: null,
+			});
+		}
+	}
 	const tempKeyByRoleId = new Map<string, string>();
 	for (let i = 0; i < input.roleAssignments.length; i++) {
 		tempKeyByRoleId.set(input.roleAssignments[i].roleId, `p_${i}`);
@@ -367,12 +402,14 @@ export async function launchRun(
 	}
 
 	// 8. Snapshot insert (transactional).
-	const { runId } = await insertRunSnapshot({
+	const { runId, participantIdByTempKey } = await insertRunSnapshot({
 		organizationId: ctx.organizationId,
 		workflowId: workflow.id,
 		workflowVersionId: version.id,
 		title: input.title ?? workflow.title,
-		createdBy: ctx.userId,
+		// createdBy is null for agent-launched runs (Phase 11a.2) -- the launching agent
+		// identity is in the audit row, not in run.createdBy.
+		createdBy: ctx.userId ?? null,
 		startedAt,
 		runDueAt: null, // top-level run due is currently not modeled; per-step due is the source
 		steps: snapshotSteps,
@@ -383,9 +420,20 @@ export async function launchRun(
 	});
 
 	// 9. Append-only writes (Invariant #6).
+	// Agent-aware attribution (Phase 11a.2): when ctx.launcherAgentId is set, resolve the
+	// just-inserted launcher participant id and record it on the audit row alongside
+	// actor_kind='agent'. The launching agent's agentId also goes into `changes` for
+	// forensic queries that filter on it directly.
+	const launcherParticipantId =
+		launcherAgentParticipantTempKey !== null
+			? (participantIdByTempKey.get(launcherAgentParticipantTempKey) ?? null)
+			: null;
+	const actorKind: "user" | "agent" = ctx.launcherAgentId ? "agent" : "user";
 	await writeAuditAndActivity({
 		organizationId: ctx.organizationId,
-		actorUserId: ctx.userId,
+		actorUserId: ctx.userId ?? null,
+		actorKind,
+		actorParticipantId: launcherParticipantId,
 		action: "run.launched",
 		verb: "launched",
 		entityType: "run",
@@ -400,12 +448,19 @@ export async function launchRun(
 			mode,
 			agentId: input.agentId ?? null,
 			agentHandledStepCount: agentHandledStepIds.size,
+			// Phase 11a.2: launcher-agent id for forensics ("which runs were kicked off by
+			// PM-as-agent vs. by a human"). Distinct from input.agentId which is the
+			// mode-handler agent -- the two can match or differ.
+			launcherAgentId: ctx.launcherAgentId ?? null,
 			// Vendor assignments (Phase 8 vendor picker, ADR-007 + D-023). The count goes
 			// into changes for forensics; the vendor identities live on participant rows
 			// (queryable via the audit_log -> participant -> vendor join chain).
 			vendorAssignedRoleCount: validatedVendorByRoleId.size,
 		},
-		metadata: { source: "manual" },
+		metadata: {
+			source: ctx.launcherAgentId ? "agent" : "manual",
+			...(ctx.launcherAgentId ? { actorAgentId: ctx.launcherAgentId } : {}),
+		},
 		activityData: { runTitle: input.title ?? workflow.title, workflowTitle: workflow.title },
 	});
 

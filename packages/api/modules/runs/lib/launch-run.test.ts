@@ -81,6 +81,7 @@ beforeEach(() => {
 	vi.mocked(insertRunSnapshot).mockResolvedValue({
 		runId: "run_new",
 		runStepIdByStepId: new Map([["step_1", "rs_1"]]),
+		participantIdByTempKey: new Map(),
 	});
 	vi.mocked(writeAuditAndActivity).mockResolvedValue(undefined);
 });
@@ -307,6 +308,7 @@ describe("launchRun -- mode-aware (Phase 8 step 3)", () => {
 				["step_a", "rs_a"],
 				["step_b", "rs_b"],
 			]),
+			participantIdByTempKey: new Map(),
 		});
 	}
 
@@ -422,6 +424,7 @@ describe("launchRun -- mode-aware (Phase 8 step 3)", () => {
 		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
 			runId: "run_new",
 			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+			participantIdByTempKey: new Map(),
 		});
 		vi.mocked(getAgentForOrg).mockResolvedValueOnce(ACTIVE_AGENT as never);
 
@@ -514,6 +517,7 @@ function mountSingleStepBundleWithRole() {
 	vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
 		runId: "run_new",
 		runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+		participantIdByTempKey: new Map(),
 	});
 }
 
@@ -679,6 +683,7 @@ describe("launchRun -- vendor role assignment", () => {
 				["step_a", "rs_a"],
 				["step_b", "rs_b"],
 			]),
+			participantIdByTempKey: new Map(),
 		});
 		vi.mocked(getVendorContactForLaunch).mockResolvedValueOnce(ACTIVE_VENDOR_CONTACT as never);
 
@@ -723,5 +728,148 @@ describe("computeStepDueAt", () => {
 		expect(due).not.toBeNull();
 		const diffMs = due!.getTime() - start.getTime();
 		expect(diffMs).toBe(3 * 24 * 60 * 60 * 1000);
+	});
+});
+
+// ============================================================================
+// Phase 11a.2 -- agent launcher (action surface)
+//
+// When an agent calls the action surface to launch a run, the launching agent
+// is added as a participant on the new run so 11a.1's findAgentParticipantForRun
+// check passes for subsequent setFieldValue / completeStep by the same agent.
+// `createdBy` is null in the run row; agent attribution lives in the audit row.
+// ============================================================================
+
+describe("launchRun -- agent launcher (Phase 11a.2)", () => {
+	const AGENT_CTX = { organizationId: "org_1", launcherAgentId: "agt_launcher" };
+
+	function mountSingleStepBundle() {
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(
+			VERSION_PUBLISHED as never,
+		);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [STEP_ROW({ id: "step_a", assignedRoleId: null, type: "task" })],
+			fields: [],
+			deps: [],
+		} as never);
+	}
+
+	it("adds a launcher-agent participant row with agentId set", async () => {
+		mountSingleStepBundle();
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+			participantIdByTempKey: new Map([["p_launcher_agent", "part_launcher"]]),
+		});
+
+		await launchRun(AGENT_CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [],
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		expect(arg.participants).toHaveLength(1);
+		expect(arg.participants[0]).toMatchObject({
+			tempKey: "p_launcher_agent",
+			kind: "agent",
+			agentId: "agt_launcher",
+			userId: null,
+			guestEmail: null,
+		});
+	});
+
+	it("writes createdBy=null when the launcher is an agent (audit captures identity instead)", async () => {
+		mountSingleStepBundle();
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+			participantIdByTempKey: new Map([["p_launcher_agent", "part_launcher"]]),
+		});
+
+		await launchRun(AGENT_CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [],
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		expect(arg.createdBy).toBeNull();
+	});
+
+	it("audit row attributes the launch to actor_kind=agent + actorParticipantId + launcherAgentId in changes", async () => {
+		mountSingleStepBundle();
+		// mockReset + mockResolvedValue (instead of mockResolvedValueOnce): in vitest 4 the
+		// once-queue isn't honored cleanly when the persistent default was set in beforeEach
+		// AND the test return value carries a Map. Resetting first ensures the populated
+		// participantIdByTempKey reaches launchRun's audit attribution branch.
+		vi.mocked(insertRunSnapshot).mockReset();
+		vi.mocked(insertRunSnapshot).mockResolvedValue({
+			runId: "run_new",
+			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+			participantIdByTempKey: new Map([["p_launcher_agent", "part_launcher"]]),
+		});
+
+		await launchRun(AGENT_CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [],
+		});
+
+		expect(writeAuditAndActivity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "run.launched",
+				actorUserId: null,
+				actorKind: "agent",
+				actorParticipantId: "part_launcher",
+				changes: expect.objectContaining({ launcherAgentId: "agt_launcher" }),
+				metadata: expect.objectContaining({
+					source: "agent",
+					actorAgentId: "agt_launcher",
+				}),
+			}),
+		);
+	});
+
+	it("merges with the mode-assigned agent when launcher and mode-handler are the same agent", async () => {
+		// Workflow with an AI step; agent launches in ai_assisted mode pointing at itself.
+		// Should produce exactly ONE agent participant (not two), and that participant should
+		// own the AI step.
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(
+			VERSION_PUBLISHED as never,
+		);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [STEP_ROW({ id: "step_a", assignedRoleId: null, type: "ai" })],
+			fields: [],
+			deps: [],
+		} as never);
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce({
+			...ACTIVE_AGENT,
+			id: "agt_launcher",
+		} as never);
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+			participantIdByTempKey: new Map([["p_agent", "part_launcher"]]),
+		});
+
+		await launchRun(AGENT_CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [],
+			mode: "ai_assisted",
+			agentId: "agt_launcher",
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		// Exactly one agent participant -- no duplicates.
+		const agentParts = arg.participants.filter((p) => p.kind === "agent");
+		expect(agentParts).toHaveLength(1);
+		// The AI step is assigned to that single agent participant.
+		expect(arg.stepAssignments).toEqual([
+			{ stepId: "step_a", participantTempKey: agentParts[0].tempKey },
+		]);
 	});
 });

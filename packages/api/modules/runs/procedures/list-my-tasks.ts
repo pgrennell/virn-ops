@@ -1,16 +1,20 @@
-import { listAssignedTasksForUser } from "@virn/database";
+import { listAssignedTasksForAgent, listAssignedTasksForUser } from "@virn/database";
 import { z } from "zod";
 
-import { protectedOrgProcedure } from "../../../orpc/procedures";
+import { agentOrUserOrgProcedure } from "../../../orpc/procedures";
 
-export const listMyTasksProc = protectedOrgProcedure
+// Dual-auth (Phase 11a.2 -- agent introspection). For users this lists run-step
+// assignments where `participant.userId = me`; for agents it lists assignments where
+// `participant.agentId = me`. Same row shape, same procedure -- both principals share the
+// "my tasks" surface.
+export const listMyTasksProc = agentOrUserOrgProcedure
 	.route({
 		method: "GET",
 		path: "/runs/my-tasks",
 		tags: ["Runs"],
-		summary: "List run steps assigned to the current user",
+		summary: "List run steps assigned to the current principal (user or agent)",
 		description:
-			"Direct assignment only -- role -> participant fanout was already materialized at launch time. Returns the data needed to render My Work + Home rows: run + workflow titles, status, due, blocked flag.",
+			"Direct assignment only -- role -> participant fanout was already materialized at launch time. Returns the data needed to render My Work + Home rows (or the agent's own assignment list): run + workflow titles, status, due, blocked flag.",
 	})
 	.input(
 		z.object({
@@ -21,12 +25,16 @@ export const listMyTasksProc = protectedOrgProcedure
 		}),
 	)
 	.handler(async ({ input, context }) => {
-		return await listAssignedTasksForUser({
-			organizationId: context.organization.id,
-			userId: context.user.id,
+		const { principal, organization } = context;
+		const shared = {
+			organizationId: organization.id,
 			status: input.status,
 			dueBefore: input.dueBefore,
 			limit: input.limit,
 			offset: input.offset,
-		});
+		};
+		if (principal.kind === "agent") {
+			return await listAssignedTasksForAgent({ ...shared, agentId: principal.agent.id });
+		}
+		return await listAssignedTasksForUser({ ...shared, userId: principal.user.id });
 	});

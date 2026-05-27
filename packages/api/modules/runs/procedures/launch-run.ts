@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { protectedOrgProcedure } from "../../../orpc/procedures";
+import { agentOrUserOrgProcedure } from "../../../orpc/procedures";
 import { launchRun } from "../lib/launch-run";
 import { runEngineCall } from "./_utils";
 
@@ -17,14 +17,19 @@ const roleAssignmentSchema = z.object({
 	vendorContactId: z.string().min(1).nullish(),
 });
 
-export const launchRunProc = protectedOrgProcedure
+// Dual-auth (Phase 11a.2). The launcher principal is either a logged-in user or an agent
+// presenting `Authorization: Bearer agent_<…>`. For agent launches, the launching agent
+// is added as a `participant` row on the new run so 11a.1's "must be a pre-existing
+// participant" check passes for subsequent setFieldValue / completeStep calls -- this is
+// the on-demand binding point that 11a.1 deliberately deferred.
+export const launchRunProc = agentOrUserOrgProcedure
 	.route({
 		method: "POST",
 		path: "/runs/launch",
 		tags: ["Runs"],
 		summary: "Launch a new run from a published workflow version",
 		description:
-			"Snapshots the workflow version into run + run_step + field_value rows. Returns the new runId.",
+			"Snapshots the workflow version into run + run_step + field_value rows. Returns the new runId. Callable by a logged-in user OR by an agent presenting a Bearer credential -- for the agent path, the launching agent is added as a participant on the new run so it can subsequently complete steps via setFieldValue / completeStep.",
 	})
 	.input(
 		z.object({
@@ -40,10 +45,23 @@ export const launchRunProc = protectedOrgProcedure
 		}),
 	)
 	.handler(async ({ input, context }) => {
-		return await runEngineCall(() =>
-			launchRun(
-				{ organizationId: context.organization.id, userId: context.user.id },
+		const { principal, organization } = context;
+		return await runEngineCall(() => {
+			if (principal.kind === "agent") {
+				return launchRun(
+					{
+						organizationId: organization.id,
+						launcherAgentId: principal.agent.id,
+					},
+					input,
+				);
+			}
+			return launchRun(
+				{
+					organizationId: organization.id,
+					userId: principal.user.id,
+				},
 				input,
-			),
-		);
+			);
+		});
 	});

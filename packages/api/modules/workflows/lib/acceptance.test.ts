@@ -393,7 +393,7 @@ vi.mock("@virn/database", () => {
 			startedAt: Date;
 			steps: Array<{ stepId: string; title: string; dueAt: Date | null; position: number }>;
 			kickoffValues: Array<{ fieldId: string; value: unknown }>;
-			participants: unknown[];
+			participants: Array<{ tempKey: string }>;
 			roleAssignments: unknown[];
 			stepAssignments: unknown[];
 		}) => {
@@ -401,7 +401,9 @@ vi.mock("@virn/database", () => {
 			store.runSnapshots.push({ runId, input });
 			const runStepIdByStepId = new Map<string, string>();
 			for (const s of input.steps) runStepIdByStepId.set(s.stepId, nextId());
-			return { runId, runStepIdByStepId };
+			const participantIdByTempKey = new Map<string, string>();
+			for (const p of input.participants) participantIdByTempKey.set(p.tempKey, nextId());
+			return { runId, runStepIdByStepId, participantIdByTempKey };
 		}),
 
 		// --- Validation passthrough (real validateFieldValue does Zod parsing; for the

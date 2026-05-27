@@ -100,13 +100,18 @@ export interface SnapshotStepAssignmentRow {
 }
 
 /** Insert run + runSteps + kickoff field_values + participants + role assignments + step
- * assignees in a single transaction. Returns the new runId. */
+ * assignees in a single transaction. Returns the new runId, the inserted runStep ids keyed
+ * by definition stepId, AND the inserted participant ids keyed by caller-assigned tempKey
+ * (Phase 11a.2 -- launchRun uses the latter to attribute the launch-audit row to the
+ * launching agent's participant when an agent calls the action surface). */
 export async function insertRunSnapshot(input: {
 	organizationId: string;
 	workflowId: string;
 	workflowVersionId: string;
 	title: string;
-	createdBy: string;
+	/** Nullable so agent-launched runs (Phase 11a.2) can carry `null` -- the agent
+	 * identity is recorded in the audit row, not in run.createdBy. */
+	createdBy: string | null;
 	startedAt: Date;
 	runDueAt: Date | null;
 	steps: SnapshotStepRow[];
@@ -114,7 +119,11 @@ export async function insertRunSnapshot(input: {
 	participants: SnapshotParticipantRow[];
 	roleAssignments: SnapshotRoleAssignmentRow[];
 	stepAssignments: SnapshotStepAssignmentRow[];
-}): Promise<{ runId: string; runStepIdByStepId: Map<string, string> }> {
+}): Promise<{
+	runId: string;
+	runStepIdByStepId: Map<string, string>;
+	participantIdByTempKey: Map<string, string>;
+}> {
 	return await db.transaction(async (tx) => {
 		const [runRow] = await tx
 			.insert(run)
@@ -228,7 +237,7 @@ export async function insertRunSnapshot(input: {
 			);
 		}
 
-		return { runId, runStepIdByStepId };
+		return { runId, runStepIdByStepId, participantIdByTempKey };
 	});
 }
 
@@ -879,17 +888,23 @@ export interface MyTaskRow {
 	blocked: boolean;
 }
 
-/** All runSteps assigned to a user within this org. Filters by org via the parent run.
- * Direct assignment only (`run_step_assignee` -> `participant.user_id`); role->participant
- * fanout was already materialized at launch time.
+/** All runSteps assigned to a principal (user or agent) within this org. Filters by org
+ * via the parent run. Direct assignment only (`run_step_assignee` -> `participant.userId`
+ * or `participant.agentId`); role->participant fanout was already materialized at launch
+ * time.
  *
  * Per-row `blocked` flag is computed in 2 batched follow-up queries (no N+1):
  *   1. step_dependency rows for the result set's definition stepIds
  *   2. run_step.status for (runId, dependsOnStepId) pairs
- * Total: 3 queries for the whole listing. */
-export async function listAssignedTasksForUser(input: {
+ * Total: 3 queries for the whole listing.
+ *
+ * Phase 11a.2: the principal discriminator gates whether the inner join filters on
+ * `participant.userId` (user path) or `participant.agentId` (agent introspection -- the
+ * Phase 11a action surface's `runs.listMyTasks` for an agent caller). Same row shape, same
+ * indexes, same dep batching -- one column swap. */
+export async function listAssignedTasksForPrincipal(input: {
 	organizationId: string;
-	userId: string;
+	principal: { kind: "user"; userId: string } | { kind: "agent"; agentId: string };
 	status?: "pending" | "completed";
 	dueBefore?: Date;
 	limit?: number;
@@ -897,10 +912,11 @@ export async function listAssignedTasksForUser(input: {
 }): Promise<MyTaskRow[]> {
 	const limit = input.limit ?? 50;
 	const offset = input.offset ?? 0;
-	const conds = [
-		eq(run.organizationId, input.organizationId),
-		eq(participant.userId, input.userId),
-	];
+	const principalCond =
+		input.principal.kind === "user"
+			? eq(participant.userId, input.principal.userId)
+			: eq(participant.agentId, input.principal.agentId);
+	const conds = [eq(run.organizationId, input.organizationId), principalCond];
 	if (input.status) conds.push(eq(runStep.status, input.status));
 	if (input.dueBefore) conds.push(lte(runStep.dueAt, input.dueBefore));
 
@@ -995,6 +1011,46 @@ export async function listAssignedTasksForUser(input: {
 			workflowTitle: r.workflowTitle,
 			blocked,
 		};
+	});
+}
+
+/** Back-compat thin wrapper over `listAssignedTasksForPrincipal` (user path). */
+export async function listAssignedTasksForUser(input: {
+	organizationId: string;
+	userId: string;
+	status?: "pending" | "completed";
+	dueBefore?: Date;
+	limit?: number;
+	offset?: number;
+}): Promise<MyTaskRow[]> {
+	return listAssignedTasksForPrincipal({
+		organizationId: input.organizationId,
+		principal: { kind: "user", userId: input.userId },
+		status: input.status,
+		dueBefore: input.dueBefore,
+		limit: input.limit,
+		offset: input.offset,
+	});
+}
+
+/** Phase 11a.2 -- agent introspection. The agent action surface calls this through the
+ * dual-auth `runs.listMyTasks` procedure to see its own assignments. Returns the same row
+ * shape as the user path so the same procedure can serve both principals. */
+export async function listAssignedTasksForAgent(input: {
+	organizationId: string;
+	agentId: string;
+	status?: "pending" | "completed";
+	dueBefore?: Date;
+	limit?: number;
+	offset?: number;
+}): Promise<MyTaskRow[]> {
+	return listAssignedTasksForPrincipal({
+		organizationId: input.organizationId,
+		principal: { kind: "agent", agentId: input.agentId },
+		status: input.status,
+		dueBefore: input.dueBefore,
+		limit: input.limit,
+		offset: input.offset,
 	});
 }
 
