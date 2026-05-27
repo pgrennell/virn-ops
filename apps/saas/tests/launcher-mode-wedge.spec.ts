@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 import * as path from "node:path";
 import { waitForVerificationForEmail } from "./__helpers/db";
+import { getArtifactsDir } from "./__helpers/artifacts";
 import { db, agent, user, member, organization, organizationCapability, capability, participant } from "@virn/database";
 import { eq, and } from "drizzle-orm";
 
-const artifactsDir = "C:\\Users\\pgren\\.gemini\\antigravity-ide\\brain\\8793271f-5d9f-43fe-80e3-12ec2ef2d9b2";
+const artifactsDir = getArtifactsDir("launcher-mode-wedge");
 
 test.describe("Virn Ops Launch-mode wedge UX E2E Walk (S-07)", () => {
 	let orgId: string;

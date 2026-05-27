@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 import * as path from "node:path";
 import { waitForVerificationForEmail } from "./__helpers/db";
+import { getArtifactsDir } from "./__helpers/artifacts";
 
-const artifactsDir = "C:\\Users\\pgren\\.gemini\\antigravity-ide\\brain\\34be6ca0-7a1f-448e-aaf5-0f5cac61e9e7";
+const artifactsDir = getArtifactsDir("operator-verification");
 
 test.describe("Virn Ops Operator-Screen Foundation Walkthrough E2E", () => {
 

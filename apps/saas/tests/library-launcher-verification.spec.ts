@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 import * as path from "node:path";
 import { waitForVerificationForEmail } from "./__helpers/db";
+import { getArtifactsDir } from "./__helpers/artifacts";
 
-const artifactsDir = "C:\\Users\\pgren\\.gemini\\antigravity-ide\\brain\\078e5381-bf52-4828-bb69-c49cd03e6d4c";
+const artifactsDir = getArtifactsDir("library-launcher-verification");
 
 test.describe("Virn Ops Library + Launcher End-to-End Walk", () => {
 	let workflowTitle: string;

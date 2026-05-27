@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import * as path from "node:path";
 import { waitForVerificationForEmail } from "./__helpers/db";
+import { getArtifactsDir } from "./__helpers/artifacts";
 import { db, agent, user, member, organization } from "@virn/database";
 import { eq } from "drizzle-orm";
 import { createId as cuid } from "@paralleldrive/cuid2";
 
-const artifactsDir = "C:\\Users\\pgren\\.gemini\\antigravity-ide\\brain\\8793271f-5d9f-43fe-80e3-12ec2ef2d9b2";
+const artifactsDir = getArtifactsDir("agent-management");
 
 test.describe("Virn Ops Agent Management settings UI E2E Walk", () => {
 	let nonAdminEmail: string;
