@@ -448,7 +448,7 @@ table, `require_concierge_review` flag) rather than redeclare them.
 - New enums: `playbook_step_type` (`wait_for_duration` / `wait_for_event` /
   `launch_workflow` / `send_notification` / `branch_on_data_set` /
   `write_to_data_set`); `playbook_lifecycle_event` (`run.completed` /
-  `run.state_changed` / `listing.cohort_added` / `vendor.upserted` — no
+  `run.state_changed` / `listing.entity_set_added` / `vendor.upserted` — no
   `cross_product` value; PM-initiated work surfaces via the existing events
   with a `crossProductOriginFilter` in trigger config); `playbook_run_status` +
   `playbook_run_step_status`.
@@ -778,7 +778,7 @@ pattern as Workflows; `/sop` indexes both). Read-only `playbookRuns.list/get`.
 No execution.
 
 **Phase 18b — Playbooks execution.** Inngest dispatcher + orchestrator functions
-emit + subscribe to `run.completed` / `run.state_changed` / `listing.cohort_added`
+emit + subscribe to `run.completed` / `run.state_changed` / `listing.entity_set_added`
 / `vendor.upserted` lifecycle events. `playbookRuns.launchManual` lights up. The
 orchestrator uses Inngest's `step.sleep` / `step.waitForEvent` for the
 `wait_for_duration` / `wait_for_event` step types — synchronous orchestration

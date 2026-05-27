@@ -162,6 +162,12 @@ Four layers, top configures down, each rests on the one below.
 - **Runtime:** Inngest.
 - **Now:** rule/condition/action tables + run-level consumers. **Defer:** SLA-breach events, the full
   action catalog.
+- **Reserved trigger seam — `iot_event`.** `automation_rule.triggerType` (and Playbooks'
+  `playbook_lifecycle_event`, per [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md)) leaves room for an
+  `iot_event` value covering building sensors, smartlocks, access control, HVAC alerts, water
+  leak detection, etc. No build in v1; the seam exists so commercial-PM / multifamily
+  customers can land IoT-driven workflows without a schema rewrite when an integration
+  partner emerges.
 
 ### ADR-004 — Enterprise RBAC + tenant hierarchy
 
