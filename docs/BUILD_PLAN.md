@@ -39,6 +39,99 @@ substantially re-ordered:
 - **Slack/Teams in-flow delivery (S-09)**, pack marketplace, white-label, and the
   full reports/BI stack move to **v1.1+**.
 
+### Update 2026-05-27 — Workflow & SOP Builder v1.5 PRD (architectural re-anchoring per D-034)
+
+[PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) (Draft v2) bundles the next
+builder push as **v1.5a/b/c**, friendly parity with Besty's PM-side SOP builder,
+re-anchored around the 3-layer architecture from the 2026-05-27 strategic
+conversation:
+
+- **Layer 1 — Configurable entity model.** v1.5 ships seams only (`entity_set` with
+  `entity_type` discriminator, polymorphic member join, `EntityAdapter` registry
+  — one `ListingAdapter` impl). Full custom-object system is a multi-month phase
+  post-v1.
+- **Layer 2 — Vertical-agnostic workflow engine.** v1.5 generalizes cohort filter
+  to entity-set scoping; documents the v1 action vocabulary as the closed set.
+- **Layer 3 — AI authoring grounded in tenant entity schema.** What makes a
+  horizontal builder feel like Besty even when the nouns are configurable.
+
+Plus the **three-views unification** commitment (PRD §1.2): SOP / KB article /
+runnable workflow are three views of one object. Editing once updates all.
+Replaces the v1-draft "separate `/sop/*` reader surface" — `/sop` becomes a
+browse-ergonomic readers' index that deep-links to the same detail page with
+`?view=read`.
+
+Slots into existing phases as follows:
+
+- **v1.5a** → new **Phase 9.5** (entity-set seams + review states + property-ops
+  pack content refresh). Renamed from the v1-draft "listing cohorts" framing.
+  No AI dependency; can ship in parallel with Phase 9.
+- **v1.5b** → **Phase 12 (AI authoring) pulled forward** to ship right after
+  Phase 11 (action surface). AI authoring lives behind the agents oRPC router so
+  MCP hosts inherit it for free; system prompt embeds the tenant's entity schema
+  (cached per org); validator cross-checks entity references against the live
+  adapter registry.
+- **v1.5c** → **Phase 10 (three-views unification + reader surface)**. Detail
+  page becomes a view-switcher (`?view={author|read}`); `/sop` is the readers'
+  browse surface; collapses the "KB and Builder as separate features" trap that
+  Besty and Process Street fall into.
+
+Pack ordering (D-034): **STR pack remains v1 wedge.** Commercial PM / Residential /
+IT Ops packs deferred to post-v1, triggered by either (a) early commercial design-
+partner pull or (b) Layer-1 completion. v1.5 architecture is pack-agnostic; only
+the content (templates, dogfood profile, marketing copy) skews STR.
+
+Resulting build order through v1.5: 7 → 8 → 9 → 9.5 → **9.6** → 11 → 12 → 10 → 13 → 14 → …
+(Phase 11 must precede 12 because the AI authoring procedures live on the agents
+router that 11 builds. Phase 9.6 is the Playbooks schema seam — see the next
+subsection.)
+
+### Update 2026-05-27 — Playbooks PRD (lifecycle-sequence primitive)
+
+[PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) introduces **Playbooks** as a sibling content
+object to Workflow — multi-step, time-and-event-staged sequences triggered by
+lifecycle events. Distinct primitive from Workflows: Workflows handle decision /
+branching procedures (one event → branching steps); Playbooks handle cadences
+over time (one lifecycle event → sequence of further actions, often invoking
+workflows). Pattern lifted from Besty's "Journeys" concept, generalized and
+renamed for horizontal property-ops + configurable label per org (Lifecycles for
+CRE-leaning orgs, etc., via `organization.label_overrides jsonb`).
+
+Slots into existing phases as follows:
+
+- **Phase 9.6** (new — lands *after* 9.5 so it can reuse v1.5a's `entity_set`,
+  `review_state`, and `ai_authoring_prompt` rather than redefine them) — thin
+  schema seam: `playbook` / `playbook_version` / `playbook_step` / `playbook_run`
+  / `playbook_run_step` tables, `playbook_step_type` + `playbook_lifecycle_event`
+  enums, `organization.label_overrides` column, `forbiddenOrganizationSlugs`
+  update for `/playbooks`. No business logic, no UI, no Inngest. Idempotent
+  re-run safe.
+- **Phase 18a** (authoring) — Playbook CRUD + builder UI (vertical step list) +
+  dry-render preview + library tab + reader-KB integration via the v1.5c
+  three-views unification (a Playbook's detail page becomes a view-switcher on
+  `?view={author|read}`, same pattern as Workflows; `/sop` indexes both).
+  Read-only `playbookRuns.list/get`. No execution yet.
+- **Phase 18b** (execution) — Inngest dispatcher + orchestrator functions emit
+  + subscribe to `run.completed` / `run.state_changed` / `listing.entity_set_added`
+  / `vendor.upserted`. `playbookRuns.launchManual` lights up. Cancellation flow.
+  Bundles cleanly with Phase 18's existing Inngest landing — three features
+  justify the runtime (`automation_rule` execution + SLA-sweep migration from
+  Vercel Cron + Playbooks).
+- **Phase 18c** (AI authoring) — `agents.authorPlaybook` + `agents.regeneratePlaybookStep`
+  on the agents oRPC router; system prompt grounded in tenant entity schema
+  (same Layer-3 pattern as Workflow AI authoring per PRD_WORKFLOW_SOP_BUILDER §6.3).
+
+**Architectural alignment with v1.5 (D-034).** Playbooks adopt the same entity-set
+scoping model as Workflows (`playbook.entity_set_ids uuid[]`); the three-views
+unification applies (one detail page, `?view=` switcher); AI authoring grounds in
+the same tenant entity schema. No new architectural primitives — Playbooks are a
+new *content object* on the same Layer-1/2/3 architecture.
+
+**PM cross-repo posture.** No new event surface, no new webhook events. PM-initiated
+work flows through existing `run.completed` / `run.state_changed` triggers with a
+`crossProductOriginFilter` in trigger config (per D-027). PM ships no symmetric
+Playbooks concept (per D-033). See [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) §9.
+
 ---
 
 ## Completed phases (foundation)
@@ -271,6 +364,106 @@ Promote Batch 7 from deferred. Schema-only is insufficient — wire it through.
 
 Multi-field `data_set_field` schemas and the full data-set builder are post-v1.
 
+### Phase 9.5 — Entity-set seams + review states + property-ops pack refresh (v1.5a)
+
+See [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.1, §6.2, §6.5, §6.6 for
+full spec. Four "no-AI-dependency" pieces of the v1.5 builder push, bundled because they
+share a migration window and a UI surface (the builder Scope/Settings panels). Framed
+around the 3-layer architecture (per D-034 / PRD §1.1) — v1.5a delivers Layer-1 seams +
+Layer-2 generalized scoping + the review-state lifecycle + the first Vertical Pack's
+template content:
+
+- **Prerequisite: `listing` table creation.** Validated 2026-05-27 — the table
+  did not exist in the schema (only `template_listing` / `template_listing_version`
+  for library distribution). Created here as part of v1.5a so the polymorphic
+  `entity_set_member` CHECK has a target and Phase 17 (property-ops pack) +
+  Phase 8 (vendor / participant) have a real listing concept to lean on.
+  Minimum shape per PRD §8.1: `id`, `organization_id`, `name`,
+  `external_listing_id` (nullable, unique per org), `property_type` (free text;
+  cohort membership via `entity_set` is the canonical categorization), `address`
+  (optional jsonb), timestamps + soft delete. Plus minimum `listings.*` CRUD
+  procedures + `/library/listings` index UI so something can create listings in
+  v1.5a. Sample listings seeded by the property-ops pack install (Phase 17a).
+  Adds ~1 day to v1.5a.
+- **Layer-1 seam: `entity_set` (replaces draft v1's `listing_cohort`).** New
+  `entity_set` (org-scoped, named, color label, `entity_type` discriminator — only
+  `'listing'` in v1.5) + `entity_set_member` join (polymorphic by `entity_type` +
+  `entity_id`). New column `workflow.entity_set_ids uuid[] DEFAULT '{}'` (empty =
+  applies-to-all, preserves current behavior). The `entity_type` discriminator +
+  polymorphic member join + thin `EntityAdapter` TS interface (one implementation:
+  `ListingAdapter`) make Layer-1's full configurable entity model a content-and-UI
+  build post-v1, not a schema migration. Cost: one enum, one polymorphic join, one
+  adapter interface. Benefit: no forklift rename when Layer 1 lands.
+- **Layer-2: generalized entity-set scoping + documented action vocabulary.**
+  `runs.launch` filters available workflows by entity-set intersection when invoked
+  from an entity context; workflow-first launches keep current behavior with a
+  mismatch warning. Builder Scope panel gains an entity-set multi-select; listings
+  index + detail gain entity-set chip badges (same UI pattern will serve future
+  entity types). The v1 composable action vocabulary (task / approval / heading /
+  one_off; reserved: code, ai) gets documented explicitly as the closed set the AI
+  authoring layer may emit. Entity sets reusable as vendor-pool scope target
+  (D-027 follow-on, post-v1).
+- **Review states.** Add `workflow.review_state pg_enum('draft','in_review','published',
+  'archived')` + `organization.require_concierge_review boolean DEFAULT false`. When
+  the org flag is on, the "Publish" button on a draft becomes "Submit for review";
+  admin inbox shows pending reviews with diff against last published version (re-uses
+  `getVersionEditBundle`). Workflow-level lifecycle, **not** version-level — snapshot
+  / publish semantics (D-019) unchanged. Audit row on every state transition. We ship
+  the flag, not an in-house review service.
+- **Property-ops pack content refresh (the first Vertical Pack).** Per D-034: STR
+  pack remains v1 wedge; pack ordering reframe defers Commercial PM to post-v1. The
+  Vertical Pack primitive (per PRD §1.1, §6.5) bundles entity schemas + workflow
+  templates + integration presets + AI grounding vocabulary; v1.5 expands the
+  property-ops pack's **template library** to span property-ops types (STR-leaning
+  per D-034 dogfood profile, but horizontal in surface area to keep the engine
+  honest). Full roster in [PRD §6.5](PRD_WORKFLOW_SOP_BUILDER.md):
+  - **STR / vacation rental** (12; v1.5 dogfood lead) — Besty parity (Pet Approval,
+    Noncritical Triage, Discount Request, Guest Complaint Escalation, Inbound Call
+    Routing, Lockout, Early Check-In, Late Checkout, Post-Stay Review) + STR
+    Turnover, deep-clean cadence, pre-arrival prep.
+  - **Long-term residential** (6) — lease renewal, move-in, move-out, late-rent
+    collection, resident complaint triage, periodic interior inspection.
+  - **Commercial** (6) — tenant fit-out coordination, quarterly PM dispatch, COI
+    refresh, after-hours access, lease renewal notice, CAM reconciliation prep.
+  - **Multifamily** (4) — common-area inspection, amenity-incident response,
+    mid-lease unit inspection, building-system outage response.
+  - **Cross-cutting** (5) — maintenance work-order triage, vendor onboarding, owner /
+    asset-manager monthly report, emergency response, new-listing / new-unit setup.
+
+  All ship as platform-published `template_listing` rows (`publisherOrganizationId
+  IS NULL`) via the existing install flow.
+
+Schema migration + UI + curated pack-content seed data. No new infrastructure.
+
+### Phase 9.6 — Playbooks schema seam (lifecycle-sequence primitive)
+
+See [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) for full spec. Schema-only chunk; no
+procedures, no UI, no Inngest functions. Sequenced *after* Phase 9.5 so it can
+reuse the v1.5a artifacts (`entity_set`, `review_state` enum, `ai_authoring_prompt`
+table, `require_concierge_review` flag) rather than redeclare them.
+
+- New tables: `playbook`, `playbook_version`, `playbook_step`, `playbook_run`,
+  `playbook_run_step` (org-scoped per D-006; snapshot-immutable on publish per
+  D-018; reuse `review_state` lifecycle from v1.5a).
+- New enums: `playbook_step_type` (`wait_for_duration` / `wait_for_event` /
+  `launch_workflow` / `send_notification` / `branch_on_data_set` /
+  `write_to_data_set`); `playbook_lifecycle_event` (`run.completed` /
+  `run.state_changed` / `listing.cohort_added` / `vendor.upserted` — no
+  `cross_product` value; PM-initiated work surfaces via the existing events
+  with a `crossProductOriginFilter` in trigger config); `playbook_run_status` +
+  `playbook_run_step_status`.
+- `entity_type` enum gains `playbook`, `playbook_version`, `playbook_run`,
+  `playbook_run_step` entries.
+- New column: `organization.label_overrides jsonb NOT NULL DEFAULT '{}'` — UI-only
+  label remapping (default `Playbooks`; CRE-leaning orgs may override to
+  `Lifecycles`). Canonical names in schema / API / URLs / audit / integration
+  contracts stay `playbook`.
+- `forbiddenOrganizationSlugs` in [packages/auth/config.ts](../packages/auth/config.ts)
+  gains `playbooks` (top-level route reserved for Phase 18a).
+
+No business logic yet; no behavior change. Idempotent re-run safe. Execution +
+authoring + AI authoring all land inside Phase 18 (see Phase 18 amendment below).
+
 ### Phase 10 — Reader-facing KB surface (S-03)
 
 A read/search/acknowledge surface over `workflow.type ∈ {document, policy}` +
@@ -283,6 +476,47 @@ A read/search/acknowledge surface over `workflow.type ∈ {document, policy}` +
 - Visibility honors `workflow.visibility` (`org-internal | guest-visible | public`).
 - Substrate for the post-v1 Slack/Teams delivery (S-09).
 
+**v1.5c — three-views unification (Author / Read / Execute) per [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §1.2, §6.4.**
+
+PRD v2's architectural commitment: the SOP, KB article, and runnable workflow are
+**three views of one object**, not three separate features. This phase implements
+that commitment as the v1.5c slice. Besty keeps KB and Builder separate; Virn
+collapses them so editing once updates all views — the human / AI / agent-executable
+bridge from day one.
+
+- **Detail page becomes a view-switcher.** `/library/workflows/[id]?view={author|read}`
+  is the canonical URL for any specific workflow's view mode. The Author view is
+  the existing builder canvas (Phase 5). The Read view (new) renders the published
+  version as an SOP/KB markdown article (steps, descriptions, field labels, role
+  hints, expected outputs). Same backing data, different lens. Author default for
+  users with edit perms; Read default for read-only org members; toggle visible to
+  users with both permissions.
+- **Two browse-ergonomic indexes both lead to the same detail page.**
+  - `/library/workflows` — authors' index (all states, all workflows the user can
+    see) — already exists.
+  - `/sop` — readers' index (published only, opens detail pages in `?view=read`).
+    New top-level route. Add `sop` to `forbiddenOrganizationSlugs` in
+    `packages/auth/config.ts` + snapshot (memory rule).
+- **Scope of Read view content.** Surfaces all published workflow types — procedural
+  workflows (`workflow.type='workflow'`), documents, policies. Operator framing is
+  "find the SOP, read it, mark as read."
+- **Mark-as-read.** Read view's button → inserts `sop_read_receipt` row (`workflow_id`,
+  `workflow_version`, `user_id`, `read_at`). Org admins see per-workflow read
+  receipts on the detail page in any view.
+- **Read receipt vs acknowledgment reconciliation.** `sop_read_receipt` = passive
+  "I've seen this" signal; existing `acknowledgment` (Phase 16) = active compliance
+  sign-off. Per PRD §12 open question #8: keep separate in v1.5; reconcile at
+  Phase 15 compliance pack if useful (could render both on one timeline).
+- **Strict no-execution constraint.** No "Start a run" button in Read view.
+  Runs launch from entity contexts (listings, triggers, runs index). Read view
+  stays reference-only to keep the mental model clean.
+- **Snapshot immutability preserved.** Read view for readers always reflects the
+  last published snapshot (D-019 unchanged). Authors viewing draft state see the
+  in-progress edits in Read view too (preview).
+- **Permission resolution.** Author landing in `?view=read` sees a toggle; reader
+  landing in `?view=author` is redirected to `?view=read`. Detail page resolves
+  view-mode default based on viewer permission + URL param.
+
 ### Phase 11 — Agent-safe action surface (S-01a) — the unfair advantage
 
 Expose the workflow/run procedures as a **credentialed, audited, capability-gated
@@ -294,6 +528,19 @@ not any specific wire protocol. oRPC is canonical; MCP is one wrapper among
 possible others.
 
 **Sub-phase 11a — Canonical oRPC action surface (primary deliverable).**
+
+**Step 1 of 11a — SHIPPED 2026-05-27.** Bearer-credential middleware
+(`agentOrUserOrgProcedure`) + agent-aware audit attribution + dual-auth wiring
+of **`runs.setFieldValue` + `runs.completeStep`** (the step-fulfillment endpoints
+agents need first). Find-or-create is intentionally NOT in step 1: agents in
+11a.1 must be a pre-existing participant on the run (bound at launch via the
+S-07 mode-aware launcher); the on-demand participant-create path lands with
+`runs.launch` in 11a.2.
+
+**Step 2 of 11a — next session.** `runs.launch` dual-auth (so PM-as-agent can
+launch runs); agent introspection (`runs.listMyAssignments`); per-agent
+capability checks via `agent_capability`; cross-product origin propagation
+(`crossProductOrigin='virn-pm'` when PM is the caller).
 
 - **Surface (read):** list workflows / read workflow / list runs / read run /
   list my assigned steps. Same oRPC procedures the human UI calls; no parallel
@@ -385,6 +632,58 @@ Two ingress paths into the existing builder API:
 LLM provider: per agents.md / `packages/ai`. Cache aggressively (prompt cache for the
 schema-emit instruction; per-customer instructions in the system slot).
 
+**v1.5b — Layer-3 AI authoring grounded in tenant entity schema, full spec in [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §1.1, §6.3.**
+
+- **Sequence:** ships immediately after Phase 11 (action surface) and before
+  Phase 10 (three-views unification + reader surface) in build order. The
+  pull-forward is driven by D-021 ("AI-credible v1") — natural-language SOP
+  authoring is the table-stakes on-ramp without which Pass 3 stays a
+  blank-canvas tax.
+- **Architectural commitment (PRD §1.1 Layer 3): AI authoring grounds in the
+  tenant's entity schema.** Per the 2026-05-27 strategic reframe, this is what
+  makes a horizontal builder feel like Besty even when the underlying nouns are
+  configurable. In v1.5b the tenant entity schema is the property-ops fixed set
+  (listing today; vendor / owner / work_order from Phase 8 schema as adapters
+  land) fetched via the `EntityAdapter` registry (Phase 9.5) and embedded as a
+  cached block in the system prompt. When Layer-1 full configurable entity
+  model ships post-v1, the same code path serves tenant-defined entities — no
+  changes to AI authoring procedures or validator structure.
+- **Lives on the agents oRPC router** (Phase 11), not as a direct Claude SDK
+  call inside a workflows procedure. Two new procedures:
+  - `agents.authorWorkflow({ prompt, sourceText?, templateHintId?, entitySetHints? }) → { workflowId }`
+  - `agents.regenerateStep({ workflowId, stepId, refinementPrompt }) → { updatedStep }`
+  Reusing the action surface (a) gives one audit trail for every Claude call,
+  (b) lets MCP hosts inherit AI authoring for free via the Phase 11b wrapper,
+  (c) keeps the model-swap seam narrow (per-org or per-tier).
+- **AI output validated against entity schema + builder contract.** Per Appendix A
+  of the PRD: step types restricted to `task | approval | heading | one_off`;
+  `dueType` restricted to `none | offset_from_start`; entity references emitted
+  by the AI are cross-checked against the live entity adapter registry (rejects
+  "for each Booking" if no `Booking` entity exists); conditional branches emitted
+  as `precondition_note` comments on relevant steps so authors can wire them when
+  Phase 6 (automation rule firing) ships. Two retry attempts max before
+  surfacing "couldn't parse your SOP — try simplifying."
+- **Two-pane review UX** after generation: original NL/source text on the left,
+  generated workflow as read-only canvas snapshot on the right. Per-step
+  accept/edit/regenerate; whole-workflow accept-all / regenerate-with-addendum /
+  start-over. Routes to `/library/workflows/[id]?view=author&aiAuthored=1`.
+- **Multi-block prompt caching.** Four stable cached blocks in the system prompt:
+  (1) builder JSON contract, (2) palette/dueType constraints + action vocabulary
+  from Phase 9.5, (3) few-shot examples from the property-ops pack templates,
+  (4) **tenant's entity schema block** (per-org cacheable; invalidated when
+  entity definitions change). Per-request user input uncached.
+- **Model default:** `claude-sonnet-4-6` (cost); fall back to `claude-opus-4-7`
+  during dogfood if Sonnet's structured-output reliability is insufficient.
+- **Provenance row:** every authoring call writes an `ai_authoring_prompt` row
+  with `entity_schema_snapshot jsonb` (the schema sent to the AI, for
+  reproducibility) plus org/user/prompt/source/response/model/timestamp;
+  `workflow.ai_authoring_prompt_id` FK lets the builder header link back to the
+  source prompt.
+- **Dogfood profile (per D-034):** STR operator. AI grounding examples skew STR
+  per the dogfood lead, but the schema-grounding pipeline is property-type-
+  agnostic so the same pipeline serves Commercial/Residential/IT Ops packs when
+  D-034 revisit triggers fire.
+
 ### Phase 13 — Tango / Scribe import path (S-01d)
 
 Import a Tango or Scribe export (their public export formats) as a draft
@@ -459,12 +758,40 @@ idempotency for vendor categories + workflow roles); platform-seed tooling scrip
   `dueAt`); routing those to a manager notification + reassignment requires
   Phase 18.
 
-### Phase 18 — Automation execution
+### Phase 18 — Automation execution + Playbooks (Inngest landing)
 
-Inngest functions evaluate `automation_rule` on events and apply actions;
-`run_rule_fired` idempotency so each rule fires once per run. Required for the
+Three features justify the Inngest investment at this phase: `automation_rule`
+execution, SLA-sweep migration from Vercel Cron, and Playbooks. Sub-phase split:
+
+**Phase 18 (core) — Automation execution.** Inngest functions evaluate
+`automation_rule` on events and apply actions; `run_rule_fired` idempotency so
+each rule fires once per run. SLA-sweep cron migrates from Vercel Cron to an
+Inngest scheduled handler (per Phase 8 step 5's successor note). Required for the
 property-ops pack's reference automations (Phase 17) and for S-07 mode (c) fully
 automated runs.
+
+**Phase 18a — Playbooks authoring** (see [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) §11).
+Playbook CRUD + builder UI (vertical step list) + dry-render preview +
+library tab + reader-KB integration via the v1.5c three-views unification (the
+Playbook detail page becomes a view-switcher on `?view={author|read}`, same
+pattern as Workflows; `/sop` indexes both). Read-only `playbookRuns.list/get`.
+No execution.
+
+**Phase 18b — Playbooks execution.** Inngest dispatcher + orchestrator functions
+emit + subscribe to `run.completed` / `run.state_changed` / `listing.cohort_added`
+/ `vendor.upserted` lifecycle events. `playbookRuns.launchManual` lights up. The
+orchestrator uses Inngest's `step.sleep` / `step.waitForEvent` for the
+`wait_for_duration` / `wait_for_event` step types — synchronous orchestration
+isn't an option once waits exist (rationale for the 18a/18b split). Cancellation
+flow (`playbookRuns.cancel`). Audit + activity attribution per D-027 (synthetic
+per-org system-agent; `crossProductOrigin` propagated from trigger).
+
+**Phase 18c — Playbooks AI authoring.** `agents.authorPlaybook` +
+`agents.regeneratePlaybookStep` on the agents oRPC router; system prompt grounded
+in tenant entity schema (same Layer-3 pattern as Workflow AI authoring per
+[PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.3). Reuses
+`ai_authoring_prompt` (no new provenance table) and prompt-caching strategy from
+v1.5b.
 
 ### Phase 19 — v1 polish + launch readiness
 
@@ -518,6 +845,27 @@ automated runs.
 - **Property-ops compliance flavors** — STR municipal records, vendor insurance
   attestations, owner-required inspection cadences (decide which first based on
   early-customer pull).
+- **Agent action policy / governance layer** — per-org rules constraining what
+  agent principals (ADR-006) can send / post / do, evaluated in the same
+  middleware as capability gating (Phase 11). Pattern inspired by Besty's
+  Autopilot Messaging guardrails; becomes load-bearing when S-07 mode (c) (fully
+  automated runs) deepens into regulated PM contexts. Lives next to the existing
+  capability × permission gating; no new schema until a real policy use case
+  demands it.
+- **AI voice receptionist (integration, not flagship)** — inbound AI voice for
+  after-hours commercial maintenance / IT Ops incident lines. Integrate with
+  EliseAI or a voice-AI specialist rather than building in-house; the lane has
+  significant specialist funding (see SCRATCHPAD competitive read). What's worth
+  studying from Besty's implementation is the **triage handoff design** — how
+  the AI hands off to humans or workflows when it hits its limits — not the
+  voice tech itself.
+- **Mobile field-execution app (work-order tech UX)** — offline-capable task
+  queue, photo / note proof of completion, time logging. Pattern inspired by
+  Besty's Cleaning & Ops module; the *differentiator* is the field-team app
+  design (its own discipline), not the underlying work-order data model.
+  Property-side build (PM owns work-order ownership per D-030); Ops contributes
+  the run/step surfaces that the field app reads from (Phase 7 already ships
+  these).
 
 ---
 

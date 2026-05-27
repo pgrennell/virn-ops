@@ -1411,3 +1411,81 @@ Action API. PM's BACKLOG carries a "Virn PM Action API + MCP wrapper" entry with
 trigger spelled out. If a real bidirectional-live-query use case emerges before v1
 ships, this decision gets revisited. Recorded in PM DECISIONS.md 2026-05-27 §N + PM
 BACKLOG.md.
+
+---
+
+## 2026-05-27 — Workflow & SOP Builder v1.5 (pack-ordering call)
+
+### D-034 — STR pack remains v1 wedge; commercial PM pack deferred to post-v1
+
+**Context:** A 2026-05-27 strategic-architecture conversation (synthesized into
+[PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §1) reframed Virn's GTM unit
+as a Vertical Pack: entity schemas + workflow templates + integration presets + AI
+grounding vocabulary. The chat recommended **Commercial PM first**, then
+Residential/LTR, then STR as fast-follow, then IT Ops as proof the engine is genuinely
+vertical-free. This conflicts with [BUILD_PLAN.md](BUILD_PLAN.md) Phase 17, which has
+STR Turnover & Housekeeping as the v1 pack content — and Phase 17a shipped
+2026-05-27 (10 vendor categories, 4 workflow roles, 1 published seed workflow at 17
+steps × 4 sections).
+
+**Decision:** **STR pack remains the v1 customer-facing wedge.** The chat's
+*architectural* moves (configurable entity model seams, generalized entity-set
+scoping, AI authoring grounded in tenant entity schema, three-views unification of
+SOP / KB / runnable workflow) are adopted in v1.5 per the PRD restructure. The
+chat's *GTM* move (commercial-first pack ordering) is **deferred**. Commercial PM
+pack ships post-v1, triggered by either:
+- (a) an early commercial-PM design-partner raising their hand with concrete pull, OR
+- (b) Layer-1 configurable entity model completion (its own multi-month phase post-v1),
+  at which point the engine can absorb new packs cheaply.
+
+**Rationale:**
+
+1. **Phase 17a is already shipped.** Abandoning it costs weeks of throwaway work and
+   forfeits the install-machinery + vendor-category + workflow-role investment.
+2. **Cross-repo Besty integration (D-024..D-033) is STR-flavored.** Besty (PM-side)
+   is STR-leaning; the webhook event catalog, vendor sync surface, and
+   `runs.launch` payload shape just defined assume STR-shaped data. Flipping to
+   commercial-first creates immediate friction in the integration we're about to
+   build.
+3. **The architectural moves stand on their own.** Configurable entity model,
+   generalized entity-set scoping, grounded AI authoring, and three-views
+   unification deliver value regardless of which pack ships first. Horizontal
+   positioning gets proven later with pack #2; we don't have to pay the
+   commercial-first GTM tax now to earn it.
+
+The chat's argument that STR is "crowded" (Besty, Hospitable, OwnerRez, Guesty,
+Breezeway all ship workflow features) is real, but the cross-repo Besty partnership
+reframes the threat — Virn-Ops is *integrated with* Besty rather than competing on
+Besty's PM-side turf. STR ops customers also decide fast (days, not 3–6 months),
+which matters for getting to first revenue.
+
+**Consequences:**
+
+- **v1.5 template library** ([PRD §6.3](PRD_WORKFLOW_SOP_BUILDER.md)) keeps the
+  property-types matrix (STR 12 / LTR 6 / commercial 6 / multifamily 4 /
+  cross-cutting 5). STR-leaning by template count but horizontal in surface area
+  to keep the engine honest. Commercial templates ship as starter examples for
+  future commercial customers, not as v1 pack content.
+- **v1.5 AI authoring** ([PRD §6.1](PRD_WORKFLOW_SOP_BUILDER.md)) grounds its
+  system-prompt examples in property-ops entities generically (listing, vendor,
+  owner) — not STR-specific. Few-shot examples rotate across property types so
+  the AI doesn't typecast itself or its output.
+- **v1.5 dogfood profile** is an STR operator (consistent with Phase 17a
+  momentum). Commercial PM dogfood deferred to whenever trigger (a) fires.
+- **Marketing and onboarding copy** in v1 speaks to property-ops broadly with STR
+  as the lead use case — not "we are an STR tool." The horizontal architecture
+  is part of the v1 story even though only one pack ships.
+- **Phase 17b–e** (property inspection, maintenance work-order routing, vendor
+  onboarding, tenant/guest onboarding per BUILD_PLAN) continue as STR-flavored
+  content. Commercial-pack content becomes a separate post-v1 effort.
+- **Revisit triggers are observable.** Trigger (a) = inbound commercial-PM
+  interest with concrete design-partner willingness. Trigger (b) = completion of
+  the Layer-1 configurable entity model phase (which itself needs scheduling
+  post-v1; not currently in BUILD_PLAN as a numbered phase).
+- **Does not supersede D-021.** D-021 locked "vertical-first property ops" as the
+  domain; this decision specifies STR as the first sub-vertical within
+  property-ops. Same direction, narrower call.
+- **Does not block the PRD architectural restructure.** The 3-layer architecture
+  (entity model + workflow engine + AI authoring) and three-views unification
+  proceed in v1.5 as planned. This decision is purely about which sub-vertical's
+  *content* ships first.
