@@ -192,11 +192,16 @@ export function RunView({ runId, isAdminOrOwner, initialRunStepId }: RunViewProp
 		if (!activeRunStep) return null;
 		const ids = activeRunStep.assignees
 			.map((a) => a.participant)
-			.map((p) =>
-				p.userId
-					? data.participants.find((dp) => dp.userId === p.userId)?.guestName ?? p.userId
-					: p.guestName ?? p.guestEmail ?? "Guest",
-			);
+			.map((p) => {
+				if (p.userId) {
+					return data.participants.find((dp) => dp.userId === p.userId)?.guestName ?? p.userId;
+				}
+				if (p.agentId) {
+					const matchingP = data.participants.find((dp) => dp.agentId === p.agentId);
+					return matchingP?.agent?.name ?? p.agent?.name ?? "Agent";
+				}
+				return p.guestName ?? p.guestEmail ?? "Guest";
+			});
 		if (ids.length === 0) return null;
 		return ids.slice(0, 2).join(", ") + (ids.length > 2 ? ` +${ids.length - 2}` : "");
 	})();

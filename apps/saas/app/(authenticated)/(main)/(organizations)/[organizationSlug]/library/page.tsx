@@ -13,9 +13,9 @@
 // modules/library/components (the client tree).
 
 import { LibraryView } from "@library/components/LibraryView";
-import { canSee } from "@shared/lib/gating";
+import { canSee, isEnabled } from "@shared/lib/gating";
 import { assertCanSee } from "@shared/lib/gating-server";
-import { NAV_AREAS } from "@shared/lib/nav";
+import { CAPABILITIES, NAV_AREAS } from "@shared/lib/nav";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Library" };
@@ -34,6 +34,9 @@ export default async function LibraryPage({
 				organizationSlug={organizationSlug}
 				isAdminOrOwner={snapshot.isAdminSuperset}
 				canRun={canSee(NAV_AREAS.runs, snapshot)}
+				// Phase 8 step 3: gates the launcher's mode selector. When OFF, the launcher
+				// only offers "human" mode (no selector cards rendered).
+				agentStepsEnabled={isEnabled(CAPABILITIES.agentSteps, snapshot)}
 			/>
 		</div>
 	);

@@ -23,6 +23,8 @@ interface LauncherPanelProps {
 		latestPublishedVersionId: string;
 	} | null;
 	organizationSlug: string;
+	/** Phase 8 step 3 -- threaded down to LauncherForm to gate the mode selector. */
+	agentStepsEnabled: boolean;
 	onClose: () => void;
 }
 
@@ -30,6 +32,7 @@ export function LauncherPanel({
 	open,
 	workflow,
 	organizationSlug,
+	agentStepsEnabled,
 	onClose,
 }: LauncherPanelProps) {
 	// ESC to dismiss. Same affordance the Builder config panel exposes.
@@ -67,6 +70,7 @@ export function LauncherPanel({
 					<LauncherForm
 						workflow={workflow}
 						organizationSlug={organizationSlug}
+						agentStepsEnabled={agentStepsEnabled}
 						onLaunched={onClose}
 					/>
 				) : null}

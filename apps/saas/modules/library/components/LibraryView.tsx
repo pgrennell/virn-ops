@@ -54,12 +54,17 @@ interface LibraryViewProps {
 	 * every reachable caller -- but the resolver takes it as a separate input so the
 	 * custom-role layer (ADR-004) doesn't require a matrix-rewrite later. */
 	canRun: boolean;
+	/** From isEnabled(workflows.agent_steps, snapshot) at the page level (Phase 8
+	 * step 3). When false, the LauncherForm only offers "human" mode (no mode
+	 * selector). Lifted via the agent_steps capability per the 2026-05-26 pivot. */
+	agentStepsEnabled: boolean;
 }
 
 export function LibraryView({
 	organizationSlug,
 	isAdminOrOwner,
 	canRun,
+	agentStepsEnabled,
 }: LibraryViewProps) {
 	const [activeTabId, setActiveTabId] = useState<LibraryTypeTab["id"]>("all");
 	const [topLevelError, setTopLevelError] = useState<string | null>(null);
@@ -180,6 +185,7 @@ export function LibraryView({
 				open={launcherTarget !== null}
 				workflow={launcherTarget}
 				organizationSlug={organizationSlug}
+				agentStepsEnabled={agentStepsEnabled}
 				onClose={() => setLauncherTarget(null)}
 			/>
 		</div>

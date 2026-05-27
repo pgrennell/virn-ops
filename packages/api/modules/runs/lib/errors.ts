@@ -20,7 +20,11 @@ export type RunEngineErrorCode =
 	| "STOP_TASK_BLOCKED"
 	| "UNKNOWN_FIELD_KEY"
 	| "FIELD_VALUE_INVALID"
-	| "GUEST_TOKEN_INVALID";
+	| "GUEST_TOKEN_INVALID"
+	// Mode-aware launch (Phase 8 step 3) — agent assignment refusals.
+	| "MODE_REQUIRES_AGENT"
+	| "AGENT_NOT_IN_ORG"
+	| "AGENT_INACTIVE";
 
 export class RunEngineError extends Error {
 	readonly code: RunEngineErrorCode;

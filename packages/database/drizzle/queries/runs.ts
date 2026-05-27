@@ -69,9 +69,13 @@ export interface SnapshotKickoffValue {
 
 export interface SnapshotParticipantRow {
 	tempKey: string; // caller-assigned key so we can wire role/assignee rows after insert
+	/** Discriminator (ADR-006 + D-022). The corresponding identity FK below must be the only
+	 * one populated -- the participant CHECK constraint enforces this at the DB level. */
+	kind: "user" | "guest" | "agent";
 	userId: string | null;
 	guestEmail: string | null;
 	guestName: string | null;
+	agentId: string | null;
 }
 
 export interface SnapshotRoleAssignmentRow {
@@ -160,13 +164,11 @@ export async function insertRunSnapshot(input: {
 					input.participants.map((p) => ({
 						organizationId: input.organizationId,
 						runId,
-						// Discriminator picked from which identity field is populated. ADR-006
-						// adds 'agent' as a third kind, set by Phase 11's MCP-side writers; this
-						// path (run launch) only spawns user/guest participants.
-						kind: (p.userId ? "user" : "guest") as "user" | "guest" | "agent",
+						kind: p.kind,
 						userId: p.userId,
 						guestEmail: p.guestEmail,
 						guestName: p.guestName,
+						agentId: p.agentId,
 					})),
 				)
 				.returning({ id: participant.id });
@@ -249,13 +251,21 @@ export async function getRunForOrg(organizationId: string, runId: string) {
 					with: {
 						assignees: {
 							with: {
-								participant: true,
+								participant: {
+									with: {
+										agent: true,
+									},
+								},
 							},
 						},
 					},
 				},
 				values: true,
-				participants: true,
+				participants: {
+					with: {
+						agent: true,
+					},
+				},
 				roleAssignments: true,
 			},
 		})) ?? null

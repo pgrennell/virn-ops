@@ -42,6 +42,8 @@ import {
 	findMissingRequiredKickoffFields,
 	type KickoffFieldDescriptor,
 } from "../lib/launcher-validation";
+import type { LaunchMode } from "../lib/launcher-types";
+import { LaunchModePicker } from "./LaunchModePicker";
 
 interface LauncherFormProps {
 	/** The workflow row that the Run action opened the launcher for. The
@@ -54,13 +56,22 @@ interface LauncherFormProps {
 		latestPublishedVersionId: string;
 	};
 	organizationSlug: string;
+	/** Phase 8 step 3 -- when true, the LaunchModePicker is rendered above the kickoff
+	 * fields. When false, the form only supports "human" mode (no picker; same shape
+	 * as pre-Phase-8 behavior). */
+	agentStepsEnabled: boolean;
 	/** Called on successful launch (after redirect) so the parent can close the
 	 * panel state. Optional -- if the container manages its own close-on-launch,
 	 * pass undefined. */
 	onLaunched?: () => void;
 }
 
-export function LauncherForm({ workflow, organizationSlug, onLaunched }: LauncherFormProps) {
+export function LauncherForm({
+	workflow,
+	organizationSlug,
+	agentStepsEnabled,
+	onLaunched,
+}: LauncherFormProps) {
 	const { user } = useSession();
 	const currentUserId = user?.id ?? null;
 
@@ -81,6 +92,10 @@ export function LauncherForm({ workflow, organizationSlug, onLaunched }: Launche
 	// semantics are explicit and we can pass them straight to the validation fn.
 	const [fieldValues, setFieldValues] = useState<Map<string, unknown>>(new Map());
 	const [roleAssignments, setRoleAssignments] = useState<Map<string, string | null>>(new Map());
+	// Phase 8 step 3 launch mode + agent selection. Default 'human' = no behavioral change
+	// from the pre-Pass-B form. Mode + agentId are sent to runs.launch on submit.
+	const [launchMode, setLaunchMode] = useState<LaunchMode>("human");
+	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 	const [submitError, setSubmitError] = useState<string | null>(null);
 	/** Server-supplied missing-field hint when REQUIRED_KICKOFF_FIELD_MISSING fires.
 	 * Lives separate from `submitError` so the per-field indicator can paint without
@@ -123,8 +138,15 @@ export function LauncherForm({ workflow, organizationSlug, onLaunched }: Launche
 		kickoffDescriptors,
 		fieldValues,
 	);
+	// When mode != human, the agent picker must have a non-null selection. Otherwise the
+	// submit would 400 with MODE_REQUIRES_AGENT -- block client-side instead of round-tripping.
+	const modeNeedsAgent = launchMode !== "human";
+	const missingAgent = modeNeedsAgent && !selectedAgentId;
 	const submitDisabled =
-		clientMissing.length > 0 || launchMutation.isPending || !bundleQuery.data;
+		clientMissing.length > 0 ||
+		missingAgent ||
+		launchMutation.isPending ||
+		!bundleQuery.data;
 
 	const handleSubmit = async () => {
 		if (!bundleQuery.data) return;
@@ -156,6 +178,10 @@ export function LauncherForm({ workflow, organizationSlug, onLaunched }: Launche
 				workflowVersionId: workflow.latestPublishedVersionId,
 				kickoffValues,
 				roleAssignments: roleAssignmentsArr,
+				// Phase 8 step 3. Defaults to 'human' on the server too, but explicit
+				// here keeps the wire payload self-describing for debugging.
+				mode: launchMode,
+				agentId: launchMode === "human" ? null : selectedAgentId,
 			});
 			// Land in the Run view for the new run. Use window.location for a hard
 			// nav so the run's data loads fresh (avoids any stale TanStack cache).
@@ -194,6 +220,14 @@ export function LauncherForm({ workflow, organizationSlug, onLaunched }: Launche
 
 	const roles = rolesQuery.data ?? [];
 	const members = membersQuery.data ?? [];
+	// Workflow steps for the LaunchModePicker's preview. The bundle includes step rows
+	// with type + position; we project just what the picker needs.
+	const stepRows = bundleQuery.data.steps.map((s) => ({
+		id: s.id,
+		title: s.title,
+		type: s.type,
+		position: s.position,
+	}));
 	const fieldSaveStates: Map<string, FieldSaveState> = EMPTY_SAVE_STATES;
 	const fieldErrors = new Map<string, string | null>(
 		// Server-flagged missing required fields paint a per-field error indicator.
@@ -209,6 +243,21 @@ export function LauncherForm({ workflow, organizationSlug, onLaunched }: Launche
 					view.
 				</p>
 			</header>
+
+			{agentStepsEnabled && (
+				<LaunchModePicker
+					mode={launchMode}
+					onChangeMode={(m) => {
+						setLaunchMode(m);
+						// Switching back to human clears the agent pick -- avoids stale state
+						// being sent if the user toggles modes after picking an agent.
+						if (m === "human") setSelectedAgentId(null);
+					}}
+					selectedAgentId={selectedAgentId}
+					onChangeAgentId={setSelectedAgentId}
+					steps={stepRows}
+				/>
+			)}
 
 			{kickoffFields.length === 0 ? (
 				<p className="text-xs text-foreground/60">

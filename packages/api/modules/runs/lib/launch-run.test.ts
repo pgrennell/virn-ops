@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@virn/database", () => ({
+	getAgentForOrg: vi.fn(),
 	getWorkflowForOrg: vi.fn(),
 	getLatestPublishedWorkflowVersion: vi.fn(),
 	getWorkflowVersionById: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock("@virn/database", () => ({
 }));
 
 import {
+	getAgentForOrg,
 	getLatestPublishedWorkflowVersion,
 	getVersionLaunchBundle,
 	getWorkflowForOrg,
@@ -250,6 +252,234 @@ describe("launchRun", () => {
 				entityId: "run_new",
 			}),
 		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Mode-aware launch (Phase 8 step 3) -- the S-07 wedge: one procedure runs
+// three ways (human / ai_assisted / automated). The role-based assignment
+// path is verified above; these tests cover the agent assignment shaping +
+// the refusal codes.
+// ---------------------------------------------------------------------------
+
+const ACTIVE_AGENT = {
+	id: "agt_1",
+	name: "Turnover AI",
+	description: null,
+	isActive: true,
+	credentialLastFour: "a3f9",
+	credentialRotatedAt: new Date(),
+	createdByUserId: "user_1",
+	createdByUserName: "U",
+	createdAt: new Date(),
+	updatedAt: new Date(),
+};
+
+describe("launchRun -- mode-aware (Phase 8 step 3)", () => {
+	// Two-step workflow: step_a is a normal task, step_b is an AI-typed step.
+	function mountTwoStepBundleWithRoleAssignment() {
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(VERSION_PUBLISHED as never);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [
+				STEP_ROW({
+					id: "step_a",
+					assignedRoleId: "role_a",
+					title: "Inspect rooms",
+					type: "task",
+				}),
+				STEP_ROW({
+					id: "step_b",
+					assignedRoleId: "role_a",
+					title: "Photo write-up",
+					position: 1,
+					type: "ai",
+				}),
+			],
+			fields: [],
+			deps: [],
+		} as never);
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map([
+				["step_a", "rs_a"],
+				["step_b", "rs_b"],
+			]),
+		});
+	}
+
+	it("MODE_REQUIRES_AGENT when mode is ai_assisted but agentId is null", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+				mode: "ai_assisted",
+				agentId: null,
+			}),
+		).rejects.toMatchObject({ code: "MODE_REQUIRES_AGENT" });
+	});
+
+	it("AGENT_NOT_IN_ORG when the agent isn't in this org (getAgentForOrg returns null)", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce(null);
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+				mode: "ai_assisted",
+				agentId: "agt_cross_org",
+			}),
+		).rejects.toMatchObject({ code: "AGENT_NOT_IN_ORG" });
+	});
+
+	it("AGENT_INACTIVE when the agent is disabled (isActive=false)", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce({
+			...ACTIVE_AGENT,
+			isActive: false,
+		} as never);
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				kickoffValues: {},
+				roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+				mode: "ai_assisted",
+				agentId: ACTIVE_AGENT.id,
+			}),
+		).rejects.toMatchObject({ code: "AGENT_INACTIVE" });
+	});
+
+	it("ai_assisted: agent participant created, agent assigned to AI step, human keeps non-AI step", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce(ACTIVE_AGENT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+			mode: "ai_assisted",
+			agentId: ACTIVE_AGENT.id,
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		// Two participants: the role's human + the agent.
+		expect(arg.participants).toHaveLength(2);
+		const agentP = arg.participants.find((p) => p.kind === "agent");
+		expect(agentP).toBeDefined();
+		expect(agentP?.agentId).toBe(ACTIVE_AGENT.id);
+		expect(agentP?.userId).toBeNull();
+		expect(agentP?.guestEmail).toBeNull();
+		const humanP = arg.participants.find((p) => p.kind === "user");
+		expect(humanP).toBeDefined();
+		expect(humanP?.userId).toBe("u_member");
+
+		// step_a (task) -> human; step_b (ai) -> agent. One-handler-per-step semantic.
+		expect(arg.stepAssignments).toHaveLength(2);
+		const aAssign = arg.stepAssignments.find((s) => s.stepId === "step_a");
+		const bAssign = arg.stepAssignments.find((s) => s.stepId === "step_b");
+		expect(aAssign?.participantTempKey).toBe(humanP?.tempKey);
+		expect(bAssign?.participantTempKey).toBe(agentP?.tempKey);
+	});
+
+	it("automated: agent assigned to ALL steps regardless of step.type; role-based assignees skipped", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce(ACTIVE_AGENT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+			mode: "automated",
+			agentId: ACTIVE_AGENT.id,
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		// Human participant still created (the role assignment row needs a target), but it
+		// owns no steps -- the agent takes everything in automated mode.
+		const agentP = arg.participants.find((p) => p.kind === "agent");
+		expect(agentP).toBeDefined();
+
+		expect(arg.stepAssignments).toHaveLength(2);
+		expect(arg.stepAssignments.every((s) => s.participantTempKey === agentP?.tempKey)).toBe(
+			true,
+		);
+	});
+
+	it("ai_assisted with zero AI steps in the bundle: no agent participant, no step swap", async () => {
+		// Override the standard mount: bundle has no AI-typed steps.
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(VERSION_PUBLISHED as never);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [STEP_ROW({ id: "step_a", assignedRoleId: "role_a", type: "task" })],
+			fields: [],
+			deps: [],
+		} as never);
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map([["step_a", "rs_a"]]),
+		});
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce(ACTIVE_AGENT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+			mode: "ai_assisted",
+			agentId: ACTIVE_AGENT.id,
+		});
+
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		// No dead agent participant rows for modes that ended up owning nothing.
+		expect(arg.participants.find((p) => p.kind === "agent")).toBeUndefined();
+		// The single step keeps the human role assignment.
+		expect(arg.stepAssignments).toEqual([
+			{ stepId: "step_a", participantTempKey: arg.participants[0].tempKey },
+		]);
+	});
+
+	it("audit row records mode + agentId + agentHandledStepCount in changes", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+		vi.mocked(getAgentForOrg).mockResolvedValueOnce(ACTIVE_AGENT as never);
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+			mode: "automated",
+			agentId: ACTIVE_AGENT.id,
+		});
+
+		expect(writeAuditAndActivity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "run.launched",
+				changes: expect.objectContaining({
+					mode: "automated",
+					agentId: ACTIVE_AGENT.id,
+					agentHandledStepCount: 2,
+				}),
+			}),
+		);
+	});
+
+	it("default mode='human' (input omits mode): no agent lookup, existing role-based assignment unchanged", async () => {
+		mountTwoStepBundleWithRoleAssignment();
+
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [{ roleId: "role_a", userId: "u_member" }],
+			// mode + agentId both omitted
+		});
+
+		expect(getAgentForOrg).not.toHaveBeenCalled();
+		const [arg] = vi.mocked(insertRunSnapshot).mock.calls[0];
+		expect(arg.participants.find((p) => p.kind === "agent")).toBeUndefined();
+		// Both steps assigned to the human (one-handler matches assignedRoleId).
+		expect(arg.stepAssignments).toHaveLength(2);
+		expect(arg.stepAssignments.every((s) => s.participantTempKey === arg.participants[0].tempKey)).toBe(true);
 	});
 });
 

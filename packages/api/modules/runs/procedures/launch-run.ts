@@ -27,6 +27,10 @@ export const launchRunProc = protectedOrgProcedure
 			kickoffValues: z.record(z.string(), z.unknown()).default({}),
 			roleAssignments: z.array(roleAssignmentSchema).default([]),
 			title: z.string().min(1).optional(),
+			// Mode-aware launch (Phase 8 step 3). Default 'human' keeps existing callers
+			// unchanged. When mode is ai_assisted/automated, agentId is required.
+			mode: z.enum(["human", "ai_assisted", "automated"]).default("human"),
+			agentId: z.string().min(1).nullish(),
 		}),
 	)
 	.handler(async ({ input, context }) => {

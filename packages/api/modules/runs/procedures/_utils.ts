@@ -25,6 +25,10 @@ const CODE_MAP: Record<RunEngineErrorCode, "NOT_FOUND" | "FORBIDDEN" | "BAD_REQU
 	UNKNOWN_FIELD_KEY: "BAD_REQUEST",
 	FIELD_VALUE_INVALID: "BAD_REQUEST",
 	GUEST_TOKEN_INVALID: "FORBIDDEN",
+	// Phase 8 step 3 — mode-aware launch refusals.
+	MODE_REQUIRES_AGENT: "BAD_REQUEST",
+	AGENT_NOT_IN_ORG: "NOT_FOUND",
+	AGENT_INACTIVE: "BAD_REQUEST",
 };
 
 /** Wraps a lib helper call so any RunEngineError becomes an ORPCError with a sensible

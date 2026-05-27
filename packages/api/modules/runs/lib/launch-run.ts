@@ -17,6 +17,7 @@
 //   - automation rule firing -> Phase 6
 
 import {
+	getAgentForOrg,
 	getLatestPublishedWorkflowVersion,
 	getVersionLaunchBundle,
 	getWorkflowForOrg,
@@ -34,6 +35,17 @@ import {
 
 import { RunEngineError } from "./errors";
 
+/** Launch mode (Phase 8 step 3 -- the S-07 wedge). One authored procedure runs three ways:
+ *   - `human`        : existing role-based assignment everywhere (no agent)
+ *   - `ai_assisted`  : agent assigned to steps where step.type='ai'; humans elsewhere
+ *   - `automated`    : agent assigned to all steps regardless of type
+ *
+ * Agent execution itself lands in Phase 11 (agent-safe action surface). This pass just
+ * shapes the assignment graph -- in `automated` mode today, every step has an agent
+ * assignee but the agent can't actually act until Phase 11, so steps sit pending until
+ * a human marks them complete (which is fine; the wedge UX is the headline). */
+export type LaunchMode = "human" | "ai_assisted" | "automated";
+
 export interface LaunchRunInput {
 	workflowId: string;
 	/** Optional pinned version. Defaults to the latest published version of the workflow. */
@@ -47,6 +59,13 @@ export interface LaunchRunInput {
 	roleAssignments: RoleAssignmentInput[];
 	/** Optional override for the run's display title. Defaults to the workflow's title. */
 	title?: string;
+	/** Launch mode (Phase 8 step 3). Default: 'human' for backward compatibility -- any
+	 * existing caller that doesn't pass mode keeps the old role-based-only assignment. */
+	mode?: LaunchMode;
+	/** Required when mode is 'ai_assisted' or 'automated'. The agent that handles the
+	 * AI-shaped (or all) steps for this run. Validated server-side: must exist in the org,
+	 * be active, and not soft-deleted. */
+	agentId?: string | null;
 }
 
 export interface LaunchRunContext {
@@ -164,13 +183,76 @@ export async function launchRun(
 		dueAt: computeStepDueAt(startedAt, s.dueType, s.dueOffsetDays),
 	}));
 
+	// 6.5. Mode-aware agent validation (Phase 8 step 3).
+	// Compute which steps (if any) the agent will handle for this launch. The role-based
+	// step assignment below SKIPS any step in agentHandledStepIds -- the agent assignee
+	// replaces the human role assignment for that step rather than coexisting (multi-
+	// assignee is supported by the schema, but the semantic is one-handler-per-step in v1
+	// to avoid "who owns this" ambiguity in the run view).
+	const mode: LaunchMode = input.mode ?? "human";
+	let agentParticipantTempKey: string | null = null;
+	const agentHandledStepIds = new Set<string>();
+	if (mode !== "human") {
+		if (!input.agentId) {
+			throw new RunEngineError(
+				"MODE_REQUIRES_AGENT",
+				`Launch mode "${mode}" requires an agentId; none provided.`,
+				{ mode },
+			);
+		}
+		const agentRow = await getAgentForOrg(ctx.organizationId, input.agentId);
+		if (!agentRow) {
+			throw new RunEngineError(
+				"AGENT_NOT_IN_ORG",
+				"Agent not found in this organization.",
+				{ agentId: input.agentId },
+			);
+		}
+		if (!agentRow.isActive) {
+			throw new RunEngineError(
+				"AGENT_INACTIVE",
+				`Agent "${agentRow.name}" is disabled. Re-enable it or pick another.`,
+				{ agentId: input.agentId },
+			);
+		}
+		// Compute step set per mode.
+		if (mode === "ai_assisted") {
+			for (const s of steps) {
+				if (s.type === "ai") agentHandledStepIds.add(s.id);
+			}
+		} else {
+			// automated -- all steps.
+			for (const s of steps) agentHandledStepIds.add(s.id);
+		}
+		// Only spawn the agent participant row if it'll actually own at least one step. In
+		// ai_assisted mode with zero AI-typed steps the agent has nothing to do -- creating
+		// a dead participant row just to satisfy the picked mode is noise (and would still
+		// audit-attribute the launch as agent-mode, which the UI prevents preemptively but
+		// the server is defensive against here too).
+		if (agentHandledStepIds.size > 0) {
+			agentParticipantTempKey = "p_agent";
+		}
+	}
+
 	// 7. Build participant + role-assignment + step-assignee plans.
 	const participants: SnapshotParticipantRow[] = input.roleAssignments.map((ra, i) => ({
 		tempKey: `p_${i}`,
+		kind: ra.userId ? "user" : "guest",
 		userId: ra.userId ?? null,
 		guestEmail: ra.guestEmail ?? null,
 		guestName: ra.guestName ?? null,
+		agentId: null,
 	}));
+	if (agentParticipantTempKey && input.agentId) {
+		participants.push({
+			tempKey: agentParticipantTempKey,
+			kind: "agent",
+			userId: null,
+			guestEmail: null,
+			guestName: null,
+			agentId: input.agentId,
+		});
+	}
 	const tempKeyByRoleId = new Map<string, string>();
 	for (let i = 0; i < input.roleAssignments.length; i++) {
 		tempKeyByRoleId.set(input.roleAssignments[i].roleId, `p_${i}`);
@@ -181,6 +263,15 @@ export async function launchRun(
 	}));
 	const stepAssignmentRows: SnapshotStepAssignmentRow[] = [];
 	for (const s of steps) {
+		if (agentHandledStepIds.has(s.id) && agentParticipantTempKey) {
+			// Agent owns this step in the chosen mode; skip any role-based assignment
+			// (one-handler-per-step semantic for v1).
+			stepAssignmentRows.push({
+				stepId: s.id,
+				participantTempKey: agentParticipantTempKey,
+			});
+			continue;
+		}
 		if (s.assignedRoleId && tempKeyByRoleId.has(s.assignedRoleId)) {
 			stepAssignmentRows.push({
 				stepId: s.id,
@@ -218,6 +309,11 @@ export async function launchRun(
 			workflowVersionId: version.id,
 			stepCount: snapshotSteps.length,
 			kickoffValueCount: kickoffValuesNorm.length,
+			// Mode-aware launch (Phase 8 step 3). Recorded for forensics + the future
+			// monitor view ("which runs went automated vs. human").
+			mode,
+			agentId: input.agentId ?? null,
+			agentHandledStepCount: agentHandledStepIds.size,
 		},
 		metadata: { source: "manual" },
 		activityData: { runTitle: input.title ?? workflow.title, workflowTitle: workflow.title },
