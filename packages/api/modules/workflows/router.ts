@@ -28,6 +28,7 @@ import { discardDraftProc } from "./procedures/discard-draft";
 import { editPublishedProc } from "./procedures/edit-published";
 import { getVersionBundleProc } from "./procedures/get-version-bundle";
 import { getWorkflowProc } from "./procedures/get-workflow";
+import { listForEntityProc } from "./procedures/list-for-entity";
 import { listWorkflowRolesProc } from "./procedures/list-workflow-roles";
 import { listWorkflowsProc } from "./procedures/list-workflows";
 import { publishVersionProc } from "./procedures/publish-version";
@@ -42,6 +43,7 @@ import { updateWorkflowRoleProc } from "./procedures/update-workflow-role";
 export const workflowsRouter = {
 	// Workflow CRUD
 	list: listWorkflowsProc,
+	listForEntity: listForEntityProc, // Phase 9.5e -- entity-context launcher filter
 	get: getWorkflowProc,
 	create: createWorkflowProc,
 	update: updateWorkflowProc,

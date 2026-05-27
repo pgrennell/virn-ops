@@ -40,6 +40,7 @@ export default async function WorkflowBuilderPage({
 		<div className="h-full min-h-0 p-4">
 			<BuilderView
 				workflowId={workflowId}
+				organizationSlug={organizationSlug}
 				isAdminOrOwner={snapshot.isAdminSuperset}
 				role={snapshot.role}
 				enabledCapabilityKeys={enabledCapabilityKeys}

@@ -58,9 +58,14 @@ import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
 import { KickoffPanel } from "./KickoffPanel";
 import { KickoffRailEntry } from "./KickoffRailEntry";
 import { StepConfigForm } from "./StepConfigForm";
+import { WorkflowConfigForm } from "./WorkflowConfigForm";
 
 interface BuilderViewProps {
 	workflowId: string;
+	/** Active org slug. Threaded through to workflow-level config surfaces so the
+	 * Scope panel's "no entity sets yet" empty-state can deep-link to
+	 * /<organizationSlug>/library/entity-sets. */
+	organizationSlug: string;
 	/** True when the caller is admin/owner of the active org. Resolved server-side via
 	 * the gating snapshot in the page (UX_SPEC §2 admin-vs-member axis). Non-admin
 	 * members see view mode regardless of draft state -- the API's adminOrgProcedure
@@ -78,6 +83,7 @@ interface BuilderViewProps {
 
 export function BuilderView({
 	workflowId,
+	organizationSlug,
 	isAdminOrOwner,
 	role,
 	enabledCapabilityKeys,
@@ -196,7 +202,10 @@ export function BuilderView({
 	return (
 		<BuilderInner
 			bundle={bundle}
+			workflowId={workflowId}
 			workflowTitle={workflowQuery.data.workflow.title}
+			workflowEntitySetIds={workflowQuery.data.workflow.entitySetIds ?? []}
+			organizationSlug={organizationSlug}
 			forkedFromVersionNumber={forkedFromVersionNumber}
 			isDraft={isDraft}
 			isAdminOrOwner={isAdminOrOwner}
@@ -221,7 +230,11 @@ export function BuilderView({
 
 interface BuilderInnerProps {
 	bundle: VersionEditBundleResponse;
+	workflowId: string;
 	workflowTitle: string;
+	/** Current workflow-level entity-set scope (Phase 9.5e). Empty array = applies-to-all. */
+	workflowEntitySetIds: string[];
+	organizationSlug: string;
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
 	isAdminOrOwner: boolean;
@@ -239,7 +252,10 @@ interface BuilderInnerProps {
 
 function BuilderInner({
 	bundle,
+	workflowId,
 	workflowTitle,
+	workflowEntitySetIds,
+	organizationSlug,
 	forkedFromVersionNumber,
 	isDraft,
 	isAdminOrOwner,
@@ -293,13 +309,14 @@ function BuilderInner({
 	const [kickoffActive, setKickoffActive] = useState(false);
 
 	// Config-panel focus. Mutually exclusive: either a step's settings are open, OR
-	// a field's, OR the panel's closed. Mode is encoded as `{ kind: "step" | "field",
-	// id }` so the same panel surface handles both. (No "kickoff" kind here -- the
-	// kickoff section's *form* lives in the center editor, not in the slide-in panel;
-	// individual kickoff field config opens via { kind: "field" } same as step fields.)
+	// a field's, OR the workflow-level settings (Phase 9.5e: Scope panel), OR the
+	// panel's closed. (No "kickoff" kind here -- the kickoff section's *form* lives in
+	// the center editor, not in the slide-in panel; individual kickoff field config
+	// opens via { kind: "field" } same as step fields.)
 	const [panelFocus, setPanelFocus] = useState<
 		| { kind: "step"; stepId: string }
 		| { kind: "field"; fieldId: string }
+		| { kind: "workflow" }
 		| null
 	>(null);
 	// Server-supplied referencer list when the last rename refused with
@@ -419,6 +436,10 @@ function BuilderInner({
 			canDiscard
 			discardPending={discardPending}
 			onDiscard={onDiscard}
+			onConfigureWorkflow={() => {
+				setKeyRenameRefs(null);
+				setPanelFocus({ kind: "workflow" });
+			}}
 			topLevelError={topLevelError}
 		>
 			<div className="flex flex-1 min-h-0">
@@ -465,7 +486,9 @@ function BuilderInner({
 							? "Step settings"
 							: panelFocus?.kind === "field"
 								? "Field settings"
-								: ""
+								: panelFocus?.kind === "workflow"
+									? "Workflow settings"
+									: ""
 					}
 					onClose={() => {
 						setPanelFocus(null);
@@ -579,6 +602,17 @@ function BuilderInner({
 								/>
 							);
 						})()}
+
+					{/* Phase 9.5e -- workflow-level settings (Scope panel + future extensions). */}
+					{panelFocus?.kind === "workflow" && (
+						<WorkflowConfigForm
+							workflowId={workflowId}
+							workflowTitle={workflowTitle}
+							entitySetIds={workflowEntitySetIds}
+							organizationSlug={organizationSlug}
+							disabled={!isAdminOrOwner || !isDraft}
+						/>
+					)}
 				</BuilderConfigPanel>
 			</div>
 		</BuilderShell>
@@ -607,6 +641,9 @@ interface BuilderShellProps {
 	canDiscard: boolean;
 	discardPending: boolean;
 	onDiscard: () => void;
+	/** Phase 9.5e -- optional callback for the top-bar gear that opens the workflow
+	 * settings panel. Threaded through from BuilderInner; view/preview shells omit it. */
+	onConfigureWorkflow?: () => void;
 	topLevelError: string | null;
 	children: React.ReactNode;
 }
@@ -629,6 +666,7 @@ function BuilderShell({
 	canDiscard,
 	discardPending,
 	onDiscard,
+	onConfigureWorkflow,
 	topLevelError,
 	children,
 }: BuilderShellProps) {
@@ -651,6 +689,7 @@ function BuilderShell({
 				canDiscard={canDiscard}
 				discardPending={discardPending}
 				onDiscard={onDiscard}
+				onConfigureWorkflow={onConfigureWorkflow}
 			/>
 			{topLevelError && (
 				<div className="px-4 py-2">

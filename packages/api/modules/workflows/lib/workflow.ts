@@ -69,6 +69,11 @@ export interface UpdateWorkflowInput {
 	description?: string | null;
 	type?: "procedure" | "document" | "policy" | "form";
 	isActive?: boolean;
+	/** Phase 9.5e: workflow-level entity-set scope (D-034 / PRD §6.2). Empty array =
+	 * applies-to-all (pre-v1.5 behavior); non-empty = launcher's set-intersection filter
+	 * surfaces this workflow only when the target entity's memberships overlap. Pass
+	 * `undefined` to leave unchanged. */
+	entitySetIds?: string[];
 }
 
 export async function updateWorkflowMeta(
@@ -98,6 +103,17 @@ export async function updateWorkflowMeta(
 	if (input.isActive !== undefined && input.isActive !== wf.isActive) {
 		changes.isActive = input.isActive;
 	}
+	if (input.entitySetIds !== undefined) {
+		// Compare arrays by content (order-insensitive set equality). Authors expect
+		// "select STR + Commercial" and "select Commercial + STR" to be the same change.
+		const before = [...(wf.entitySetIds ?? [])].sort();
+		const after = [...input.entitySetIds].sort();
+		const same =
+			before.length === after.length && before.every((id, i) => id === after[i]);
+		if (!same) {
+			changes.entitySetIds = { from: wf.entitySetIds ?? [], to: input.entitySetIds };
+		}
+	}
 	if (Object.keys(changes).length === 0) return; // No-op.
 
 	await updateWorkflowQuery({
@@ -107,6 +123,7 @@ export async function updateWorkflowMeta(
 		description: input.description,
 		type: input.type,
 		isActive: input.isActive,
+		entitySetIds: input.entitySetIds,
 	});
 
 	await writeAuditAndActivity({

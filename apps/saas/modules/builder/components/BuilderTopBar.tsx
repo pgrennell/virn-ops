@@ -12,7 +12,7 @@
 
 import { Button } from "@virn/ui/components/button";
 import { cn } from "@virn/ui";
-import { Eye, Pencil, Trash2, UploadCloud } from "lucide-react";
+import { Eye, Pencil, Settings, Trash2, UploadCloud } from "lucide-react";
 
 interface BuilderTopBarProps {
 	workflowTitle: string;
@@ -37,6 +37,9 @@ interface BuilderTopBarProps {
 	canDiscard: boolean;
 	discardPending: boolean;
 	onDiscard: () => void;
+	/** Phase 9.5e -- opens the workflow-level config panel (Scope + future workflow
+	 * settings). Optional so callers that don't have the wiring yet just omit it. */
+	onConfigureWorkflow?: () => void;
 }
 
 export function BuilderTopBar({
@@ -56,6 +59,7 @@ export function BuilderTopBar({
 	canDiscard,
 	discardPending,
 	onDiscard,
+	onConfigureWorkflow,
 }: BuilderTopBarProps) {
 	return (
 		<header className="gap-3 flex items-center px-4 py-2.5 border-b border-border bg-background">
@@ -71,6 +75,18 @@ export function BuilderTopBar({
 			</div>
 
 			<div className="gap-2 flex items-center">
+				{onConfigureWorkflow && (
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={onConfigureWorkflow}
+						className="size-8 p-0 text-foreground/60 hover:text-foreground"
+						aria-label="Workflow settings"
+						title="Workflow settings (Scope, etc.)"
+					>
+						<Settings className="size-3.5" />
+					</Button>
+				)}
 				{previewAvailable && (
 					<Button
 						variant={previewActive ? "secondary" : "ghost"}

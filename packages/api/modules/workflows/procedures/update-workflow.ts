@@ -20,6 +20,11 @@ export const updateWorkflowProc = adminOrgProcedure
 			description: z.string().max(2000).nullable().optional(),
 			type: z.enum(["procedure", "document", "policy", "form"]).optional(),
 			isActive: z.boolean().optional(),
+			// Phase 9.5e: workflow-level entity-set scope (D-034 / PRD §6.2). Empty array
+			// means "applies to any entity" (preserves pre-v1.5 behavior). Non-empty array
+			// narrows the launcher's set-intersection filter. Cap at 50 entries -- a
+			// workflow scoped to more than that should probably be unscoped instead.
+			entitySetIds: z.array(z.string().min(1)).max(50).optional(),
 		}),
 	)
 	.handler(async ({ input, context }) => {

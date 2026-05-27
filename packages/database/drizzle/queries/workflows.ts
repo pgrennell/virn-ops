@@ -153,6 +153,134 @@ export async function listWorkflowsForOrg(input: {
 	});
 }
 
+// ---------------------------------------------------------------------------
+// Entity-context workflow listing (Phase 9.5e / PRD §6.2)
+// ---------------------------------------------------------------------------
+
+export interface EntityContextWorkflowRow {
+	id: string;
+	type: "procedure" | "document" | "policy" | "form";
+	title: string;
+	description: string | null;
+	isActive: boolean;
+	latestPublishedVersionId: string | null;
+	latestPublishedVersionNumber: number | null;
+	latestPublishedAt: Date | null;
+	/** The workflow's declared scope. Empty array = "applies to any entity". Surfaced
+	 * to the launcher so it can render "scoped to: STR penthouses" badges next to
+	 * filtered results. */
+	entitySetIds: string[];
+}
+
+/** List workflows that apply to a specific entity, per the PRD §6.2 set-intersection
+ * filter: `workflow.entity_set_ids = '{}' OR workflow.entity_set_ids ∩ entity_sets ≠ ∅`.
+ * An entity with no set memberships only sees unscoped workflows (a workflow scoped to
+ * "STR penthouses" rightly does NOT surface for an uncategorized listing).
+ *
+ * Implementation: single query using Postgres array operators. The COALESCE on the
+ * subquery handles "entity has zero memberships" — `array_agg` returns NULL over an
+ * empty set, and `&&` against NULL yields NULL (falsey), so without COALESCE the
+ * empty-set case would also reject unscoped workflows. We want unscoped workflows
+ * always.
+ *
+ * Returns published-only by default (no draft workflows surface to the launcher).
+ * Includes latestPublishedVersionId so the launcher can pin the version into
+ * runs.launch and close the publish-during-fill-window race (D-018). */
+export async function listWorkflowsForEntity(input: {
+	organizationId: string;
+	entityType: "listing";
+	entityId: string;
+	limit?: number;
+	offset?: number;
+}): Promise<EntityContextWorkflowRow[]> {
+	const limit = input.limit ?? 100;
+	const offset = input.offset ?? 0;
+
+	// Postgres-specific: array overlap (`&&`) + cardinality + COALESCE on subquery.
+	// Kept inline as raw SQL because Drizzle's typed query builder doesn't model the
+	// array operators ergonomically.
+	const rows = await db.execute(sql`
+		SELECT
+			w.id,
+			w.type,
+			w.title,
+			w.description,
+			w.is_active AS "isActive",
+			w.entity_set_ids AS "entitySetIds"
+		FROM workflow w
+		WHERE w.organization_id = ${input.organizationId}
+			AND w.deleted_at IS NULL
+			AND w.is_active = true
+			AND (
+				cardinality(w.entity_set_ids) = 0
+				OR w.entity_set_ids && COALESCE(
+					(
+						SELECT array_agg(esm.entity_set_id)
+						FROM entity_set_member esm
+						WHERE esm.entity_type = ${input.entityType}
+							AND esm.entity_id = ${input.entityId}
+					),
+					'{}'::text[]
+				)
+			)
+		ORDER BY w.updated_at DESC
+		LIMIT ${limit}
+		OFFSET ${offset}
+	`);
+
+	const wfRows = (rows as unknown as { rows: Array<Record<string, unknown>> }).rows;
+	if (wfRows.length === 0) return [];
+
+	// Second pass: latest-published version per workflow. Same shape as
+	// listWorkflowsForOrg's pub-version reduction.
+	const ids = wfRows.map((r) => r.id as string);
+	const versions = await db
+		.select({
+			id: workflowVersion.id,
+			workflowId: workflowVersion.workflowId,
+			status: workflowVersion.status,
+			versionNumber: workflowVersion.versionNumber,
+			publishedAt: workflowVersion.publishedAt,
+		})
+		.from(workflowVersion)
+		.where(inArray(workflowVersion.workflowId, ids));
+
+	const latestPub = new Map<
+		string,
+		{ id: string; versionNumber: number; publishedAt: Date | null }
+	>();
+	for (const v of versions) {
+		if (v.status !== "published") continue;
+		const cur = latestPub.get(v.workflowId);
+		if (!cur || v.versionNumber > cur.versionNumber) {
+			latestPub.set(v.workflowId, {
+				id: v.id,
+				versionNumber: v.versionNumber,
+				publishedAt: v.publishedAt,
+			});
+		}
+	}
+
+	// Filter out workflows with no published version -- the launcher should never
+	// surface "you can run this" for a workflow that has no runnable version.
+	return wfRows
+		.filter((r) => latestPub.has(r.id as string))
+		.map((r) => {
+			const pub = latestPub.get(r.id as string)!;
+			return {
+				id: r.id as string,
+				type: r.type as "procedure" | "document" | "policy" | "form",
+				title: r.title as string,
+				description: (r.description as string | null) ?? null,
+				isActive: r.isActive as boolean,
+				entitySetIds: ((r.entitySetIds as string[] | null) ?? []) as string[],
+				latestPublishedVersionId: pub.id,
+				latestPublishedVersionNumber: pub.versionNumber,
+				latestPublishedAt: pub.publishedAt,
+			};
+		});
+}
+
 export interface WorkflowWithVersionsRow {
 	workflow: typeof workflow.$inferSelect;
 	currentDraft: typeof workflowVersion.$inferSelect | null;
@@ -464,6 +592,10 @@ export async function updateWorkflow(
 		description?: string | null;
 		type?: "procedure" | "document" | "policy" | "form";
 		isActive?: boolean;
+		/** Phase 9.5e: entity-set scope. Empty array preserves pre-v1.5 behavior (workflow
+		 * applies to any entity); non-empty narrows to runs launched from an entity whose
+		 * set memberships intersect this list. Pass `undefined` to leave unchanged. */
+		entitySetIds?: string[];
 	},
 	executor: DbExecutor = db,
 ): Promise<void> {
@@ -472,6 +604,7 @@ export async function updateWorkflow(
 	if (input.description !== undefined) patch.description = input.description;
 	if (input.type !== undefined) patch.type = input.type;
 	if (input.isActive !== undefined) patch.isActive = input.isActive;
+	if (input.entitySetIds !== undefined) patch.entitySetIds = input.entitySetIds;
 	if (Object.keys(patch).length === 0) return;
 
 	await executor
