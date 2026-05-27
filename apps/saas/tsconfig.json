@@ -18,7 +18,8 @@
 			"@runs/*": ["./modules/runs/*"],
 			"@shared/*": ["./modules/shared/*"],
 			"@builder/*": ["./modules/builder/*"],
-			"@library/*": ["./modules/library/*"]
+			"@library/*": ["./modules/library/*"],
+			"@listings/*": ["./modules/listings/*"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.mjs", ".next/types/**/*.ts"],

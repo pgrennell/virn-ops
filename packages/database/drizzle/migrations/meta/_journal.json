@@ -50,6 +50,13 @@
       "when": 1779909152647,
       "tag": "0006_misty_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779917692090,
+      "tag": "0007_eminent_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

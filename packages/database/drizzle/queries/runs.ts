@@ -829,7 +829,8 @@ export async function writeAuditAndActivity(
 			| "role"
 			| "agent"
 			| "vendor"
-			| "vendor_contact";
+			| "vendor_contact"
+			| "listing";
 		entityId: string;
 		changes?: Record<string, unknown>;
 		metadata?: Record<string, unknown>;
