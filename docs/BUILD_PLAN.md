@@ -159,6 +159,20 @@ first, before any agent-aware code.**
    `capability_enabled(org, 'agent_steps')` (the existing capability × permission
    gating, no new mechanism).
 
+5. **SLA-driven escalation via Inngest scheduled function** (v1 path, *not* full
+   SLA event catalog). ADR-003 defers SLA-breach events and the full action
+   catalog. But v1 use cases (property-ops pack — e.g. "pest control work order
+   not completed within X days, escalate to manager") require basic escalation
+   on overdue runs. Implement via an Inngest scheduled function ("every hour,
+   find runs past their `dueAt`, fire escalation automation actions") rather
+   than as a true SLA event. Cheap, works with existing Inngest infrastructure
+   (already wired for scheduled recurring runs), no schema change. The full SLA
+   event catalog (proper `event` table, `automation_rule` triggers on SLA
+   events, multi-tier breach severities) stays post-v1 per ADR-003 — promote
+   when a vertical actually requires the richer model. For v1 the Inngest sweep
+   covers the property-ops case; the escalation *actions* themselves are
+   existing `automation_action` types (notify, reassign, run_workflow).
+
 ### Phase 9 — Data Sets minimal subset (S-02)
 
 Promote Batch 7 from deferred. Schema-only is insufficient — wire it through.

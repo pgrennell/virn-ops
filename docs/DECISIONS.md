@@ -768,6 +768,16 @@ principal model — hybrid: org-scoped `agent` table + `participant.kind=agent` 
 credential storage choice, and the audit-attribution column — so Phase 8 (S-07
 wedge) has a deterministic target to land against.
 
+**"Agent" covers all machine principals.** Per ADR-006's clarification: the `agent`
+table is the home for both AI agents ("Turnover AI", "Vendor Routing AI") **and**
+trusted sibling-product callers (Virn PM authenticating to launch a work-order run
+in Ops from a tenant service request). Same schema, same credential pattern, same
+audit attribution (`actorKind='agent'`). The columns below work identically for
+both — `name` reads as "Turnover AI" or "Virn PM"; `description` says what it does;
+`credentialHash` is an API-key-shaped secret either way. No discriminator column at
+the schema level for v1 (defer until distinct telemetry between AI and integration
+principals is actually needed).
+
 **Decision:** Phase 8 ships these schema changes in a single migration (no agent-aware
 code lands until the schema is in place):
 

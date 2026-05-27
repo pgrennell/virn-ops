@@ -335,6 +335,15 @@ than delete; reference from implementation decisions. Status uses the v2 vocabul
   human-handoff points are.
 - **Status:** **v1 — the headline.** Reframes and extends S-01. Together they are the
   product story. Schema foundation locked (ADR-006 / D-022) before Phase 8 lands.
+- **Runtime AI content generation is in-scope.** When an agent is assigned to a step
+  whose fulfillment requires LLM-generated content (drafting a vendor email,
+  summarizing an escalation for a manager, parsing a vendor's email reply into a
+  structured status update), the agent calls an LLM as part of its fulfillment logic.
+  This is *runtime* AI use — distinct from S-01b/c which cover *authoring* AI
+  (prompt→workflow, doc→workflow). No new architectural element; runtime LLM calls
+  are gated by the agent's capability grants and audited via `audit_log` like any
+  other agent action. Called out here so a future reader doesn't mistake "AI" in this
+  product for authoring-only.
 
 ### S-08 — KB / procedure / training / agent instructions as views of one content object
 

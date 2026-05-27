@@ -200,6 +200,20 @@ Four layers, top configures down, each rests on the one below.
   hasn't enabled is unreachable for any agent in that org. Per-agent grants are an
   *additional* narrowing on top of the org-level capability (an agent may be granted
   fewer capabilities than the org has enabled; never more).
+- **"Agent" = machine principal (AI agents AND trusted sibling products).** The `agent`
+  table is the home for *any* non-human autonomous caller of the action surface — both
+  AI agents (a "Vendor Routing AI", a "Lease Summarizer") and trusted sibling-product
+  callers (Virn PM authenticating to launch a work-order run in Virn Ops from a tenant
+  service request). Both have org-scoped identity, an API-key-shaped credential,
+  capability grants, and `actorKind='agent'` audit attribution. The table doesn't
+  distinguish between them at the schema level — the same `agent` row pattern works
+  for "Pest Control Router AI" and "Virn PM" alike. Conceptually: humans use the UI,
+  agents (in this broad sense) use the action surface. This keeps the principal model
+  small (`user | guest | agent`) and avoids inventing a parallel `service_principal`
+  kind that would duplicate the agent infrastructure. If a future scenario genuinely
+  needs distinct telemetry between AI agents and sibling products, add a nullable
+  `agent.kind ∈ {ai | integration}` discriminator — but defer until there's a real
+  reason.
 - **Now:** the `agent` table (Phase 8 — `cuid` id, `organizationId NOT NULL`,
   `name`, `description`, `credentialHash`, `isActive`, timestamps); `participant.kind`
   enum extended to include `agent`; nullable `participant.agentId` FK with a CHECK
