@@ -24,6 +24,7 @@ export const NAV_AREAS = {
 	membersAndRoles: "members",
 	agents: "agents",
 	vendors: "vendors",
+	dataSets: "data-sets",
 	branding: "branding",
 	integrations: "integrations",
 	billing: "billing",
@@ -175,6 +176,13 @@ export const NAV_AREA_DEFINITIONS: Record<NavArea, NavAreaDefinition> = {
 		allowedRoles: [ROLES.admin, ROLES.owner],
 		phase: "now",
 	},
+	[NAV_AREAS.dataSets]: {
+		area: NAV_AREAS.dataSets,
+		// Admin/owner only -- data sets are org-level reference catalogs (S-02).
+		// Lookup fields reference them by stable key (Phase 9b).
+		allowedRoles: [ROLES.admin, ROLES.owner],
+		phase: "now",
+	},
 	[NAV_AREAS.branding]: {
 		area: NAV_AREAS.branding,
 		allowedRoles: [ROLES.admin, ROLES.owner],
@@ -278,6 +286,12 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 				segment: "settings/vendors",
 				icon: "Briefcase",
 				label: "Vendors",
+			},
+			{
+				area: NAV_AREAS.dataSets,
+				segment: "settings/data-sets",
+				icon: "Database",
+				label: "Data sets",
 			},
 			{
 				area: NAV_AREAS.branding,

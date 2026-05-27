@@ -12,6 +12,7 @@
 			"@admin/*": ["./modules/admin/*"],
 			"@agents/*": ["./modules/agents/*"],
 			"@vendors/*": ["./modules/vendors/*"],
+			"@datasets/*": ["./modules/datasets/*"],
 			"@ai/*": ["./modules/ai/*"],
 			"@onboarding/*": ["./modules/onboarding/*"],
 			"@runs/*": ["./modules/runs/*"],
