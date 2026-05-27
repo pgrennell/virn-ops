@@ -567,6 +567,15 @@ function BuilderInner({
 										}
 										updateField.mutate({ fieldId: f.id, config: next });
 									}}
+									onChangeDataSetKey={(key) => {
+										const next = { ...(f.config ?? {}) };
+										if (key === null) {
+											delete (next as Record<string, unknown>).dataSetKey;
+										} else {
+											(next as Record<string, unknown>).dataSetKey = key;
+										}
+										updateField.mutate({ fieldId: f.id, config: next });
+									}}
 								/>
 							);
 						})()}

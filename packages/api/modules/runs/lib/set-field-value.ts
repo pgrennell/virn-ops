@@ -17,6 +17,7 @@ import {
 	getRunStepWithRun,
 	upsertRunFieldValue,
 	validateFieldValue,
+	validateLookupReferenceByKey,
 	withTransaction,
 	writeAuditAndActivity,
 } from "@virn/database";
@@ -130,7 +131,8 @@ export async function setRunFieldValue(
 		);
 	}
 
-	// Validate value against the snapshotted field's config.
+	// Validate value against the snapshotted field's config (shape only -- buildFieldZod
+	// returns z.unknown() for the lookup type; cross-row validation happens below).
 	let validated: unknown;
 	try {
 		validated = validateFieldValue(
@@ -143,6 +145,42 @@ export async function setRunFieldValue(
 			`Field value for "${input.fieldKey}" failed validation: ${err instanceof Error ? err.message : String(err)}`,
 			{ fieldKey: input.fieldKey },
 		);
+	}
+
+	// Phase 9b: lookup-field cross-row validation. The shape validator can't check that
+	// the value resolves to a real data_set_record id -- that needs a DB roundtrip. We
+	// only run this when the value is non-null (clearing a lookup is fine).
+	if (f.fieldType === "lookup" && validated !== null && validated !== undefined) {
+		const cfg = (f.config ?? {}) as { dataSetKey?: unknown };
+		const dataSetKey = typeof cfg.dataSetKey === "string" ? cfg.dataSetKey : null;
+		if (!dataSetKey) {
+			throw new RunEngineError(
+				"FIELD_VALUE_INVALID",
+				`Lookup field "${input.fieldKey}" has no data set configured. Set field.config.dataSetKey in the Builder.`,
+				{ fieldKey: input.fieldKey },
+			);
+		}
+		if (typeof validated !== "string" || validated.length === 0) {
+			throw new RunEngineError(
+				"FIELD_VALUE_INVALID",
+				`Lookup field "${input.fieldKey}" expects a record id (string); got ${typeof validated}.`,
+				{ fieldKey: input.fieldKey },
+			);
+		}
+		const result = await validateLookupReferenceByKey({
+			organizationId: ctx.organizationId,
+			dataSetKey,
+			recordId: validated,
+		});
+		if (!result.ok) {
+			throw new RunEngineError(
+				"FIELD_VALUE_INVALID",
+				result.reason === "dataset_missing"
+					? `Lookup field "${input.fieldKey}" references data set "${dataSetKey}" which doesn't exist in this organization (or is archived).`
+					: `Lookup field "${input.fieldKey}" value isn't a valid record of data set "${dataSetKey}".`,
+				{ fieldKey: input.fieldKey, dataSetKey, recordId: validated, reason: result.reason },
+			);
+		}
 	}
 
 	// Atomic write: field-value upsert + activity must succeed or fail together.

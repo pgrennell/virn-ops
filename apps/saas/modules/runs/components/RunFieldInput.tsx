@@ -4,8 +4,8 @@
 // Live-save policy:
 //   - text / textarea / number  → save on BLUR (no debounced typing — avoids "did it save?"
 //     anxiety; blur is unambiguous).
-//   - date / select / multiselect → save on CHANGE (discrete choice; no debounce).
-//   - file / image / signature / member / lookup → DEFERRED — rendered disabled with a
+//   - date / select / multiselect / lookup → save on CHANGE (discrete choice; no debounce).
+//   - file / image / signature / member → DEFERRED — rendered disabled with a
 //     placeholder note (upload pipeline + member-select aren't wired yet).
 //
 // Reads + writes are scoped through the parent (RunStepPanel), which owns the mutation.
@@ -24,8 +24,11 @@ import {
 } from "@virn/ui/components/select";
 import { Spinner } from "@virn/ui/components/spinner";
 import { Textarea } from "@virn/ui/components/textarea";
+import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { orpc } from "@shared/lib/orpc-query-utils";
 
 import type { FieldSaveState, FieldType } from "../types";
 
@@ -72,13 +75,15 @@ export function RunFieldInput(props: RunFieldInputProps) {
 // Input dispatch
 // ---------------------------------------------------------------------------
 
-const DEFERRED_TYPES = new Set<FieldType>(["file", "image", "signature", "member", "lookup"]);
+// `lookup` removed from this set in Phase 9b -- now editable (records picker via the
+// configured data set). file/image/signature/member remain deferred to their respective
+// pipelines.
+const DEFERRED_TYPES = new Set<FieldType>(["file", "image", "signature", "member"]);
 const DEFERRED_NOTE: Partial<Record<FieldType, string>> = {
 	file: "File uploads coming with the storage pipeline.",
 	image: "Image uploads coming with the storage pipeline.",
 	signature: "Signature capture coming with the storage pipeline.",
 	member: "Member picker coming with the org-member directory.",
-	lookup: "Data-set lookups are reserved (BUILD_PLAN Batch 7).",
 };
 
 function renderInput(props: RunFieldInputProps) {
@@ -101,6 +106,8 @@ function renderInput(props: RunFieldInputProps) {
 			return <SelectInput value={value} config={config} onSave={onSave} />;
 		case "multiselect":
 			return <MultiselectInput value={value} config={config} onSave={onSave} />;
+		case "lookup":
+			return <LookupInput value={value} config={config} onSave={onSave} />;
 		default:
 			return <DeferredOrDisabled value={value} fieldType={fieldType} />;
 	}
@@ -269,6 +276,98 @@ function MultiselectInput({
 				);
 			})}
 		</div>
+	);
+}
+
+// Lookup field renderer (Phase 9b). Reads field.config.dataSetKey, fetches the data
+// set via dataSets.getByKey, renders a Select over records. value = recordId; label
+// shown to the operator is record.label.
+//
+// Surface decisions:
+//   - No dataSetKey configured: red banner ("Author this field's data set in the
+//     Builder"). Setting a value is impossible.
+//   - dataSetKey resolves to no data set (archived / renamed): red banner ("Data set
+//     not found"). Existing value stays shown but read-only.
+//   - data set has no records yet: amber hint ("No records yet -- add some in
+//     /settings/data-sets").
+//   - Happy path: Select with records, current value pre-selected by id.
+function LookupInput({
+	value,
+	config,
+	onSave,
+}: {
+	value: unknown;
+	config: Record<string, unknown> | null;
+	onSave: (v: unknown) => void;
+}) {
+	const dataSetKey =
+		config && typeof config.dataSetKey === "string" ? config.dataSetKey : null;
+
+	const dataSetQuery = useQuery({
+		...orpc.dataSets.getByKey.queryOptions({
+			input: { key: dataSetKey ?? "" },
+		}),
+		enabled: dataSetKey !== null,
+	});
+
+	if (!dataSetKey) {
+		return (
+			<Alert variant="error">
+				<AlertDescription className="text-xs">
+					This lookup field has no data set configured. Edit it in the Workflow
+					Builder and pick one.
+				</AlertDescription>
+			</Alert>
+		);
+	}
+
+	if (dataSetQuery.isLoading) {
+		return (
+			<div className="gap-1.5 flex items-center text-xs text-foreground/50">
+				<Spinner className="size-3" /> Loading records…
+			</div>
+		);
+	}
+
+	if (dataSetQuery.isError || !dataSetQuery.data) {
+		return (
+			<Alert variant="error">
+				<AlertDescription className="text-xs">
+					Data set <code className="font-mono">{dataSetKey}</code> isn't available in
+					this organization (archived or renamed). Update the field's binding in
+					the Builder.
+				</AlertDescription>
+			</Alert>
+		);
+	}
+
+	const records = dataSetQuery.data.records;
+	if (records.length === 0) {
+		return (
+			<Alert variant="default">
+				<AlertDescription className="text-xs">
+					Data set "{dataSetQuery.data.name}" has no records yet. Add some at{" "}
+					<code className="font-mono">/settings/data-sets</code>.
+				</AlertDescription>
+			</Alert>
+		);
+	}
+
+	const current = typeof value === "string" ? value : "";
+
+	return (
+		<Select value={current} onValueChange={(v) => onSave(v)}>
+			<SelectTrigger className="max-w-sm">
+				<SelectValue placeholder={`Pick from ${dataSetQuery.data.name}…`} />
+			</SelectTrigger>
+			<SelectContent>
+				{records.map((r) => (
+					<SelectItem key={r.id} value={r.id}>
+						{r.label}
+					</SelectItem>
+				))}
+			</SelectContent>
+		</Select>
 	);
 }
 

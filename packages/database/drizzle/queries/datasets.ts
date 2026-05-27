@@ -360,5 +360,56 @@ export async function isDataSetRecordValidForOrg(input: {
 	return r !== undefined && r !== null;
 }
 
+/** Key-based variant of isDataSetRecordValidForOrg. The lookup field's config stores
+ * the data set's stable `key` (not id) -- so the run-engine validation path needs to
+ * resolve by key. Returns the validated context (dataSetId + label) on success, or
+ * a typed error reason ("dataset_missing" / "record_not_in_dataset") on failure --
+ * callers convert these to RunEngineError codes. */
+export type LookupValidationResult =
+	| { ok: true; dataSetId: string; recordLabel: string }
+	| { ok: false; reason: "dataset_missing"; dataSetKey: string }
+	| {
+			ok: false;
+			reason: "record_not_in_dataset";
+			dataSetKey: string;
+			dataSetId: string;
+			recordId: string;
+	  };
+
+export async function validateLookupReferenceByKey(input: {
+	organizationId: string;
+	dataSetKey: string;
+	recordId: string;
+}): Promise<LookupValidationResult> {
+	const ds = await db.query.dataSet.findFirst({
+		where: (d, { and: a, eq: e, ne }) =>
+			a(
+				e(d.organizationId, input.organizationId),
+				e(d.key, input.dataSetKey),
+				ne(d.status, "archived"),
+			),
+		columns: { id: true },
+	});
+	if (!ds) {
+		return { ok: false, reason: "dataset_missing", dataSetKey: input.dataSetKey };
+	}
+	const rec = await db.query.dataSetRecord.findFirst({
+		where: (r, { and: a, eq: e, isNull: n }) =>
+			a(e(r.id, input.recordId), e(r.dataSetId, ds.id), n(r.deletedAt)),
+	});
+	if (!rec) {
+		return {
+			ok: false,
+			reason: "record_not_in_dataset",
+			dataSetKey: input.dataSetKey,
+			dataSetId: ds.id,
+			recordId: input.recordId,
+		};
+	}
+	const values = (rec.values as Record<string, unknown>) ?? {};
+	const label = typeof values.label === "string" ? values.label : "";
+	return { ok: true, dataSetId: ds.id, recordLabel: label };
+}
+
 // Re-export the columnar helpers for unused-import cleanups in tooling.
 void asc;

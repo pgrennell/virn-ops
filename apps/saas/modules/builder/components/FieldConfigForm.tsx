@@ -24,10 +24,12 @@ import {
 	SelectValue,
 } from "@virn/ui/components/select";
 import { Textarea } from "@virn/ui/components/textarea";
+import { useQuery } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { FieldType } from "@runs/types";
+import { orpc } from "@shared/lib/orpc-query-utils";
 
 import { getFieldTypeOptions, type PaletteGates } from "../lib/capability-gates";
 import type { VersionEditBundleResponse } from "../lib/types";
@@ -52,6 +54,9 @@ export interface FieldConfigFormProps {
 	onChangeRequired: (value: boolean) => void;
 	onChangeOptions: (options: string[]) => void;
 	onChangeHelpText: (text: string | null) => void;
+	/** Phase 9b: when fieldType='lookup', updates field.config.dataSetKey -- the
+	 * stable key of the data set this lookup references. Null clears the binding. */
+	onChangeDataSetKey: (key: string | null) => void;
 }
 
 export function FieldConfigForm(props: FieldConfigFormProps) {
@@ -66,6 +71,7 @@ export function FieldConfigForm(props: FieldConfigFormProps) {
 		onChangeRequired,
 		onChangeOptions,
 		onChangeHelpText,
+		onChangeDataSetKey,
 	} = props;
 
 	const fieldTypeOptions = getFieldTypeOptions(gates);
@@ -76,6 +82,13 @@ export function FieldConfigForm(props: FieldConfigFormProps) {
 		Array.isArray((field.config as { options?: unknown } | null)?.options)
 			? ((field.config as { options: unknown[] }).options as string[])
 			: [];
+	const dataSetKey =
+		field.fieldType === "lookup"
+			? (() => {
+					const cfg = field.config as { dataSetKey?: unknown } | null;
+					return typeof cfg?.dataSetKey === "string" ? cfg.dataSetKey : null;
+				})()
+			: null;
 
 	return (
 		<div className="flex flex-col gap-5 px-5 py-4">
@@ -126,6 +139,15 @@ export function FieldConfigForm(props: FieldConfigFormProps) {
 			{(field.fieldType === "select" || field.fieldType === "multiselect") && (
 				<Section label="Options">
 					<OptionsEditor options={options} onChange={onChangeOptions} />
+				</Section>
+			)}
+
+			{field.fieldType === "lookup" && (
+				<Section label="Data set">
+					<DataSetPicker
+						currentKey={dataSetKey}
+						onChange={onChangeDataSetKey}
+					/>
 				</Section>
 			)}
 
@@ -293,3 +315,85 @@ function HelpTextEditor({
 }
 
 void Button; // reserved -- the future "Add option" affordance lives here.
+
+// ---------------------------------------------------------------------------
+// Lookup field: data-set picker (Phase 9b)
+//
+// Reads available data sets from orpc.dataSets.list and lets the author pick which
+// one this lookup field references. Stored as field.config.dataSetKey -- the stable
+// identifier (renames in /settings/data-sets surface a warning in EditDataSetDialog).
+// Surfaces three states clearly:
+//   - no data sets exist yet (link to /settings/data-sets)
+//   - data set picked but archived / renamed (orphan warning)
+//   - data set picked + valid (display the chip)
+// ---------------------------------------------------------------------------
+
+function DataSetPicker({
+	currentKey,
+	onChange,
+}: {
+	currentKey: string | null;
+	onChange: (key: string | null) => void;
+}) {
+	const listQuery = useQuery(orpc.dataSets.list.queryOptions({ input: {} }));
+	const dataSets = listQuery.data ?? [];
+
+	const currentExists =
+		currentKey != null && dataSets.some((ds) => ds.key === currentKey);
+	const isOrphaned = currentKey != null && !currentExists && !listQuery.isLoading;
+
+	if (listQuery.isLoading) {
+		return <p className="text-xs text-foreground/50">Loading data sets…</p>;
+	}
+
+	if (dataSets.length === 0) {
+		return (
+			<Alert variant="default">
+				<AlertDescription className="text-[11px]">
+					No data sets in this org yet. Create one at{" "}
+					<code className="font-mono">/settings/data-sets</code>, then come back to
+					pick it here.
+				</AlertDescription>
+			</Alert>
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-1.5">
+			<Select
+				value={currentKey ?? "__none__"}
+				onValueChange={(v) => onChange(v === "__none__" ? null : v)}
+			>
+				<SelectTrigger>
+					<SelectValue placeholder="Pick a data set…" />
+				</SelectTrigger>
+				<SelectContent>
+					<SelectItem value="__none__">No data set</SelectItem>
+					{dataSets.map((ds) => (
+						<SelectItem key={ds.id} value={ds.key}>
+							{ds.name}{" "}
+							<span className="text-foreground/50 font-mono text-[11px]">
+								({ds.key})
+							</span>
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+			{isOrphaned && (
+				<Alert variant="error">
+					<AlertDescription className="text-[11px]">
+						This field points at data set key <code className="font-mono">{currentKey}</code>{" "}
+						which no longer exists (archived or renamed). Pick a different set or
+						restore the original. New runs will refuse this field's writes.
+					</AlertDescription>
+				</Alert>
+			)}
+			{!isOrphaned && (
+				<p className="text-[11px] text-foreground/60">
+					Runtime: operators pick from the data set's records (label + optional
+					value). Field stores the chosen record's id.
+				</p>
+			)}
+		</div>
+	);
+}
