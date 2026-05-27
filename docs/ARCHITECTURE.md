@@ -57,13 +57,32 @@ Virn PM.
 3. **One content object, many views.** Procedures, KB articles, training guides, and agent
    instructions are different *views* of the same `workflow_version` substrate (`workflow.type`
    discriminator). No new content-object table without an ADR (STRATEGY S-08).
-4. **Configuration over code — for process-shaped products.** A new process vertical or customer
+4. **Vertical-agnostic primitives.** Ops's primitives (workflows, runs, steps, fields,
+   participants — including the vendor primitive per ADR-007) are *vertical-agnostic*. The
+   property-ops focus is in v1 *build content* (the pack, seed templates, demo data, the
+   first-vertical UX polish), not in the primitives themselves. Future verticals (IT ops,
+   marketing ops, agency ops, compliance ops, HR ops) consume the same primitives via
+   different packs. **Implication:** when designing an Ops entity, ask "would an IT-ops
+   customer running Ops standalone (no Virn PM) still need this?" — if yes, it's a primitive
+   and lives in Ops on its own merits, not as a property-ops-flavored extension.
+5. **Product independence with linking.** Each Virn product (Ops, PM, future siblings) is a
+   complete standalone application. Universal-enough entities that exist meaningfully in
+   multiple products (vendor is the first example — see ADR-007) get a *complete model in
+   each product*, with **bidirectional linking** when both products are installed
+   (nullable FK pairs like `vendor.linkedPmVendorId` ↔ `vendor.linkedOpsVendorId`).
+   Overlapping fields stay in sync via the integration layer (agent-credentialed calls
+   between products); product-specific fields stay in their owning product. **PM is not a
+   "PM extension to Ops"; Ops is not a "process layer over PM."** They are independent
+   property-domain products that happen to interoperate. The duplication on overlapping
+   fields is the deliberate price of separate-apps independence — same tradeoff every mature
+   multi-app SaaS makes (Salesforce Account ↔ Stripe Customer pattern).
+6. **Configuration over code — for process-shaped products.** A new process vertical or customer
    customization is a bundle of configuration (capabilities, settings, templates, taxonomies, field
    definitions, roles) — never a fork. ERP-class verticals are separate apps on the shared
    foundation, not configurations.
-5. **Metadata-driven extensibility.** Customers and verticals extend the data model through
+7. **Metadata-driven extensibility.** Customers and verticals extend the data model through
    registered definitions + validated JSONB, not new hand-written tables.
-6. **Strict tenancy.** Everything a customer runs is org-scoped. The only deliberate cross-tenant
+8. **Strict tenancy.** Everything a customer runs is org-scoped. The only deliberate cross-tenant
    exceptions are the publishable library and platform-owned packs.
 
 ---
@@ -239,6 +258,96 @@ Four layers, top configures down, each rests on the one below.
   join, the existing audit pattern, and the existing capability resolver all work
   unchanged for agent principals — only the writers (`assignAgent`,
   `launchRunWithMode`) need to know about the new kind.
+
+### ADR-007 — Vendor as universal participant kind + Ops-owned primitive
+
+- **Context.** Third-party vendor relationships are a near-universal process-ops concept,
+  not a property-management-specific one. Property ops has pest control, HVAC, plumbing,
+  landscaping vendors. IT ops has managed-services providers, cloud providers, security
+  consultants. Marketing ops has agencies, freelancers, media buyers. Agency client ops
+  has subcontractors. Every process-shaped business that runs work through external
+  parties has vendors. Modeling vendor as a property-management-specific concept (i.e.
+  exclusively in Virn PM, requiring PM to be installed before Ops can talk about
+  vendors) would lock Ops out of every non-property vertical — violating Principle #4
+  (Vertical-agnostic primitives, §1) and the long-term platform moat (STRATEGY S-11).
+  Today's `participant.kind ∈ {user, guest, agent}` (post-ADR-006) covers most actor
+  needs but treats vendors as `guest`s, which loses persistent business identity,
+  multi-human-per-vendor structure, performance tracking, categorization, and capability
+  grants — all of which are operationally essential and not adequately captured by
+  "external email with a tokenized link."
+- **Decision.** Add `vendor` as a **fourth participant kind** AND introduce a
+  first-class, org-scoped `vendor` entity in Virn Ops as a vertical-agnostic primitive.
+  The four-kind principal model is final: `participant.kind ∈ {user, guest, agent,
+  vendor}`. The `vendor` table is a primitive in Ops, **not** an extension of any
+  vertical-specific record system. Per Principle #5 (Product independence with linking,
+  §1), Virn PM (and any future ERP-class sibling) maintains its **own complete vendor
+  entity** for its own use cases, with bidirectional linking when both products are
+  installed.
+- **Why a new kind, not a flavor of guest.** A guest is a one-off external (a candidate
+  filling a form, a tenant acknowledging a policy, a real-estate agent doing a one-time
+  signing). A vendor is an ongoing business relationship with persistent identity,
+  multiple humans, categorization, capability grants, performance history, and status
+  (preferred / approved / probation / blacklisted). Conflating them at the schema level
+  forces ugly `WHERE kind='guest' AND vendorRef IS NOT NULL` queries everywhere, loses
+  filter/UX clarity, and makes vendor-only capability gates ("this step requires a
+  vendor of category X") an awkward downstream check rather than a clean schema-level
+  predicate. The cost of the new kind is a single enum value + one FK column; the
+  upside is significant. Keeping both kinds (not replacing guest) preserves the genuine
+  one-off case.
+- **Why a new kind, not a property of agent.** A vendor is human (the dispatcher /
+  technician at the vendor authenticates via a tokenized link). An agent is a machine
+  principal (API credential, programmatic call surface). Different auth path, different
+  semantics, different audit story.
+- **Vendor entity is in Ops, not PM.** This is the load-bearing departure from a naive
+  "PM owns property-flavored entities" reading. A vendor's *universal columns* (name,
+  category, status, contacts, capabilities, performance) are vertical-agnostic — an
+  IT-ops customer running Ops standalone needs all of them. PM-specific *records about
+  vendors* (COIs, W-9s, AP balance, property-vendor-assignments, lease addenda) live in
+  PM as PM-flavored extensions; PM's vendor entity FKs out to Ops's vendor via the
+  bidirectional link when both are installed. PM's vendor entity is **also complete**
+  for PM-only customers (Principle #5 — both products work standalone). The two products
+  hold overlapping but independent representations of "Acme Pest Control"; the
+  integration layer keeps the overlap consistent.
+- **Multi-human-per-vendor.** A `vendor_contact` table holds the multiple humans at a
+  vendor (dispatcher, technicians, office manager). A participant row for a vendor
+  carries both `vendorId` (which vendor) AND `vendorContactId` (which specific human at
+  that vendor is acting in this run). The tokenized run link is scoped to (run, vendor,
+  vendor_contact) — Mike's link is different from Jose's link even if both work at
+  Acme.
+- **Capability composition.** Per-vendor capability grants (in `vendor_capability`)
+  compose into the existing two-axis gating exactly as agent capabilities do (ADR-006).
+  A vendor only sees / acts on workflows where `capability_enabled(org) ∧
+  vendor_has_capability(vendorId, capability)`. This enables natural step-level gates
+  like "this step is fulfillable only by a vendor of category 'pest-control'."
+- **Now:** the `vendor` table (Phase 8 — `cuid` id, `organizationId NOT NULL`, `name
+  UNIQUE per org`, `description`, `category`, `status` enum, `isActive`, timestamps,
+  `deletedAt` soft-delete, optional `linkedPmVendorId text NULLABLE` for the
+  cross-product link); `vendor_contact` (id, vendorId, name, email, phone, role,
+  isPrimary, timestamps); `vendor_capability` join; `vendor_category` lookup table (or
+  pgEnum if small); `participant.kind` enum extended to include `vendor`; nullable
+  `participant.vendorId` and `participant.vendorContactId` FKs with a CHECK enforcing
+  `kind='vendor' ⇔ vendorId IS NOT NULL`; `audit_log.actorKind` and
+  `activity_event.actorKind` enums extended to include `vendor`. **Defer:** cross-org
+  vendor sharing ("our preferred vendor list" published as a pack), vendor-side portals
+  beyond the per-run guest run view, vendor fine-grained ACLs beyond capability gating,
+  vendor-side notifications outside email.
+- **Rationale.** Vendor is the first cross-product universal entity surfaced by the
+  property-ops worked example (pest control service request → vendor work order). The
+  same shape will likely apply to future universal entities (potentially asset, client,
+  location — defer until concrete need). This ADR is the precedent: universal primitives
+  live in Ops, vertical-specific records extend in PM/sibling apps, links are
+  bidirectional, both products work standalone.
+- **Consequences.** Phase 8 schema migration extends to include the vendor tables +
+  participant kind extension + actor_kind enum extension — all four kinds (user, guest,
+  agent, vendor) land in one migration. PM's own vendor schema is PM-side work
+  (specified in the PM session per the briefing); the link from Ops side is the
+  `vendor.linkedPmVendorId` nullable column. The agent-safe action surface (Phase 11)
+  serves as the integration layer for keeping overlapping vendor fields in sync between
+  Ops and PM when both are installed — neither product reaches into the other's
+  database; sync flows via the credentialed action API. The audit_log polymorphism
+  works unchanged — vendor actions land with `actorKind='vendor'` + `actorParticipantId`
+  pointing at the per-run participant row that carries the (vendorId, vendorContactId)
+  pair.
 
 ---
 

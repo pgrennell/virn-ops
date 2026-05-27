@@ -116,10 +116,14 @@ testing.
 ### Phase 8 — One-procedure-three-modes wedge (S-07) — headline product story
 
 The wedge surface, in three coordinated changes. **Schema foundation locked by
-ARCHITECTURE.md ADR-006 + DECISIONS.md D-022 (2026-05-27) — land the migration
-first, before any agent-aware code.**
+ARCHITECTURE.md ADR-006 + ADR-007 + DECISIONS.md D-022 + D-023 (2026-05-27) — land
+the migration first, before any agent- or vendor-aware code. All four participant
+kinds (user, guest, agent, vendor) land in this one migration.**
 
-1. **Schema migration (per D-022) — single migration, no agent code yet.**
+1. **Schema migration (per D-022 + D-023) — single migration, no agent or vendor
+   code yet.**
+
+   **Agent side (per D-022):**
    - New `drizzle/schema/agents.ts` with `agent` table (org-scoped, top-level per
      D-006: `id`, `organizationId`, `name UNIQUE per org`, `description`,
      `credentialHash`, `credentialLastFour`, `credentialRotatedAt`, `isActive`,
@@ -128,31 +132,73 @@ first, before any agent-aware code.**
    - `ALTER TYPE participant_kind ADD VALUE 'agent'`.
    - `participant.agentId text NULLABLE REFERENCES agent(id) ON DELETE RESTRICT`
      with `CHECK ((kind = 'agent') = (agentId IS NOT NULL))`.
-   - New `actor_kind` pgEnum (`user | guest | agent`); `audit_log.actorKind NOT NULL`
-     (backfill existing rows to `'user'`); `activity_event.actorKind NOT NULL` (same
-     backfill). Optionally add `audit_log.actorParticipantId text NULLABLE
-     REFERENCES participant(id)` in the same migration (working assumption: yes,
-     per D-022, so Phase 11 is purely behavioral).
-   - Wire `agents.ts` into the `postgres.ts` barrel; run `pnpm --filter database
-     generate`; show the generated SQL before applying. Do not run against Neon
-     without explicit confirmation (per CLAUDE.md / agents.md).
 
-2. **Assignee model extension** — `participant` now supports `kind='agent'` via the
-   migration above. Runtime: an `agent` assignee on a `run_step` (via the existing
-   `run_step_assignee → participant.id` chain — unchanged) means the step is
-   fulfilled via the agent-safe action surface (Phase 11), not a human UI. The
-   `writeAuditAndActivity` helper gains an `actorKind` parameter, defaulting to
-   `'user'` so existing call sites are unchanged; only the new agent-aware writers
-   pass `'agent'`.
+   **Vendor side (per D-023):**
+   - New `drizzle/schema/vendors.ts` with:
+     - `vendor` table (org-scoped, top-level per D-006: `id`, `organizationId`,
+       `name UNIQUE per org`, `description`, `categoryId` FK to `vendor_category`,
+       `status` enum (`active | preferred | approved | under_review | probation |
+       blacklisted`), `isActive`, `linkedPmVendorId text NULLABLE` (string,
+       cross-product reference — no `REFERENCES` clause), `createdByUserId`,
+       `timestamps`, `deletedAt`).
+     - `vendor_contact` table (`id`, `vendorId`, `name`, `email`, `phone`, `role`,
+       `isPrimary`, `isActive`, `timestamps`).
+     - `vendor_capability` join (`vendorId`, `capabilityId`,
+       `UNIQUE(vendorId, capabilityId)`).
+     - `vendor_category` lookup table (`id`, `organizationId NULLABLE` for
+       platform-seeded vs org-custom, `slug`, `name`, `description`,
+       `parentCategoryId text NULLABLE` (plain text per D-012), `timestamps`).
+   - `ALTER TYPE participant_kind ADD VALUE 'vendor'`.
+   - `participant.vendorId text NULLABLE REFERENCES vendor(id) ON DELETE RESTRICT`
+     and `participant.vendorContactId text NULLABLE REFERENCES vendor_contact(id)
+     ON DELETE RESTRICT` with `CHECK ((kind = 'vendor') = (vendorId IS NOT NULL
+     AND vendorContactId IS NOT NULL))`.
+
+   **Cross-cutting (audit + activity):**
+   - New `actor_kind` pgEnum **with all four values** (`user | guest | agent |
+     vendor`); `audit_log.actorKind NOT NULL` (backfill existing rows to `'user'`);
+     `activity_event.actorKind NOT NULL` (same backfill). Add
+     `audit_log.actorParticipantId text NULLABLE REFERENCES participant(id)` in
+     this same migration (working assumption per D-022, so Phase 11 is purely
+     behavioral).
+
+   **Wiring:**
+   - Wire both `agents.ts` and `vendors.ts` into the `postgres.ts` barrel; run
+     `pnpm --filter database generate`; show the generated SQL before applying.
+     Do not run against Neon without explicit confirmation (per CLAUDE.md /
+     agents.md).
+   - Update `writeAuditAndActivity` helper signature: `actorKind: 'user' |
+     'guest' | 'agent' | 'vendor'` (default still `'user'` for backward compat).
+
+2. **Assignee model extension** — `participant` now supports all four kinds
+   (`user | guest | agent | vendor`) via the migration above. Runtime semantics by
+   kind:
+   - `agent` assignee → fulfilled via the agent-safe action surface (Phase 11),
+     not a human UI.
+   - `vendor` assignee → fulfilled by a specific `vendor_contact` via the existing
+     tokenized guest-run-view path, with vendor-aware UI ("Acme Pest Control — Mike
+     Smith" in step assignee displays, audit feeds, run timelines).
+   - `user` / `guest` assignees → unchanged from existing behavior.
+   - All four kinds use the existing `run_step_assignee → participant.id` chain.
+   `writeAuditAndActivity` helper signature extends to include `'vendor'`; existing
+   call sites unchanged.
 
 3. **Run launch mode selector** — `runs.launch` accepts a mode hint
-   (`human | ai_assisted | automated`). The hint shapes default assignees (agent on
-   `step.type=ai` steps; agent on all steps for `automated`; humans for `human`) but
-   the *authored procedure is unchanged*. UI surfaces clearly which steps an agent
-   will handle and where the handoff points are. The agent-selection picker (which
-   org agents are available to assign) reads from the new `agent` table filtered
-   by `isActive=true ∧ deletedAt IS NULL` and intersected with the active
-   capability set.
+   (`human | ai_assisted | automated`). The hint shapes default assignees:
+   - `human` → user / guest / vendor assignees per the workflow's authored
+     `step.assignee_kind_preference` (TBD: whether this is a step-level setting or
+     just default-by-step-type).
+   - `ai_assisted` → agent on `step.type='ai'` steps; user/guest/vendor on others;
+     handoff steps where a human reviews agent output.
+   - `automated` → agent on all steps where capability allows; falls back to
+     human/vendor only if no agent is capable of that step type.
+   The *authored procedure is unchanged* across modes — variation lives in
+   execution, not authoring (Invariants #2–#5). UI surfaces clearly which kind of
+   actor will handle each step and where the handoff points are. The
+   agent-selection picker reads from `agent` filtered by `isActive=true ∧
+   deletedAt IS NULL` and intersected with the active capability set; the
+   vendor-selection picker reads from `vendor` with the same filters plus
+   category-matching when the step has a vendor-category constraint.
 
 4. **Lift `step.type=ai`** from reserved to live — the primitive for "this step is
    an agent action." Builder gates exposing this option on

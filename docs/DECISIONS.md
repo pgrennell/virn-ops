@@ -899,3 +899,182 @@ code lands until the schema is in place):
 - **Out of scope, decide later:** agent-to-agent delegation; cross-org agents (a Virn-owned
   "platform agent" usable across tenants); agent OAuth flows for action-on-behalf-of a
   user; agent fine-grained ACLs beyond capability gating. ADR-006 explicitly defers these.
+
+---
+
+## 2026-05-27 — Vendor as fourth participant kind: Ops-owned primitive with PM-side linking
+
+### D-023 — Vendor schema in Virn Ops + participant kind extension
+
+**Context:** ARCHITECTURE.md ADR-007 (2026-05-27) introduces `vendor` as the fourth
+participant kind alongside `user | guest | agent`, with the vendor *entity* living in
+Virn Ops as a vertical-agnostic primitive (Principle #4) and the *complete vendor model*
+also living in Virn PM independently (Principle #5 — both products standalone-usable;
+bidirectional link when both installed). This entry locks the Ops-side implementation
+specifics so Phase 8's migration covers all four kinds in one shot, before any
+agent-aware or vendor-aware code lands.
+
+**Decision:** Extend Phase 8's migration (already specified in D-022 for the agent
+side) to also include the vendor schema. Concretely, all four kinds (user, guest,
+agent, vendor) land in **one** migration; no second migration churn.
+
+1. **New file `drizzle/schema/vendors.ts`.** Holds the `vendor` table + `vendor_contact`
+   + `vendor_capability` join + (initially) `vendor_category` lookup. One file per
+   domain group (D-001 convention).
+
+2. **`vendor` table — org-scoped, top-level (D-006 convention).** Columns:
+   - `id text PK` (`cuid()` via the shared helper, D-007).
+   - `organizationId text NOT NULL REFERENCES organization(id)` (Invariant #1, top-level
+     entity per D-006).
+   - `name text NOT NULL` — vendor business name ("Acme Pest Control"). Unique per
+     org via `UNIQUE(organizationId, name)`.
+   - `description text` — what this vendor does (free-text).
+   - `categoryId text REFERENCES vendor_category(id)` — initial implementation uses a
+     lookup table (extensible per org / per pack). Categories are pack-seedable.
+   - `status` enum (`active | preferred | approved | under_review | probation |
+     blacklisted`) — operational state distinct from `isActive`. `preferred` is the
+     positive flag (vendor of choice for this category); `blacklisted` blocks selection
+     even when otherwise active.
+   - `isActive boolean NOT NULL DEFAULT true` — soft-disable. A `isActive=false` vendor
+     can't be selected for new runs but historical participant rows remain valid.
+   - `linkedPmVendorId text NULLABLE` — the cross-product link to Virn PM's vendor row
+     when both products are installed. **No `REFERENCES` clause** — PM's database is
+     separate, so this is a string identifier in PM's namespace, not a real FK. The
+     integration layer maintains it. NULL when PM isn't installed or the vendor hasn't
+     been linked yet.
+   - `createdByUserId text REFERENCES user(id)` — which human (or agent acting on
+     behalf of PM) created the vendor.
+   - `timestamps` (createdAt + updatedAt).
+   - `deletedAt timestamp` — three-bucket soft delete (D-006). Historical participant
+     rows pointing at a soft-deleted vendor still join; new selection fails.
+
+3. **`vendor_contact` table.** Multiple humans per vendor:
+   - `id text PK`
+   - `vendorId text NOT NULL REFERENCES vendor(id) ON DELETE CASCADE`
+   - `name text NOT NULL` — full name ("Mike Smith").
+   - `email text NOT NULL` — primary contact email.
+   - `phone text NULLABLE`.
+   - `role text NULLABLE` — free-text role within the vendor org ("Dispatcher",
+     "Senior Technician").
+   - `isPrimary boolean NOT NULL DEFAULT false` — exactly one row per vendor should
+     have `isPrimary=true`; service-layer enforced (a partial unique index could
+     enforce at DB layer if needed later).
+   - `isActive boolean NOT NULL DEFAULT true` — soft-disable an individual contact
+     (employee left the vendor) without deleting their historical participant rows.
+   - `timestamps`. No `deletedAt` at v1 — soft-disable via `isActive` is sufficient.
+   - No `organizationId` (descendant, derives via FK chain to `vendor.organizationId`).
+
+4. **`vendor_capability` join table.** Per-vendor capability grants composing into
+   the existing capability × permission gating (ADR-007 composition rules):
+   - `id text PK`
+   - `vendorId text NOT NULL REFERENCES vendor(id) ON DELETE CASCADE`
+   - `capabilityId text NOT NULL REFERENCES capability(id)`
+   - `UNIQUE(vendorId, capabilityId)`
+   - `createdAt timestamp`
+   - No `organizationId` (descendant), no `deletedAt` (revoke = delete row).
+
+5. **`vendor_category` lookup table.** Org-scoped initially; future packs may seed
+   platform-global categories:
+   - `id text PK`
+   - `organizationId text NULLABLE REFERENCES organization(id)` — NULL = platform-seeded.
+   - `slug text NOT NULL` — e.g. `pest-control`, `hvac`, `plumbing`,
+     `cloud-provider`, `msp`, `agency`. `UNIQUE(organizationId, slug)` — orgs may
+     override platform categories with their own slug-matching ones.
+   - `name text NOT NULL` — display label ("Pest Control").
+   - `description text NULLABLE`.
+   - `parentCategoryId text NULLABLE` — for category hierarchies later (e.g.
+     "Maintenance" → "Pest Control"). Plain text per D-012 (self-FK avoided).
+   - `timestamps`. No `deletedAt` — categories are immutable once referenced.
+
+6. **`participant.kind` enum extension — second value added in this migration.**
+   Currently `{user, guest}` pre-migration; D-022 added `agent`; D-023 adds `vendor`.
+   Final post-migration: `{user, guest, agent, vendor}`. One migration adds both
+   values via two `ALTER TYPE … ADD VALUE` statements. Per D-003's stance on
+   extending enums up front while data volume is low, this is the right time to do
+   both at once.
+
+7. **`participant.vendorId` and `participant.vendorContactId` columns.** Both nullable
+   `text` columns:
+   - `participant.vendorId text NULLABLE REFERENCES vendor(id) ON DELETE RESTRICT`
+   - `participant.vendorContactId text NULLABLE REFERENCES vendor_contact(id) ON
+     DELETE RESTRICT`
+   - CHECK constraint: `(kind = 'vendor') = (vendorId IS NOT NULL AND vendorContactId
+     IS NOT NULL)` — kind and both FKs stay in lockstep. A vendor participant **must**
+     have both a vendor AND a specific contact identified — anonymous-vendor
+     participation is not modeled (it would lose the audit story).
+
+8. **`audit_log.actorKind` and `activity_event.actorKind` enums.** D-022 introduced
+   these as `{user, guest, agent}`. This migration adds `vendor` to both via
+   `ALTER TYPE … ADD VALUE`. Going forward, every audit/activity write sets
+   `actorKind` from the acting participant's kind.
+
+9. **`writeAuditAndActivity` helper.** Existing parameter signature from D-022:
+   `actorKind: 'user' | 'guest' | 'agent'` (default `'user'`). Extends to
+   `'user' | 'guest' | 'agent' | 'vendor'` (default still `'user'`). All existing
+   callers unchanged.
+
+**Why these specifics:**
+
+- **`linkedPmVendorId` is a string, not a real FK.** PM's database is physically
+  separate (the "separate apps, separate databases" architecture). A FK would
+  require cross-database integrity Postgres can't enforce. The string identifier
+  follows the same cross-product reference convention used elsewhere (e.g.
+  workflows referencing PM property IDs). The integration layer (Phase 11 — the
+  action surface) is responsible for maintaining link validity; Ops's local
+  schema treats it as opaque.
+- **`vendorCategory` as a lookup table (not enum).** Categories grow over time
+  per vertical (pest-control, HVAC for property ops; MSP, cloud-provider for IT
+  ops; agency, freelancer for marketing ops). pgEnum extension requires migrations
+  per value addition; a lookup table allows pack seeding + org customization
+  without migrations. Aligns with the "pgEnum for closed sets; lookup table for
+  growable" convention from D-002 / agents.md.
+- **`participant.vendorId` AND `vendorContactId` both required.** A vendor
+  participating in a run is *always* a specific human at the vendor (Mike, not
+  "Acme generally"). Audit attribution requires both: "Acme via Mike" reads
+  meaningfully; "Acme via ???" doesn't. The CHECK enforces this at the DB layer
+  so service code can't accidentally omit.
+- **`ON DELETE RESTRICT` on participant's vendor FKs.** A vendor with any
+  historical participant rows can't be hard-deleted (preserves audit integrity);
+  soft-delete via `vendor.deletedAt` is the user path. Same pattern as agent
+  (D-022).
+- **Category lookup table, not just `category text`.** Allows pack seeding
+  (the property-ops pack seeds pest-control / HVAC / plumbing / landscaping /
+  GC; an IT-ops pack would seed MSP / cloud-provider / security-consultant /
+  contract-dev), allows org customization, allows hierarchies later, supports
+  validation at the schema layer. Costs one more table; well worth it.
+- **No `organizationId` on `vendor_contact` / `vendor_capability`.** D-006
+  convention — descendants derive org-scope via FK chain to parent. The
+  capability resolver already joins through the parent for tenant filtering.
+
+**Consequences:**
+
+- Phase 8 (BUILD_PLAN.md) ships the vendor schema in the **same** migration as the
+  agent schema and the participant/audit/activity extensions. One migration, all
+  four kinds operational at the DB layer, no agent- or vendor-aware code yet —
+  D-022's stance applied symmetrically.
+- The seed step for the property-ops pack (Phase 17) seeds the
+  property-ops-flavored vendor categories (pest-control, HVAC, plumbing,
+  landscaping, general-contractor, locksmith, cleaning, pool-spa).
+- The Ops-side vendor selection UI (Phase 17 — part of the property-ops pack +
+  potentially a generic vendor-management surface in Ops) reads from the new
+  `vendor` table directly. PM's own vendor records (COIs, AP, etc.) are not
+  visible from Ops — those queries happen on PM's side, with results passed
+  through the action surface when an integrated selection decision is being
+  made.
+- The action surface (Phase 11) — when PM calls Ops to launch a run with a
+  vendor participant — accepts `vendorId` and `vendorContactId` in the
+  `runs.launch` payload. PM is responsible for having already created/linked the
+  Ops vendor before launching (one-time setup per vendor; the action surface
+  exposes a "find-or-create vendor" procedure that PM uses).
+- **PM-side schema is PM's concern**, specified in the PM session per the
+  briefing. PM's vendor entity is fully complete (Principle #5), with its own
+  `linkedOpsVendorId` nullable column for the reverse link. The cross-product
+  sync mechanism (which fields sync, conflict resolution) is a v1 integration
+  design specified by PM with cross-repo agreement (cross-repo decision per the
+  briefing).
+- **Out of scope, decide later:** vendor self-service portal beyond the per-run
+  guest run view (a "Vendor Hub" where vendors see all their assigned runs
+  across orgs they're contracted to); cross-org vendor sharing (e.g. a
+  property-management-company-owned "approved-vendor list" shared across the
+  PMC's managed orgs); vendor invoicing flows in Ops (these stay in PM / AP
+  systems); vendor performance analytics beyond raw run history.

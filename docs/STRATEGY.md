@@ -325,14 +325,18 @@ than delete; reference from implementation decisions. Status uses the v2 vocabul
   about *the same content being executable at different levels of AI assistance*. They
   compound — S-01a's action surface (oRPC + MCP wrapper) is *how* the agent fulfills
   its assigned step in mode (b) or (c).
-- **Build implication.** Extend the assignee model to include an agent assignee —
-  shape locked by **ARCHITECTURE.md ADR-006** (org-scoped `agent` table + per-run
-  `participant.kind=agent` binding; `run_step_assignee` unchanged); implementation
-  specifics in **DECISIONS.md D-022**. Run launch gets a mode selector. `step.type=ai`
-  (reserved) is the third mode's primitive. The definition/execution split
+- **Build implication.** Extend the assignee model to the four-kind principal set
+  — `participant.kind ∈ {user, guest, agent, vendor}`. Shapes locked by
+  **ARCHITECTURE.md ADR-006** (org-scoped `agent` table + per-run
+  `participant.kind=agent` binding) and **ADR-007** (vendor as universal Ops-owned
+  primitive + per-run `participant.kind=vendor` binding with specific
+  `vendorContactId`); `run_step_assignee` is unchanged across all four kinds.
+  Implementation specifics in **DECISIONS.md D-022** (agent) and **D-023** (vendor).
+  Run launch gets a mode selector. `step.type=ai` (reserved) is the third mode's
+  primitive for agent-fulfillable steps. The definition/execution split
   (Invariants #2–#5) means no schema fork — the variation is in *execution*, not
-  authoring. UI shows clearly which steps an agent will do and where the
-  human-handoff points are.
+  authoring. UI shows clearly which steps an agent will do, which a vendor will
+  do, and where the human-handoff points are.
 - **Status:** **v1 — the headline.** Reframes and extends S-01. Together they are the
   product story. Schema foundation locked (ADR-006 / D-022) before Phase 8 lands.
 - **Runtime AI content generation is in-scope.** When an agent is assigned to a step
