@@ -3,6 +3,7 @@ import { ChangeOrganizationNameForm } from "@organizations/components/ChangeOrga
 import { DeleteOrganizationForm } from "@organizations/components/DeleteOrganizationForm";
 import { OrganizationLogoForm } from "@organizations/components/OrganizationLogoForm";
 import { SlaSweepCard } from "@organizations/components/SlaSweepCard";
+import { StarterContentCard } from "@organizations/components/StarterContentCard";
 import { isOrganizationAdmin } from "@virn/auth/lib/helper";
 import { PageHeader } from "@shared/components/PageHeader";
 import { SettingsList } from "@shared/components/SettingsList";
@@ -41,6 +42,7 @@ export default async function OrganizationSettingsPage({
 			<SettingsList>
 				<OrganizationLogoForm />
 				<ChangeOrganizationNameForm />
+				{canManageDeletion && <StarterContentCard />}
 				{canManageDeletion && <SlaSweepCard />}
 				{canManageDeletion && <DeleteOrganizationForm />}
 			</SettingsList>

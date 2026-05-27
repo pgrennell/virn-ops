@@ -9,6 +9,7 @@
 		"seed:settings": "dotenv -c -e ../../.env -- tsx ./src/seed-settings.ts",
 		"seed:config": "pnpm seed:capabilities && pnpm seed:settings",
 		"seed:demo-workflow": "dotenv -c -e ../../.env -- tsx ./src/seed-demo-workflow.ts",
+		"seed:property-ops-pack": "dotenv -c -e ../../.env -- tsx ./src/seed-property-ops-pack.ts",
 		"test:config": "dotenv -c -e ../../.env -- tsx ./src/test-config-resolution.ts",
 		"walk:builder": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/walk-builder-publish-launch.ts",
 		"sla-sweep:dev": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/sla-sweep-dev.ts",

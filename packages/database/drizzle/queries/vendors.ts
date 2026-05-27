@@ -17,7 +17,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "../client";
-import { vendor, vendorContact } from "../schema/postgres";
+import { vendor, vendorCategory, vendorContact } from "../schema/postgres";
 
 // ---------------------------------------------------------------------------
 // Vendor CRUD
@@ -259,6 +259,43 @@ export async function softDeleteVendor(input: {
 // vendor in a transaction. The DB doesn't enforce this with a partial unique index in
 // v1 (could be added later if needed).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Vendor category seeding (Phase 17 -- property-ops pack)
+// ---------------------------------------------------------------------------
+
+export interface CreateVendorCategoryIfMissingInput {
+	organizationId: string;
+	slug: string;
+	name: string;
+	description?: string | null;
+}
+
+/** Idempotent vendor-category upsert keyed on (organizationId, slug). If a row with
+ * the same slug already exists for the org, returns `{ created: false, id }` without
+ * touching the row. If missing, inserts and returns `{ created: true, id }`. Used by
+ * pack-install flows (Phase 17) to seed the property-ops category set without
+ * duplicating on re-install. */
+export async function createVendorCategoryIfMissing(
+	input: CreateVendorCategoryIfMissingInput,
+): Promise<{ id: string; created: boolean }> {
+	const existing = await db.query.vendorCategory.findFirst({
+		where: (vc, { and: andOp, eq: eqOp }) =>
+			andOp(eqOp(vc.organizationId, input.organizationId), eqOp(vc.slug, input.slug)),
+		columns: { id: true },
+	});
+	if (existing) return { id: existing.id, created: false };
+	const [row] = await db
+		.insert(vendorCategory)
+		.values({
+			organizationId: input.organizationId,
+			slug: input.slug,
+			name: input.name,
+			description: input.description ?? null,
+		})
+		.returning({ id: vendorCategory.id });
+	return { id: row.id, created: true };
+}
 
 /** Verify that a vendor exists in the org (and isn't soft-deleted). Used by the contact
  * procedures to enforce parent ownership before any contact mutation lands. */

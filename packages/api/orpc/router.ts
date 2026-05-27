@@ -6,6 +6,7 @@ import { aiRouter } from "../modules/ai/router";
 import { configRouter } from "../modules/config/router";
 import { notificationsRouter } from "../modules/notifications/router";
 import { organizationsRouter } from "../modules/organizations/router";
+import { packsRouter } from "../modules/packs/router";
 import { paymentsRouter } from "../modules/payments/router";
 import { runsRouter } from "../modules/runs/router";
 import { usersRouter } from "../modules/users/router";
@@ -24,6 +25,7 @@ export const router = publicProcedure.router({
 	config: configRouter,
 	runs: runsRouter,
 	vendors: vendorsRouter,
+	packs: packsRouter,
 	workflows: workflowsRouter,
 });
 

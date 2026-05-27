@@ -427,22 +427,37 @@ UX over the data-model already shipped in Phase 1 Batch 3:
 Build the property-ops solution pack end-to-end as the v1 *content*. Pack mechanism
 ADR-001 is already built; this is the content shape.
 
-- **Pack manifest** — capabilities (recurring runs, guests, approvals, acknowledgments,
-  agent-mode, compliance-pack), settings (STR-specific defaults), seed templates,
-  taxonomies, field definitions, role definitions (Owner, Property Manager,
-  Housekeeper, Inspector, Vendor, Owner-Guest, Reviewer).
-- **Seed templates** (in priority order — depth, not breadth, within property ops):
-  1. **STR turnover & housekeeping** (the concrete first shape — full procedure
-     with check-in/check-out cadence, room-by-room steps, photo evidence,
-     restocking, vendor sign-off).
-  2. Property inspection (move-in / move-out / periodic).
-  3. Maintenance work-order routing.
-  4. Vendor onboarding (insurance attestation, W-9, scope of work).
-  5. Tenant / guest onboarding.
-- **Data sets** seeded by the pack: room types, common SKUs, vendor categories,
-  inspection criteria.
-- **Reference automations** (using ADR-003 + Phase 6 automation execution):
-  schedule-on-checkout, escalate-on-overdue, notify-owner-on-completion.
+**Phase 17a (2026-05-27 — done) — install machinery + vendor categories + STR turnover.**
+Pack install procedure (idempotent at the `pack_install` boundary; row-level
+idempotency for vendor categories + workflow roles); platform-seed tooling script
+(`pnpm --filter @virn/scripts seed:property-ops-pack`); admin UI button on
+`/settings/general`. Content shipped:
+  - 10 vendor categories (pest-control, HVAC, plumbing, electrical, landscaping,
+    cleaning, pool-spa, locksmith, appliance-repair, general-contractor)
+  - 4 workflow roles (Property Manager [initiator], Housekeeper, Inspector, Owner)
+  - 1 published seed workflow: STR Turnover & Housekeeping (17 steps across 4
+    sections, 8 kickoff fields, stop-task on the final "mark ready" gate)
+
+**Phases 17b-17e (follow-up chunks — each one its own session-sized commit):**
+  1. ~~STR turnover & housekeeping~~ (17a — done)
+  2. Property inspection (move-in / move-out / periodic)
+  3. Maintenance work-order routing
+  4. Vendor onboarding (insurance attestation, W-9, scope of work)
+  5. Tenant / guest onboarding
+
+**Deliberately deferred (not part of Phase 17):**
+- Pack manifest capabilities / settings auto-grants — pack manifest jsonb today
+  is a content-type discriminator; richer manifest semantics (capability
+  auto-grants, setting defaults) land when there's a real second pack that
+  demands them.
+- **Data sets** seeded by the pack (room types, common SKUs, inspection
+  criteria) — depends on Phase 9 (Data Sets minimal subset).
+- **Reference automations** (schedule-on-checkout, escalate-on-overdue,
+  notify-owner-on-completion) — depends on Phase 18 (automation execution).
+  The escalate-on-overdue case is partially covered by Phase 8 step 5's
+  SLA-sweep (writes `run.escalated` audit/activity rows when runs go past
+  `dueAt`); routing those to a manager notification + reassignment requires
+  Phase 18.
 
 ### Phase 18 — Automation execution
 
