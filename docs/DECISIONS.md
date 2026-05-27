@@ -1274,7 +1274,7 @@ complete the run even if PM is unreachable. `photoR2Keys` instead of pre-resolve
 URLs because R2 keys remain valid longer than signed URLs; Ops resolves them via its own
 R2 client.
 
-**Consequences:** Photos uploaded to PM's `propvana-documents` bucket need to be
+**Consequences:** Photos uploaded to PM's `virn-pm-documents` bucket need to be
 readable by Ops's R2 client. Either: (a) shared bucket with shared credential — simpler;
 (b) cross-account copy at launch time — heavier but stricter isolation. Operational
 decision deferred; recommend (a) for v1. Recorded in PM DECISIONS.md 2026-05-27 §H.
