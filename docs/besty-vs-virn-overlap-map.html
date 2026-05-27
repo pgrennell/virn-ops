@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Besty vs. Virn — Competitive Overlap Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0d10; --ink:#f4f1ea; --muted:#8d8b83; --muted2:#67655e;
+    --line:rgba(255,255,255,0.08); --panel:rgba(255,255,255,0.025);
+    --clash:#ef6f6f;   /* head-on collision */
+    --adj:#f5b73b;     /* adjacent */
+    --besty:#7aa7d9;   /* besty's STR lane */
+    --virn:#c4f230;    /* virn open territory */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1000px 560px at 90% -8%, rgba(196,242,48,0.06), transparent 60%),
+      radial-gradient(820px 480px at -8% 108%, rgba(122,167,217,0.06), transparent 55%),
+      var(--bg);
+    color:var(--ink); font-family:'Hanken Grotesk',sans-serif; line-height:1.5;
+    padding:clamp(20px,4vw,52px); min-height:100vh;
+  }
+  .grain{position:fixed;inset:0;pointer-events:none;opacity:0.03;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+  .wrap{max-width:1040px;margin:0 auto;position:relative}
+
+  .kicker{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.32em;
+    text-transform:uppercase;color:var(--virn);margin-bottom:16px;opacity:0;animation:rise .7s .05s ease both}
+  h1{font-family:'Fraunces',serif;font-weight:500;font-size:clamp(28px,5vw,46px);line-height:1.03;
+    letter-spacing:-0.01em;max-width:18ch;opacity:0;animation:rise .7s .12s ease both}
+  h1 em{font-style:italic;color:var(--muted)}
+  .sub{color:var(--muted);font-size:15px;margin-top:15px;max-width:66ch;opacity:0;animation:rise .7s .2s ease both}
+  .sub b{color:var(--ink);font-weight:600}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px 24px;margin:26px 0 6px;padding:15px 20px;
+    border:1px solid var(--line);border-radius:13px;background:var(--panel);
+    opacity:0;animation:rise .7s .3s ease both}
+  .lg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .swatch{width:11px;height:11px;border-radius:3px;flex:none}
+  .dots-key{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-left:auto}
+  .dots-key span{font-family:'JetBrains Mono',monospace}
+
+  .matrix{margin-top:22px;border:1px solid var(--line);border-radius:15px;overflow:hidden;
+    opacity:0;animation:rise .7s .36s ease both}
+  .scroll{overflow-x:auto}
+  .grid{min-width:640px}
+  .hrow,.drow{display:grid;grid-template-columns:minmax(240px,2.5fr) 1fr 1fr 1fr;align-items:center}
+  .hrow{background:rgba(255,255,255,0.04);border-bottom:1px solid var(--line)}
+  .hcell{padding:13px 16px;font-family:'JetBrains Mono',monospace;font-size:10.5px;
+    letter-spacing:0.14em;text-transform:uppercase;color:var(--muted)}
+  .hcell.prod{text-align:center;color:var(--ink);font-weight:700;letter-spacing:0.08em;font-size:11px}
+  .hcell.prod small{display:block;color:var(--muted2);font-weight:400;letter-spacing:0.04em;font-size:9.5px;margin-top:2px}
+
+  .band{display:flex;align-items:center;gap:11px;padding:11px 16px;border-top:1px solid var(--line);
+    border-bottom:1px solid rgba(255,255,255,0.05)}
+  .band .bar{width:4px;height:26px;border-radius:3px;flex:none}
+  .band .bt{font-family:'Fraunces',serif;font-size:15.5px;font-weight:500}
+  .band .bv{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.12em;
+    text-transform:uppercase;margin-left:auto;padding:3px 9px;border-radius:5px}
+
+  .drow{border-top:1px solid rgba(255,255,255,0.045)}
+  .cap{padding:13px 16px;min-width:0}
+  .cap .cn{font-weight:600;font-size:14.5px;letter-spacing:-0.01em}
+  .cap .cnote{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+  .pcell{padding:13px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:19px}
+  .full{color:var(--ink)}
+  .part{color:var(--adj)}
+  .none{color:var(--muted2);opacity:0.6}
+
+  .bottom{margin-top:30px;padding:24px clamp(20px,3vw,30px);border-radius:17px;border:1px solid var(--line);
+    background:linear-gradient(150deg,rgba(196,242,48,0.06),rgba(255,255,255,0.015) 48%);
+    opacity:0;animation:rise .7s .2s ease both}
+  .bottom .rk{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.26em;
+    text-transform:uppercase;color:var(--virn);margin-bottom:12px}
+  .bottom h2{font-family:'Fraunces',serif;font-weight:500;font-size:20px;margin-bottom:9px}
+  .bottom p{font-size:14.5px;color:#d6d3ca;margin-top:9px;max-width:80ch}
+  .bottom b{color:var(--ink);font-weight:700}
+  .bottom .acc{color:var(--virn)}
+
+  @keyframes rise{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:none}}
+  @media(max-width:640px){.dots-key{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap">
+
+  <div class="kicker">Competitive Overlap Map</div>
+  <h1>Besty vs. Virn — where you <em>collide</em>, and where you have clear air</h1>
+  <p class="sub">Reframed for Virn's actual positioning: a <b>horizontal, configurable platform</b> that allows STR but isn't built around it. Against that, Besty — a <b>vertical STR product</b> — only truly competes inside one narrow band. Almost everything else is open.</p>
+
+  <div class="legend">
+    <div class="lg"><span class="swatch" style="background:var(--clash)"></span> Head-on collision</div>
+    <div class="lg"><span class="swatch" style="background:var(--besty)"></span> Besty's STR lane</div>
+    <div class="lg"><span class="swatch" style="background:var(--virn)"></span> Virn's open territory</div>
+    <div class="dots-key"><span class="full">●</span> native <span class="part">◐</span> partial / adjacent <span class="none">○</span> absent</div>
+  </div>
+
+  <div class="matrix">
+   <div class="scroll"><div class="grid">
+
+    <div class="hrow">
+      <div class="hcell">Capability</div>
+      <div class="hcell prod">Besty<small>STR vertical</small></div>
+      <div class="hcell prod">Virn Ops<small>horizontal SOP/automation</small></div>
+      <div class="hcell prod">Virn PM<small>all-vertical PM</small></div>
+    </div>
+
+    <!-- BAND A -->
+    <div class="band">
+      <span class="bar" style="background:var(--clash)"></span>
+      <span class="bt">Same concept — head-on</span>
+      <span class="bv" style="background:rgba(239,111,111,0.16);color:var(--clash)">collision · but Virn is cross-vertical</span>
+    </div>
+
+    <div class="drow">
+      <div class="cap"><div class="cn">Workflow &amp; SOP builder</div><div class="cnote">Plain-English → branching workflow</div></div>
+      <div class="pcell full">●</div><div class="pcell full">●</div><div class="pcell full">●</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">AI knowledge base</div><div class="cnote">Central intelligence layer / RAG over SOPs</div></div>
+      <div class="pcell full">●</div><div class="pcell full">●</div><div class="pcell full">●</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Checklists &amp; recurring tasks</div><div class="cnote">Repeatable execution + tracking</div></div>
+      <div class="pcell part">◐</div><div class="pcell full">●</div><div class="pcell full">●</div>
+    </div>
+
+    <!-- BAND B -->
+    <div class="band">
+      <span class="bar" style="background:var(--besty)"></span>
+      <span class="bt">Besty's STR lane</span>
+      <span class="bv" style="background:rgba(122,167,217,0.16);color:var(--besty)">mostly not your fight</span>
+    </div>
+
+    <div class="drow">
+      <div class="cap"><div class="cn">Autopilot guest messaging</div><div class="cnote">OTA guest comms on autopilot</div></div>
+      <div class="pcell full">●</div><div class="pcell none">○</div><div class="pcell part">◐</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Upselling / revenue engine</div><div class="cnote">Gap-night, early check-in, retargeting</div></div>
+      <div class="pcell full">●</div><div class="pcell none">○</div><div class="pcell none">○</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Unified inbox (OTA / WhatsApp / SMS)</div><div class="cnote">Guest-thread aggregation</div></div>
+      <div class="pcell full">●</div><div class="pcell none">○</div><div class="pcell part">◐</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Guest portal ↔ tenant portal</div><div class="cnote">Adjacent — same idea, different shape</div></div>
+      <div class="pcell full">●</div><div class="pcell none">○</div><div class="pcell part">◐</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Turnover/cleaning ↔ work-order/maintenance</div><div class="cnote">Adjacent — STR turnovers vs PM maintenance ops</div></div>
+      <div class="pcell full">●</div><div class="pcell none">○</div><div class="pcell full">●</div>
+    </div>
+
+    <!-- BAND C -->
+    <div class="band">
+      <span class="bar" style="background:var(--virn)"></span>
+      <span class="bt">Virn's open territory</span>
+      <span class="bv" style="background:rgba(196,242,48,0.16);color:var(--virn)">Besty can't follow here</span>
+    </div>
+
+    <div class="drow">
+      <div class="cap"><div class="cn">Cross-vertical configurability</div><div class="cnote">One engine for any industry</div></div>
+      <div class="pcell none">○</div><div class="pcell full">●</div><div class="pcell full">●</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Flexible / custom data model</div><div class="cnote">Tenant-defined entities &amp; relationships</div></div>
+      <div class="pcell none">○</div><div class="pcell full">●</div><div class="pcell full">●</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Lease / vendor / asset management</div><div class="cnote">Commercial &amp; LTR PM depth</div></div>
+      <div class="pcell none">○</div><div class="pcell none">○</div><div class="pcell full">●</div>
+    </div>
+    <div class="drow">
+      <div class="cap"><div class="cn">Non-PM verticals (IT Ops, field service, facilities)</div><div class="cnote">SOP/automation beyond property</div></div>
+      <div class="pcell none">○</div><div class="pcell full">●</div><div class="pcell none">○</div>
+    </div>
+
+   </div></div>
+  </div>
+
+  <div class="bottom">
+    <div class="rk">The bottom line</div>
+    <h2>The collision is one band wide. The clear air is the rest of the page.</h2>
+    <p>Besty and Virn genuinely overlap on only three things — <b>the SOP builder, the AI knowledge base, and checklists</b> — and even there, Besty does them <b>STR-flavored and STR-locked</b>. Their entire middle section (guest messaging, upselling, OTA inbox) is a vertical you've chosen not to chase.</p>
+    <p>Your structural advantage is the bottom band: <b class="acc">a configurable engine and flexible data model that serve commercial, retail, industrial, residential, LTR — and IT Ops.</b> Besty's speed comes precisely from being narrow; that same narrowness is what stops them from ever following you out of short-term rentals.</p>
+    <p>So don't clone Besty's builder — clone its <b>feel</b> ("describe it, watch it build") on top of an engine that's vertical-agnostic underneath. That's the whole game.</p>
+  </div>
+
+</div>
+</body>
+</html>

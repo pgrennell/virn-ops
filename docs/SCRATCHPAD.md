@@ -94,17 +94,36 @@ Before going further with development, stop and re-examine whether Virn Ops is s
 
 ---
 
-### Growth scorecard — competitor momentum landscape (HTML visualization)
+### Growth scorecard v2 — competitor momentum landscape (HTML visualization)
 
 - **Kind:** research
-- **Source:** Claude conversation, competitor momentum analysis with HTML scorecard
+- **Source:** Claude conversation, competitor momentum analysis with HTML scorecard (v2 adds vertical PropTech AI band)
 - **Status:** open — sharpens the pause-and-reconsider questions above; not yet integrated into STRATEGY.md
-- **Tags:** competitors, market, momentum, funding, visualization
+- **Tags:** competitors, market, momentum, funding, visualization, str, proptech
 
-[Open the visualization](./virn-ops-growth-scorecard.html) — tier-ranked momentum scorecard of 13 products across the process / workflow / SOP-capture / AI-orchestration landscape, with funding, valuation, and usage signals per row, plus a "what this means for Virn Ops" read at the bottom.
+[Open the visualization](./virn-ops-growth-scorecard.html) — tier-ranked momentum scorecard of **15 products** across the process / workflow / SOP-capture / AI-orchestration landscape, with funding, valuation, and usage signals per row, plus a "what this means for Virn" read at the bottom. **v2** adds a fifth band — vertical PropTech AI — for the products that sit directly in Virn's lane at a different scale.
 
-**The headline:** all four named comps sit in Tier 3 or 4 — Process Street (52, defending via "compliance ops" repositioning), SweetProcess (38, bootstrapped/profitable), Tallyfy (32), Manifestly (28). Tier 1 hypergrowth is AI-native: n8n ($2.5B, $40M ARR, 10× YoY usage), Scribe ($1.3B unicorn moving into "Workflow AI"), Gumloop (Benchmark-led). Tier 2 includes Tango (building toward AI-executable docs — the same wedge as STRATEGY S-07), Lindy, Guidde, Relay.app.
+**The headline:** all four originally-named comps still sit in Tier 3 or 4 — Process Street (52, defending via "compliance ops" repositioning), SweetProcess (38, bootstrapped/profitable), Tallyfy (32), Manifestly (28). Tier 1 hypergrowth is AI-native: n8n ($2.5B, $40M ARR, 10× YoY usage), Scribe ($1.3B unicorn moving into "Workflow AI"), Gumloop (Benchmark-led). Tier 2 includes Tango (building toward AI-executable docs — the same wedge as STRATEGY S-07), Lindy, Guidde, Relay.app.
+
+**The new fifth band (vertical PropTech AI):** Besty AI (55 — $1.5M seed, NYC, STR-locked, 0→250 customers / 15K properties / ~34% MoM, 12-feature OS with Workflow & SOP Builder + AI KB already shipped) and Propvana (30 — funding undisclosed, LTR-residential voice AI, narrow 2-workflow scope, crowded lane vs EliseAI). These are the closest live analogues to what Virn Ops is building — they validate the thesis, and their narrowness validates Virn's cross-vertical wedge. Pairs directly with the Besty overlap-map entry below.
 
 **The sharpest pointer:** Scribe Optimize — capture the work, then tell the customer where AI/agents should take over — is the highest-value real estate on the board, and it's the same bridge S-07 (one procedure → human / AI-assisted / automated) is built around.
 
-**Note for next STRATEGY.md re-score:** several Tier-1/2 players (n8n, Scribe, Gumloop, Lindy, Tango) live in §2's "adjacent landscape" prose but aren't in §6's scorecard. Worth deciding whether some belong as additional rows or alternate columns on the rows where they're the actual competition (auto-capture authoring, AI-over-KB, agent action surface).
+**Note for next STRATEGY.md re-score:** several Tier-1/2 players (n8n, Scribe, Gumloop, Lindy, Tango) live in §2's "adjacent landscape" prose but aren't in §6's scorecard. v2's vertical PropTech AI band (Besty, Propvana) also needs to land in §6 — they're the most direct competitors and they're not represented at all yet. Worth deciding whether some belong as additional rows or alternate columns on the rows where they're the actual competition (auto-capture authoring, AI-over-KB, agent action surface, vertical specialists).
+
+---
+
+### Besty vs. Virn — competitive overlap map (HTML visualization)
+
+- **Kind:** research
+- **Source:** Claude conversation, capability-band overlap analysis between Besty (STR vertical) and Virn (Ops + PM)
+- **Status:** open — reframes the Besty threat in light of D-021's vertical-first pivot; not yet reconciled with STRATEGY.md's competitive section
+- **Tags:** competitors, positioning, str, besty, visualization
+
+[Open the visualization](./besty-vs-virn-overlap-map.html) — three-band capability matrix (head-on collision / Besty's STR lane / Virn's open territory) comparing Besty, Virn Ops, and Virn PM across 12 capabilities, with a "bottom line" read at the bottom.
+
+**The headline:** real overlap is one band wide — SOP builder, AI knowledge base, checklists — and even there Besty is STR-flavored and STR-locked. Their middle band (autopilot guest messaging, upselling, unified OTA inbox, guest portal, turnover ops) is a vertical we've explicitly not chased. Virn's structural moat is the bottom band: cross-vertical configurability, flexible data model, lease/vendor/asset depth, and non-PM verticals (IT Ops, field service, facilities) — terrain Besty can't follow into without abandoning what makes them fast.
+
+**The sharpest pointer:** don't clone Besty's builder — clone its *feel* ("describe it, watch it build") on top of a vertical-agnostic engine. That maps directly onto the AI-authoring + agent-safe action surface promoted to v1 in D-021.
+
+**Tension to resolve in STRATEGY.md:** post-D-021 we *are* now vertical-first on property ops, which narrows the gap on the "Virn's open territory" band against any vertical PM competitor (not just Besty). The map's framing — "horizontal, configurable platform that allows STR" — is the long-term S-11 framing, not the v1 public lead. Worth a pass to make sure the competitive narrative matches the actual v1 surface rather than the long-term moat.

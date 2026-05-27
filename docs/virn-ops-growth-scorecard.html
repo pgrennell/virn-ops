@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Growth Scorecard — Process & Workflow Automation Landscape</title>
+<title>Growth Scorecard v2 — Process &amp; Workflow Automation Landscape + Vertical PropTech AI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -16,17 +16,18 @@
     --ink:#f4f1ea;
     --muted:#8d8b83;
     --muted2:#67655e;
-    --t1:#c4f230;   /* hypergrowth - electric lime */
-    --t2:#34d399;   /* strong - emerald */
-    --t3:#f5b73b;   /* steady - amber */
-    --t4:#ef6f6f;   /* fading - soft red */
+    --t1:#c4f230;   /* hypergrowth */
+    --t2:#34d399;   /* strong */
+    --t3:#f5b73b;   /* steady */
+    --t4:#ef6f6f;   /* fading */
+    --t5:#7aa7d9;   /* vertical PropTech AI - adjacent */
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{-webkit-text-size-adjust:100%}
   body{
     background:
       radial-gradient(1100px 600px at 85% -5%, rgba(196,242,48,0.07), transparent 60%),
-      radial-gradient(900px 500px at -10% 110%, rgba(52,211,153,0.06), transparent 55%),
+      radial-gradient(900px 500px at -10% 110%, rgba(122,167,217,0.08), transparent 55%),
       var(--bg);
     color:var(--ink);
     font-family:'Hanken Grotesk',sans-serif;
@@ -42,12 +43,15 @@
   .kicker{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.32em;
     text-transform:uppercase;color:var(--t1);margin-bottom:18px;
     opacity:0;animation:rise .7s .05s ease both}
+  .kicker span.v{color:var(--t5);margin-left:8px}
   h1{font-family:'Fraunces',serif;font-weight:500;font-size:clamp(30px,5.4vw,52px);
     line-height:1.02;letter-spacing:-0.01em;max-width:14ch;
     opacity:0;animation:rise .7s .12s ease both}
   h1 em{font-style:italic;color:var(--muted)}
   .sub{color:var(--muted);font-size:15px;margin-top:16px;max-width:62ch;
     opacity:0;animation:rise .7s .2s ease both}
+  .sub b{color:var(--ink);font-weight:600}
+  .sub .acc{color:var(--t5)}
   .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted2);
     margin-top:14px;letter-spacing:0.04em;
     opacity:0;animation:rise .7s .28s ease both}
@@ -90,17 +94,23 @@
   .fill{height:100%;border-radius:99px;transform-origin:left;
     animation:grow 1.15s cubic-bezier(.2,.7,.2,1) both}
 
+  .you-are-here{display:flex;align-items:center;gap:9px;margin-top:8px;
+    padding:8px 12px;border-radius:8px;background:rgba(122,167,217,0.08);
+    border:1px dashed rgba(122,167,217,0.35);font-size:11.5px;color:#bcd2ea;
+    font-family:'JetBrains Mono',monospace;letter-spacing:0.06em}
+
   /* ---- footer read ---- */
   .read{margin-top:42px;padding:26px clamp(20px,3vw,32px);border-radius:18px;
     border:1px solid var(--line);
-    background:linear-gradient(150deg,rgba(196,242,48,0.06),rgba(255,255,255,0.015) 45%);
+    background:linear-gradient(150deg,rgba(196,242,48,0.06),rgba(122,167,217,0.05) 55%,rgba(255,255,255,0.015) 90%);
     opacity:0;animation:rise .7s .2s ease both}
   .read h2{font-family:'Fraunces',serif;font-weight:500;font-size:21px;margin-bottom:4px}
   .read .rk{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.28em;
     text-transform:uppercase;color:var(--t1);margin-bottom:14px}
   .read p{font-size:14.5px;color:#d6d3ca;margin-top:11px;max-width:78ch}
   .read p b{color:var(--ink);font-weight:700}
-  .read .acc{color:var(--t1)}
+  .read .acc1{color:var(--t1)}
+  .read .acc5{color:var(--t5)}
 
   .foot{margin-top:26px;font-family:'JetBrains Mono',monospace;font-size:10.5px;
     color:var(--muted2);line-height:1.7;letter-spacing:0.02em}
@@ -121,10 +131,10 @@
 <div class="grain"></div>
 <div class="wrap">
 
-  <div class="kicker">Growth Scorecard · Competitive Intelligence</div>
+  <div class="kicker">Growth Scorecard · v2 — competitive intelligence<span class="v">+ vertical proptech ai</span></div>
   <h1>The process &amp; workflow automation <em>landscape</em></h1>
-  <p class="sub">Where the capital, usage and mindshare are flowing across the tools adjacent to Virn Ops — and where they're draining out. The energy has moved decisively from static checklist/SOP tools to AI-native automation and AI-powered capture.</p>
-  <p class="meta">COMPILED MAY 2026 · 13 PRODUCTS · MOMENTUM = DIRECTIONAL SYNTHESIS OF FUNDING, VALUATION, USAGE &amp; CATEGORY HEAT (0–100), NOT AUDITED FINANCIALS</p>
+  <p class="sub">Where the capital, usage and mindshare are flowing across the tools adjacent to Virn Ops — plus a new fifth band: <b class="acc">vertical PropTech AI specialists (Besty, Propvana)</b> that sit directly in Virn's lane at a different scale.</p>
+  <p class="meta">UPDATED MAY 2026 · 15 PRODUCTS · MOMENTUM = DIRECTIONAL SYNTHESIS OF FUNDING, VALUATION, USAGE &amp; CATEGORY HEAT (0–100), NOT AUDITED FINANCIALS</p>
 
   <div class="legend">
     <div class="lg"><span class="arr" style="color:var(--t1)">↑↑↑</span> Hypergrowth</div>
@@ -132,6 +142,7 @@
     <div class="lg"><span class="arr" style="color:var(--t2)">↑</span> Rising</div>
     <div class="lg"><span class="arr" style="color:var(--t3)">→</span> Steady / defending</div>
     <div class="lg"><span class="arr" style="color:var(--t4)">↓</span> Losing relative mindshare</div>
+    <div class="lg"><span class="arr" style="color:var(--t5)">→</span> Vertical · adjacent to Virn</div>
   </div>
 
   <!-- TIER 1 -->
@@ -149,14 +160,14 @@
     </div>
 
     <div class="row" style="animation-delay:.46s">
-      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t1)"></span>Scribe</div><div class="cat">SOP capture — "Workflow AI" (most relevant to you)</div></div>
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t1)"></span>Scribe</div><div class="cat">SOP capture → "Workflow AI" (most relevant to you)</div></div>
       <div class="sig"><b>$1.3B</b> unicorn · <b>$75M</b> Series C (Nov '25) · <b>$130M</b> total<br>revenue <b>2×+</b> YoY · <b>78K</b> paying orgs · 5M users</div>
       <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t1)">↑↑↑</span><span class="score-num" style="color:var(--t1)">96</span></div><div class="track"><div class="fill" style="width:96%;background:var(--t1);animation-delay:.56s"></div></div></div>
     </div>
 
     <div class="row" style="animation-delay:.52s">
       <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t1)"></span>Gumloop</div><div class="cat">No-code AI workflow / agent builder</div></div>
-      <div class="sig"><b>~$70M</b> raised · Series B led by <b>Benchmark</b><br>bedroom startup — SF rocket (YC W24)</div>
+      <div class="sig"><b>~$70M</b> raised · Series B led by <b>Benchmark</b><br>bedroom startup → SF rocket (YC W24)</div>
       <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t1)">↑↑↑</span><span class="score-num" style="color:var(--t1)">88</span></div><div class="track"><div class="fill" style="width:88%;background:var(--t1);animation-delay:.62s"></div></div></div>
     </div>
   </div>
@@ -248,18 +259,41 @@
     </div>
   </div>
 
+  <!-- TIER 5 - NEW: Vertical PropTech AI -->
+  <div class="tier">
+    <div class="tier-head">
+      <span class="tier-tag" style="background:rgba(122,167,217,0.18);color:var(--t5)">Vertical</span>
+      <span class="tier-name">Vertical PropTech AI — adjacent to Virn</span>
+      <span class="tier-note">different scale · same lane you're building in</span>
+    </div>
+
+    <div class="row" style="animation-delay:.98s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t5)"></span>Besty AI</div><div class="cat">AI "property manager" OS · <b style="color:var(--t5)">STR-locked vertical</b></div></div>
+      <div class="sig"><b>$1.5M</b> seed (Aug '24, Bungalow + Ridge) · NYC<br>seed traction: <b>0→250</b> customers · <b>15K</b> properties · <b>~34% MoM</b><br>now <b>12-feature OS</b> (Workflow &amp; SOP Builder + AI KB shipped)</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t5)">→</span><span class="score-num" style="color:var(--t5)">55</span></div><div class="track"><div class="fill" style="width:55%;background:var(--t5);animation-delay:1.06s"></div></div></div>
+    </div>
+
+    <div class="row" style="animation-delay:1.02s">
+      <div class="name-cell"><div class="pname"><span class="dot" style="background:var(--t5)"></span>Propvana</div><div class="cat">Voice AI for PM · <b style="color:var(--t5)">LTR-residential</b> · leasing + maintenance only</div></div>
+      <div class="sig">funding <b>not disclosed</b> · founders/traction <b>unverified</b><br>narrow scope: 2 workflows · voice-first execution layer<br>crowded lane (EliseAI dominant) · stealth profile</div>
+      <div class="score-cell"><div class="score-top"><span class="arr" style="color:var(--t5)">→</span><span class="score-num" style="color:var(--t5)">30</span></div><div class="track"><div class="fill" style="width:30%;background:var(--t5);animation-delay:1.10s"></div></div></div>
+    </div>
+
+    <div class="you-are-here">↳ this is the band where Virn actually competes — <b style="color:#dbe7f5">vertical specialists you out-flank by being horizontal &amp; configurable</b></div>
+  </div>
+
   <!-- STRATEGIC READ -->
   <div class="read">
-    <div class="rk">What this means for Virn Ops</div>
-    <h2>The static SOP/checklist tier is being commoditized from above.</h2>
-    <p>Every dollar and every headline is flowing to two places: <b class="acc">AI-native orchestration</b> (n8n, Gumloop, Lindy) and <b class="acc">AI-powered capture + "what should we automate" intelligence</b> (Scribe). Your four named comps sit in the slow lane — Process Street is repositioning to compliance to survive, and Tallyfy / SweetProcess / Manifestly are stable small businesses the category has simply grown past.</p>
-    <p>The sharpest signal is <b>Scribe Optimize</b>: capture the work, then tell the customer <b>where AI/agents should take over</b>. That's the exact bridge between your KB + SOP layer and the automation layer — and it's the highest-value real estate on this board.</p>
-    <p>Implication: don't build "a better checklist." Build the layer that turns a captured SOP into something a <b>human runs, an AI assists, or an agent executes</b> — and win a vertical (property ops) before the horizontal giants notice.</p>
+    <div class="rk">What the updated board tells you</div>
+    <h2>Money flows to scale players. Mindshare in your lane flows to verticals.</h2>
+    <p>The top of the board hasn't changed: every dollar and headline is still going to <b class="acc1">AI-native orchestration</b> (n8n, Gumloop, Lindy) and <b class="acc1">AI-powered capture + automation intelligence</b> (Scribe). Your four named comps still sit in the slow lane.</p>
+    <p>The new fifth band is the one to watch carefully. <b class="acc5">Besty</b> is the only product on the board that has actually shipped your Virn Ops concept — a Workflow &amp; SOP Builder plus an AI Knowledge Base — and they did it by locking themselves into one vertical (STR) to move fast. <b class="acc5">Propvana</b> is doing a far narrower version of the same play (voice AI, two workflows, LTR-residential). Both are small in absolute funding terms but they're the closest live analogues to what you're building.</p>
+    <p>The strategic read: you don't beat them on speed inside their own verticals — you beat them by being the <b>configurable, cross-vertical platform underneath</b> that they can't become without rebuilding from scratch. They validate the thesis; their narrowness validates your wedge.</p>
   </div>
 
   <p class="foot">
-    SOURCES: company funding announcements, PitchBook / Crunchbase / Tracxn profiles, TechCrunch, Fortune, and 2026 category roundups (G2/Capterra-cited).<br>
-    METHOD: momentum scores are a directional synthesis of recent funding, valuation trajectory, disclosed usage/revenue growth and category mindshare — they are estimates for comparison, not audited metrics. Private-company figures vary by source.
+    SOURCES: company funding announcements, PitchBook / Crunchbase / Tracxn profiles, TechCrunch, Fortune, Ridge Ventures &amp; Bungalow Capital announcements, getbesty.ai &amp; propvana.ai homepages, 2026 category roundups.<br>
+    METHOD: momentum scores are a directional synthesis of recent funding, valuation trajectory, disclosed usage/revenue growth and category mindshare — they are estimates for comparison, not audited metrics. Tier 5 scores are intentionally lower because the band measures absolute scale; the relevance to Virn is qualitative and explained in the strategic read.
   </p>
 
 </div>
