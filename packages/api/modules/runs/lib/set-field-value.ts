@@ -12,6 +12,7 @@
 // the client.
 
 import {
+	findAgentParticipantForRun,
 	findFieldByVersionAndKey,
 	getRunForOrg,
 	getRunStepWithRun,
@@ -26,10 +27,15 @@ import { RunEngineError } from "./errors";
 
 export interface SetFieldValueContext {
 	organizationId: string;
-	/** Better Auth user id; mutually exclusive with `participantId`. */
+	/** Better Auth user id; mutually exclusive with `participantId` and `agentId`. */
 	userId?: string;
-	/** Participant id when called via verified participant_token (guest path). */
+	/** Participant id when called via verified participant_token (guest path). Mutually
+	 * exclusive with `userId` and `agentId`. */
 	participantId?: string;
+	/** Agent id when called via verified bearer credential (Phase 11a action surface,
+	 * ADR-006). Mutually exclusive with `userId` and `participantId`. Agents are never
+	 * admin/owner, must be a pre-existing participant on the run (bound at launch). */
+	agentId?: string;
 	isAdminOrOwner: boolean;
 }
 
@@ -50,6 +56,10 @@ export async function setRunFieldValue(
 ): Promise<{ ok: true }> {
 	let runId: string;
 	let workflowVersionId: string;
+	// Agent caller: we resolve the agent's participant row lazily once we know runId, then
+	// reuse it for both the assignee check and the audit attribution. `null` for non-agent
+	// callers.
+	let agentParticipantId: string | null = null;
 
 	if (input.runStepId) {
 		// Step-scoped write -- look up the runStep, derive run + version, enforce assignee/admin.
@@ -74,10 +84,30 @@ export async function setRunFieldValue(
 				{ runStepId: input.runStepId, runId: rs.run.id, runStatus: rs.run.status },
 			);
 		}
+		// Agent path: resolve the agent's participant row for this run BEFORE the assignee
+		// check, so the same `participantId` flows into both the access decision and the
+		// audit row. An agent that wasn't bound to this run at launch can't act on it --
+		// Phase 11a.1 has no "create on demand" pathway (matches user-side semantics).
+		if (ctx.agentId) {
+			const part = await findAgentParticipantForRun({
+				organizationId: ctx.organizationId,
+				runId: rs.run.id,
+				agentId: ctx.agentId,
+			});
+			if (!part) {
+				throw new RunEngineError(
+					"RUN_STEP_ACCESS_DENIED",
+					"This agent is not a participant of this run.",
+					{ runStepId: input.runStepId, agentId: ctx.agentId },
+				);
+			}
+			agentParticipantId = part.id;
+		}
 		if (!ctx.isAdminOrOwner) {
 			const isAssignee = rs.assignees.some((a) => {
 				if (ctx.participantId && a.participant.id === ctx.participantId) return true;
 				if (ctx.userId && a.participant.userId === ctx.userId) return true;
+				if (agentParticipantId && a.participant.id === agentParticipantId) return true;
 				return false;
 			});
 			if (!isAssignee) {
@@ -91,7 +121,15 @@ export async function setRunFieldValue(
 		runId = rs.run.id;
 		workflowVersionId = rs.run.workflowVersionId;
 	} else {
-		// Kickoff write after launch -- admin/owner only.
+		// Kickoff write after launch -- admin/owner only. Agents are never admin/owner;
+		// kickoff edits are an admin-only escape hatch and don't make sense for the
+		// machine principal flow.
+		if (ctx.agentId) {
+			throw new RunEngineError(
+				"RUN_STEP_ACCESS_DENIED",
+				"Agents cannot edit kickoff field values.",
+			);
+		}
 		if (!ctx.isAdminOrOwner) {
 			throw new RunEngineError(
 				"RUN_STEP_ACCESS_DENIED",
@@ -199,10 +237,18 @@ export async function setRunFieldValue(
 		// Activity (per #6 -- field edits are user-visible). Audit_log skipped here to
 		// avoid noise; setFieldValue fires often during a run. If forensic field-edit
 		// history becomes needed, add a dedicated audit channel.
+		const actorKind: "user" | "guest" | "agent" = ctx.agentId
+			? "agent"
+			: ctx.participantId
+				? "guest"
+				: "user";
+		const actorParticipantId = ctx.participantId ?? agentParticipantId ?? null;
 		await writeAuditAndActivity(
 			{
 				organizationId: ctx.organizationId,
 				actorUserId: ctx.userId ?? null,
+				actorKind,
+				actorParticipantId,
 				action: "field_value.set",
 				verb: "edited",
 				entityType: "field_value",
@@ -212,6 +258,7 @@ export async function setRunFieldValue(
 					runStepId: input.runStepId ?? null,
 					fieldKey: input.fieldKey,
 					...(ctx.participantId ? { actorParticipantId: ctx.participantId } : {}),
+					...(ctx.agentId ? { actorAgentId: ctx.agentId } : {}),
 				},
 				activityData: { fieldKey: input.fieldKey, fieldLabel: f.label },
 			},

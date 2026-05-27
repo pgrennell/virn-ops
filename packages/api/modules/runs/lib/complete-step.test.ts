@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@virn/database", () => ({
+	findAgentParticipantForRun: vi.fn(),
 	getRunStepWithRun: vi.fn(),
 	getRequiredFieldsForStep: vi.fn(),
 	getFieldValuesForRun: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("@virn/database", () => ({
 
 import {
 	areAllRequiredRunStepsComplete,
+	findAgentParticipantForRun,
 	findIncompleteStopDependencies,
 	getFieldValuesForRun,
 	getRequiredFieldsForStep,
@@ -216,6 +218,93 @@ describe("completeRunStep", () => {
 			details: { runStatus: "archived" },
 		});
 		expect(markRunStepCompleted).not.toHaveBeenCalled();
+	});
+
+	// Phase 11a.1 -- agent principal path (ADR-006 action surface).
+	describe("agent principal", () => {
+		const AGENT_CTX = {
+			organizationId: "org_1",
+			agentId: "agent_1",
+			isAdminOrOwner: false,
+		};
+
+		// Step is assigned to the agent's participant row; we wire the assignees list to
+		// include that id so the assignee check passes on the agent branch.
+		const RS_PENDING_AS_AGENT = {
+			...RS_PENDING_AS_ASSIGNEE,
+			assignees: [{ participant: { id: "part_agent_1", userId: null } }],
+		};
+
+		it("RUN_STEP_ACCESS_DENIED when the agent isn't a participant on this run", async () => {
+			vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_AGENT as never);
+			vi.mocked(findAgentParticipantForRun).mockResolvedValueOnce(null);
+
+			await expect(completeRunStep(AGENT_CTX, "rs_1")).rejects.toMatchObject({
+				code: "RUN_STEP_ACCESS_DENIED",
+			});
+			expect(markRunStepCompleted).not.toHaveBeenCalled();
+		});
+
+		it("RUN_STEP_ACCESS_DENIED when the agent is a participant but not an assignee", async () => {
+			vi.mocked(getRunStepWithRun).mockResolvedValueOnce({
+				...RS_PENDING_AS_AGENT,
+				assignees: [{ participant: { id: "part_other", userId: null } }],
+			} as never);
+			vi.mocked(findAgentParticipantForRun).mockResolvedValueOnce({
+				id: "part_agent_1",
+			});
+
+			await expect(completeRunStep(AGENT_CTX, "rs_1")).rejects.toMatchObject({
+				code: "RUN_STEP_ACCESS_DENIED",
+			});
+			expect(markRunStepCompleted).not.toHaveBeenCalled();
+		});
+
+		it("happy path: agent completes step, audit attributes actor_kind=agent + actorParticipantId", async () => {
+			vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_AGENT as never);
+			vi.mocked(findAgentParticipantForRun).mockResolvedValueOnce({
+				id: "part_agent_1",
+			});
+			vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(false);
+
+			const result = await completeRunStep(AGENT_CTX, "rs_1");
+			expect(result).toEqual({ runStepId: "rs_1", runCompleted: false });
+
+			// `completedBy` is null for agent callers -- there is no Better Auth user.
+			expect(markRunStepCompleted).toHaveBeenCalledWith(
+				{ runStepId: "rs_1", completedBy: null },
+				expect.anything(),
+			);
+			expect(writeAuditAndActivity).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "run_step.completed",
+					actorUserId: null,
+					actorKind: "agent",
+					actorParticipantId: "part_agent_1",
+					metadata: expect.objectContaining({ actorAgentId: "agent_1" }),
+				}),
+				expect.anything(),
+			);
+		});
+
+		it("agent cascade audit also carries actor_kind=agent attribution", async () => {
+			vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_AGENT as never);
+			vi.mocked(findAgentParticipantForRun).mockResolvedValueOnce({
+				id: "part_agent_1",
+			});
+			vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(true);
+
+			const result = await completeRunStep(AGENT_CTX, "rs_1");
+			expect(result.runCompleted).toBe(true);
+
+			expect(writeAuditAndActivity).toHaveBeenCalledTimes(2);
+			const calls = vi.mocked(writeAuditAndActivity).mock.calls;
+			expect(calls[1][0]).toMatchObject({
+				action: "run.completed",
+				actorKind: "agent",
+				actorParticipantId: "part_agent_1",
+			});
+		});
 	});
 
 	it("does not emit cascade audit when markRunCompleted loses the race (G3)", async () => {

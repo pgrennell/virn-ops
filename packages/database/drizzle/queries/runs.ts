@@ -752,6 +752,28 @@ export async function markRunCompleted(
 	return result.length > 0;
 }
 
+/** Find the `participant` row for an agent on a specific run. Returns null if the agent
+ * was never made a participant of this run (i.e. wasn't bound at launch). Phase 11a.1 uses
+ * this to enforce that agents can only act on runs where they were explicitly assigned at
+ * launch -- there is no "create on demand" pathway in 11a.1, matching the user-side
+ * assignment model (you can't act on a run you aren't on). */
+export async function findAgentParticipantForRun(input: {
+	organizationId: string;
+	runId: string;
+	agentId: string;
+}): Promise<{ id: string } | null> {
+	const row = await db.query.participant.findFirst({
+		where: (p, { and: andOp, eq: eqOp }) =>
+			andOp(
+				eqOp(p.organizationId, input.organizationId),
+				eqOp(p.runId, input.runId),
+				eqOp(p.agentId, input.agentId),
+			),
+		columns: { id: true },
+	});
+	return row ? { id: row.id } : null;
+}
+
 // ---------------------------------------------------------------------------
 // Append-only writes (Invariant #6)
 // ---------------------------------------------------------------------------

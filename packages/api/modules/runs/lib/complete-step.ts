@@ -18,6 +18,7 @@
 
 import {
 	areAllRequiredRunStepsComplete,
+	findAgentParticipantForRun,
 	findIncompleteStopDependencies,
 	getFieldValuesForRun,
 	getRequiredFieldsForStep,
@@ -33,13 +34,18 @@ import { RunEngineError } from "./errors";
 export interface CompleteStepContext {
 	organizationId: string;
 	/** Better Auth user id of the calling user, when the call is internal. Mutually
-	 * exclusive with `participantId`. Set to `undefined` for guest calls. */
+	 * exclusive with `participantId` and `agentId`. Set to `undefined` for guest calls. */
 	userId?: string;
 	/** Participant id of the calling guest, when the call is via a verified
-	 * participant_token. Mutually exclusive with `userId`. Guests are never admin/owner. */
+	 * participant_token. Mutually exclusive with `userId` and `agentId`. Guests are never
+	 * admin/owner. */
 	participantId?: string;
+	/** Agent id when called via verified bearer credential (Phase 11a, ADR-006). Mutually
+	 * exclusive with `userId` / `participantId`. Agents are never admin/owner and must be a
+	 * pre-existing participant on the run (bound at launch). */
+	agentId?: string;
 	/** True when the caller is an admin/owner of the active org; bypasses the assignee
-	 * check. (D-014.) Always `false` for guest contexts. */
+	 * check. (D-014.) Always `false` for guest and agent contexts. */
 	isAdminOrOwner: boolean;
 }
 
@@ -77,13 +83,36 @@ export async function completeRunStep(
 		);
 	}
 
-	// Access: assignee OR admin/owner. Assignee can be matched either by the calling
-	// user's Better Auth id (internal path) or by participant id (guest path via verified
-	// token). Guests never have isAdminOrOwner = true.
+	// Agent path: resolve the agent's participant row for this run BEFORE the assignee
+	// check, so the same `participantId` flows into both the access decision and the
+	// audit row. An agent that wasn't bound to this run at launch can't act on it --
+	// Phase 11a.1 has no "create on demand" pathway (matches user-side semantics).
+	let agentParticipantId: string | null = null;
+	if (ctx.agentId) {
+		const part = await findAgentParticipantForRun({
+			organizationId: ctx.organizationId,
+			runId: rs.run.id,
+			agentId: ctx.agentId,
+		});
+		if (!part) {
+			throw new RunEngineError(
+				"RUN_STEP_ACCESS_DENIED",
+				"This agent is not a participant of this run.",
+				{ runStepId, agentId: ctx.agentId },
+			);
+		}
+		agentParticipantId = part.id;
+	}
+
+	// Access: assignee OR admin/owner. Assignee can be matched by the calling user's
+	// Better Auth id (internal), by participant id (guest via verified token), or by the
+	// agent's participant row (Phase 11a action surface). Guests + agents never have
+	// isAdminOrOwner = true.
 	if (!ctx.isAdminOrOwner) {
 		const isAssignee = rs.assignees.some((a) => {
 			if (ctx.participantId && a.participant.id === ctx.participantId) return true;
 			if (ctx.userId && a.participant.userId === ctx.userId) return true;
+			if (agentParticipantId && a.participant.id === agentParticipantId) return true;
 			return false;
 		});
 		if (!isAssignee) {
@@ -136,6 +165,14 @@ export async function completeRunStep(
 		}
 	}
 
+	// Actor attribution shared by both the step-complete write and the cascade write.
+	const actorKind: "user" | "guest" | "agent" = ctx.agentId
+		? "agent"
+		: ctx.participantId
+			? "guest"
+			: "user";
+	const actorParticipantId = ctx.participantId ?? agentParticipantId ?? null;
+
 	// Atomic write: step-complete update + audit + activity must succeed or fail together.
 	// The cascade (run-level completion) runs in the same transaction; `markRunCompleted`'s
 	// `WHERE status = 'active'` clause + boolean return prevents duplicate cascade audits
@@ -146,6 +183,8 @@ export async function completeRunStep(
 			{
 				organizationId: ctx.organizationId,
 				actorUserId: ctx.userId ?? null,
+				actorKind,
+				actorParticipantId,
 				action: "run_step.completed",
 				verb: "completed",
 				entityType: "run_step",
@@ -155,6 +194,7 @@ export async function completeRunStep(
 					runId: rs.run.id,
 					workflowVersionId: rs.run.workflowVersionId,
 					...(ctx.participantId ? { actorParticipantId: ctx.participantId } : {}),
+					...(ctx.agentId ? { actorAgentId: ctx.agentId } : {}),
 				},
 				activityData: { stepTitle: rs.title },
 			},
@@ -179,6 +219,8 @@ export async function completeRunStep(
 			{
 				organizationId: ctx.organizationId,
 				actorUserId: ctx.userId ?? null,
+				actorKind,
+				actorParticipantId,
 				action: "run.completed",
 				verb: "completed",
 				entityType: "run",
@@ -187,6 +229,7 @@ export async function completeRunStep(
 				metadata: {
 					triggeredByRunStepId: runStepId,
 					...(ctx.participantId ? { actorParticipantId: ctx.participantId } : {}),
+					...(ctx.agentId ? { actorAgentId: ctx.agentId } : {}),
 				},
 				activityData: { reason: "all required steps complete" },
 			},

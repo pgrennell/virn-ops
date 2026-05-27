@@ -16,6 +16,7 @@ import {
 	credentialLastFour,
 	generateAgentCredential,
 	hashAgentCredential,
+	verifyAgentCredential,
 } from "./agent-credentials";
 
 // ---------------------------------------------------------------------------
@@ -242,6 +243,57 @@ export async function softDeleteAgent(input: {
 		)
 		.returning({ id: agent.id });
 	return { deleted: result.length > 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Credential resolution (Phase 11a, action surface)
+// ---------------------------------------------------------------------------
+
+export interface ResolvedAgent {
+	id: string;
+	organizationId: string;
+	name: string;
+}
+
+/** Resolve a bearer-credential plaintext to an active, non-soft-deleted agent. Returns null
+ * for any malformed input, unknown credential, or inactive/deleted row.
+ *
+ * Performance: scrypt verification is intentionally CPU-expensive (~50ms). To keep this
+ * helper O(1)-ish instead of O(N agents in the platform), we prefilter by the public
+ * `credentialLastFour` column — a 4-char base64url suffix yields ~1/16M collision odds, so
+ * the inner loop almost always sees zero or one candidate. The last-four value is not a
+ * secret (already shown in admin UI for agent identification) and exposing it as a filter
+ * key doesn't weaken the scrypt verification that runs after.
+ *
+ * Safe against early returns leaking timing: the suffix prefilter is structural (not based
+ * on the secret), and we always scrypt-verify every candidate before deciding. */
+export async function findActiveAgentByCredential(
+	plaintext: string,
+): Promise<ResolvedAgent | null> {
+	if (typeof plaintext !== "string" || plaintext.length < 8) return null;
+	const lastFour = credentialLastFour(plaintext);
+
+	const candidates = await db.query.agent.findMany({
+		where: (a, { and: andOp, eq: eqOp, isNull: isNullOp }) =>
+			andOp(
+				eqOp(a.credentialLastFour, lastFour),
+				eqOp(a.isActive, true),
+				isNullOp(a.deletedAt),
+			),
+		columns: {
+			id: true,
+			organizationId: true,
+			name: true,
+			credentialHash: true,
+		},
+	});
+
+	for (const c of candidates) {
+		if (verifyAgentCredential(plaintext, c.credentialHash)) {
+			return { id: c.id, organizationId: c.organizationId, name: c.name };
+		}
+	}
+	return null;
 }
 
 // Silence unused-import warnings for the leftover helpers kept for future expansion.

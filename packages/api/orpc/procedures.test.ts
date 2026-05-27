@@ -1,5 +1,5 @@
 import { call, ORPCError } from "@orpc/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@virn/auth", () => ({
 	auth: {
@@ -15,11 +15,18 @@ vi.mock("@virn/auth", () => ({
 // helpers they wrap (see modules/runs/lib/*.test.ts for the pattern).
 vi.mock("@virn/database", () => ({
 	getOrganizationMembership: vi.fn(),
+	findActiveAgentByCredential: vi.fn(),
 }));
 
 import { auth } from "@virn/auth";
+import { findActiveAgentByCredential, getOrganizationMembership } from "@virn/database";
 
-import { adminProcedure, protectedProcedure, publicProcedure } from "./procedures";
+import {
+	adminProcedure,
+	agentOrUserOrgProcedure,
+	protectedProcedure,
+	publicProcedure,
+} from "./procedures";
 
 describe("publicProcedure", () => {
 	it("is defined", () => {
@@ -113,5 +120,172 @@ describe("adminProcedure", () => {
 		});
 
 		expect(result).toEqual({ success: true });
+	});
+});
+
+// Phase 11a.1 -- dual-auth org procedure (S-01a action surface).
+describe("agentOrUserOrgProcedure", () => {
+	beforeEach(() => {
+		// Clear call records across tests in this block -- several tests assert
+		// `not.toHaveBeenCalled()` which would otherwise bleed across cases.
+		vi.clearAllMocks();
+	});
+
+	it("is defined", () => {
+		expect(agentOrUserOrgProcedure).toBeDefined();
+	});
+
+	it("resolves an agent principal from a valid Bearer credential", async () => {
+		// Bearer wins over session even if both were present, but we don't set a session here.
+		vi.mocked(findActiveAgentByCredential).mockResolvedValueOnce({
+			id: "agent_1",
+			organizationId: "org_1",
+			name: "Turnover AI",
+		});
+
+		let capturedContext: unknown;
+		const testProcedure = agentOrUserOrgProcedure.handler(async ({ context }) => {
+			capturedContext = context;
+			return { ok: true };
+		});
+
+		const headers = new Headers({ authorization: "Bearer agent_secret_abcd" });
+		await call(testProcedure, undefined, { context: { headers } });
+
+		expect(findActiveAgentByCredential).toHaveBeenCalledWith("agent_secret_abcd");
+		expect(capturedContext).toMatchObject({
+			principal: {
+				kind: "agent",
+				agent: { id: "agent_1", organizationId: "org_1" },
+			},
+			organization: { id: "org_1" },
+		});
+		// No session lookup should be attempted when a bearer is present.
+		expect(auth.api.getSession).not.toHaveBeenCalled();
+	});
+
+	it("throws UNAUTHORIZED for a Bearer that doesn't resolve to an active agent", async () => {
+		vi.mocked(findActiveAgentByCredential).mockResolvedValueOnce(null);
+
+		const testProcedure = agentOrUserOrgProcedure.handler(async () => ({ ok: true }));
+		const headers = new Headers({ authorization: "Bearer agent_revoked" });
+
+		await expect(
+			call(testProcedure, undefined, { context: { headers } }),
+		).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+	});
+
+	it("Bearer takes precedence over an existing session cookie", async () => {
+		// A stale session cookie + a valid bearer should resolve via the bearer; the
+		// session lookup must NOT be consulted (else a developer hitting the action
+		// surface from a browser could accidentally fall through to user-mode and bypass
+		// agent attribution).
+		vi.mocked(findActiveAgentByCredential).mockResolvedValueOnce({
+			id: "agent_1",
+			organizationId: "org_1",
+			name: "Turnover AI",
+		});
+		vi.mocked(auth.api.getSession).mockResolvedValue({
+			user: { id: "user_1" },
+			session: { activeOrganizationId: "org_other" },
+		} as never);
+
+		let capturedContext: unknown;
+		const testProcedure = agentOrUserOrgProcedure.handler(async ({ context }) => {
+			capturedContext = context;
+			return { ok: true };
+		});
+
+		const headers = new Headers({
+			authorization: "Bearer agent_secret",
+			cookie: "session=tok",
+		});
+		await call(testProcedure, undefined, { context: { headers } });
+
+		expect(capturedContext).toMatchObject({
+			principal: { kind: "agent" },
+			organization: { id: "org_1" },
+		});
+	});
+
+	it("falls back to user-session path when no bearer is present", async () => {
+		const mockUser = { id: "user_1", name: "Pat" };
+		const mockSession = { id: "session_1", activeOrganizationId: "org_1" };
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce({
+			user: mockUser,
+			session: mockSession,
+		} as never);
+		vi.mocked(getOrganizationMembership).mockResolvedValueOnce({
+			organization: { id: "org_1", name: "Org", slug: "org" },
+			role: "admin",
+		} as never);
+
+		let capturedContext: unknown;
+		const testProcedure = agentOrUserOrgProcedure.handler(async ({ context }) => {
+			capturedContext = context;
+			return { ok: true };
+		});
+
+		await call(testProcedure, undefined, {
+			context: { headers: new Headers() },
+		});
+
+		expect(capturedContext).toMatchObject({
+			principal: {
+				kind: "user",
+				user: mockUser,
+				membership: { role: "admin" },
+			},
+			organization: { id: "org_1" },
+		});
+	});
+
+	it("throws UNAUTHORIZED in user-path when no session", async () => {
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+
+		const testProcedure = agentOrUserOrgProcedure.handler(async () => ({ ok: true }));
+		await expect(
+			call(testProcedure, undefined, { context: { headers: new Headers() } }),
+		).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+	});
+
+	it("throws FORBIDDEN in user-path when session has no active organization", async () => {
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce({
+			user: { id: "user_1" },
+			session: { activeOrganizationId: null },
+		} as never);
+
+		const testProcedure = agentOrUserOrgProcedure.handler(async () => ({ ok: true }));
+		await expect(
+			call(testProcedure, undefined, { context: { headers: new Headers() } }),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	});
+
+	it("throws FORBIDDEN in user-path when user is not a member of the active org", async () => {
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce({
+			user: { id: "user_1" },
+			session: { activeOrganizationId: "org_1" },
+		} as never);
+		vi.mocked(getOrganizationMembership).mockResolvedValueOnce(null);
+
+		const testProcedure = agentOrUserOrgProcedure.handler(async () => ({ ok: true }));
+		await expect(
+			call(testProcedure, undefined, { context: { headers: new Headers() } }),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	});
+
+	it("ignores a malformed Authorization header and falls back to user-path", async () => {
+		// "Basic ..." or similar -- not a Bearer; we should not consult the credential
+		// resolver and should proceed to the user-session path instead.
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+
+		const testProcedure = agentOrUserOrgProcedure.handler(async () => ({ ok: true }));
+		const headers = new Headers({ authorization: "Basic Zm9vOmJhcg==" });
+
+		await expect(
+			call(testProcedure, undefined, { context: { headers } }),
+		).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+		expect(findActiveAgentByCredential).not.toHaveBeenCalled();
 	});
 });
