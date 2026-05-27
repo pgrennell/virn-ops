@@ -20,6 +20,9 @@ export default defineConfig({
 			"@ai": path.resolve(import.meta.dirname, "./modules/ai"),
 			"@onboarding": path.resolve(import.meta.dirname, "./modules/onboarding"),
 			"@settings": path.resolve(import.meta.dirname, "./modules/settings"),
+			"@runs": path.resolve(import.meta.dirname, "./modules/runs"),
+			"@builder": path.resolve(import.meta.dirname, "./modules/builder"),
+			"@library": path.resolve(import.meta.dirname, "./modules/library"),
 		},
 	},
 });

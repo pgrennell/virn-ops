@@ -29,7 +29,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@virn/ui/components/select";
-import { Lock, X } from "lucide-react";
+import { Lock, Plus, X } from "lucide-react";
+import { useState } from "react";
 
 import type { StepType } from "@runs/types";
 
@@ -49,6 +50,11 @@ export interface StepConfigFormProps {
 	onToggleStopTask: (value: boolean) => void;
 	onAddDependency: (dependsOnStepId: string) => void;
 	onRemoveDependency: (dependsOnStepId: string) => void;
+	/** Inline + New role affordance in the assignee picker. Resolves to the new
+	 * role's id so the form can auto-select it. AWAIT semantics by contract --
+	 * server owns the cuid. Adjacent fix from the Pass-3 review: without this,
+	 * a fresh-org first-run lands in an empty picker with no recovery. */
+	onCreateRole: (name: string) => Promise<{ id: string }>;
 }
 
 export function StepConfigForm(props: StepConfigFormProps) {
@@ -65,6 +71,7 @@ export function StepConfigForm(props: StepConfigFormProps) {
 		onToggleStopTask,
 		onAddDependency,
 		onRemoveDependency,
+		onCreateRole,
 	} = props;
 
 	const stepTypeOptions = getStepTypeOptions(gates);
@@ -114,11 +121,14 @@ export function StepConfigForm(props: StepConfigFormProps) {
 						))}
 					</SelectContent>
 				</Select>
-				{workflowRoles.length === 0 && (
-					<p className="text-xs text-foreground/60 mt-1.5">
-						No workflow roles defined. Create them via the workflow roles list.
-					</p>
-				)}
+				<InlineRoleCreator
+					hasExistingRoles={workflowRoles.length > 0}
+					onCreate={async (name) => {
+						const result = await onCreateRole(name);
+						// Auto-select the new role -- removes a click and signals success.
+						onChangeAssignedRole(result.id);
+					}}
+				/>
 			</Section>
 
 			<Section label="Due rule">
@@ -286,5 +296,108 @@ function DisabledByCapability({ message }: { message: string }) {
 				<span>{message}</span>
 			</AlertDescription>
 		</Alert>
+	);
+}
+
+// Inline + New role affordance. Collapsed = a small ghost button below the picker.
+// Expanded = name input + Add / Cancel. On Add: calls onCreate (which awaits the
+// server's response and returns the new id), the parent auto-selects, and the input
+// collapses. Modal would interrupt the config-panel flow; inline keeps the user in
+// context. Adjacent fix from the Pass-3 review.
+function InlineRoleCreator({
+	hasExistingRoles,
+	onCreate,
+}: {
+	hasExistingRoles: boolean;
+	onCreate: (name: string) => Promise<void>;
+}) {
+	const [expanded, setExpanded] = useState(false);
+	const [draft, setDraft] = useState("");
+	const [pending, setPending] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	if (!expanded) {
+		return (
+			<div className="mt-1.5">
+				<button
+					type="button"
+					onClick={() => {
+						setExpanded(true);
+						setDraft("");
+						setError(null);
+					}}
+					className="gap-1.5 inline-flex items-center text-xs text-foreground/60 hover:text-foreground transition-colors"
+				>
+					<Plus className="size-3" />
+					<span>
+						{hasExistingRoles ? "New role" : "Create your first role"}
+					</span>
+				</button>
+				{!hasExistingRoles && (
+					<p className="text-[11px] text-foreground/50 mt-1">
+						No roles defined yet. Roles let you assign steps to people at run time
+						("Operator", "Reviewer", etc.).
+					</p>
+				)}
+			</div>
+		);
+	}
+
+	const submit = async () => {
+		const name = draft.trim();
+		if (name.length === 0) {
+			setExpanded(false);
+			return;
+		}
+		setPending(true);
+		setError(null);
+		try {
+			await onCreate(name);
+			setExpanded(false);
+			setDraft("");
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't create the role.");
+		} finally {
+			setPending(false);
+		}
+	};
+
+	return (
+		<div className="mt-1.5">
+			<div className="gap-2 flex items-center">
+				<Input
+					value={draft}
+					onChange={(e) => setDraft(e.target.value)}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") {
+							e.preventDefault();
+							void submit();
+						} else if (e.key === "Escape") {
+							setExpanded(false);
+						}
+					}}
+					placeholder="Role name…"
+					disabled={pending}
+					autoFocus
+					className="text-sm"
+				/>
+				<Button size="sm" variant="primary" onClick={submit} disabled={pending}>
+					Add
+				</Button>
+				<Button
+					size="sm"
+					variant="ghost"
+					onClick={() => setExpanded(false)}
+					disabled={pending}
+				>
+					Cancel
+				</Button>
+			</div>
+			{error && (
+				<Alert variant="error" className="mt-2">
+					<AlertDescription className="text-xs">{error}</AlertDescription>
+				</Alert>
+			)}
+		</div>
 	);
 }

@@ -14,7 +14,8 @@
 			"@onboarding/*": ["./modules/onboarding/*"],
 			"@runs/*": ["./modules/runs/*"],
 			"@shared/*": ["./modules/shared/*"],
-			"@builder/*": ["./modules/builder/*"]
+			"@builder/*": ["./modules/builder/*"],
+			"@library/*": ["./modules/library/*"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.mjs", ".next/types/**/*.ts"],

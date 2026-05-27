@@ -36,6 +36,7 @@ import {
 	useCreateField,
 	useCreateSection,
 	useCreateStep,
+	useCreateWorkflowRole,
 	useDeleteField,
 	useDeleteStep,
 	useDiscardDraft,
@@ -263,6 +264,7 @@ function BuilderInner({
 	const deleteField = useDeleteField(mutArgs);
 	const reorderSteps = useReorderSteps(mutArgs);
 	const addDep = useAddStepDependency(mutArgs);
+	const createRole = useCreateWorkflowRole();
 	const removeDep = useRemoveStepDependency(mutArgs);
 	// Workflow roles for the step assignee picker. Org-level query, mounted once.
 	const rolesQuery = useQuery(orpc.workflows.listRoles.queryOptions({ input: {} }));
@@ -487,6 +489,11 @@ function BuilderInner({
 									onRemoveDependency={(dependsOnStepId) =>
 										removeDep.mutate({ stepId: step.id, dependsOnStepId })
 									}
+									onCreateRole={async (name) => {
+										// AWAIT -- the server owns the cuid. Returns the new role's id
+										// so the form can auto-select it.
+										return await createRole.mutateAsync({ name });
+									}}
 								/>
 							);
 						})()}

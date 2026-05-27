@@ -196,4 +196,14 @@ describe("builder-mutations: split optimistic strategy", () => {
 			expect(body!).toMatch(/onSuccess/);
 		}
 	});
+
+	it("useCreateWorkflowRole is AWAIT (server owns the cuid, same as createField/Step/Section)", () => {
+		const body = extract("useCreateWorkflowRole");
+		expect(body, "useCreateWorkflowRole should be exported").not.toBeNull();
+		// Optimistic patch would invent a temp role id that the picker auto-selects,
+		// then desync once the server returns the real id.
+		expect(body!).not.toMatch(/onMutate/);
+		expect(body!).toMatch(/onSuccess/);
+		expect(body!).toMatch(/listRoles\.queryKey/); // invalidates the right query
+	});
 });

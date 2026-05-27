@@ -314,6 +314,23 @@ export function useEditPublished() {
 	});
 }
 
+// Workflow roles (org-level). Surfaces the inline "+ New role" affordance in the
+// step assignee picker so a fresh-org user isn't stuck staring at an empty list. AWAIT
+// posture -- server owns the cuid id, same reason useCreateField/Step/Section await.
+// On success, the workflows.listRoles query invalidates and the picker rebuilds with
+// the new entry; the caller selects it.
+export function useCreateWorkflowRole() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.workflows.createRole.mutationOptions(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: orpc.workflows.listRoles.queryKey({ input: {} }),
+			});
+		},
+	});
+}
+
 export function useDiscardDraft() {
 	return useMutation({
 		...orpc.workflows.discardDraft.mutationOptions(),
