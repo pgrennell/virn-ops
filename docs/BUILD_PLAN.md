@@ -754,20 +754,56 @@ registering the cross-product credential also grants the action capabilities);
 no special-case bypass for cross-product callers. Tenant-internal AI agents
 (ai_assisted / automated mode) are granted whichever subset matches their role.
 
-**Sub-phase 11b — Thin MCP wrapper (good-citizen alternative).**
+**Step 11a follow-ups (deferred to post-v1):**
 
-- Wrapper exposes the same oRPC procedures from 11a via the MCP protocol — read
-  procedures as MCP `tools` and `resources`, write procedures as MCP `tools`.
-  Credential validation happens in the oRPC middleware (11a), so the wrapper
-  doesn't reimplement auth.
-- Deployable as a sibling endpoint (e.g. `mcp.ops.virn.com` or
-  `ops.virn.com/mcp`) — deployment shape to settle when 11b ships.
+- **`run.comment_added` emission (D-035).** The outbox + delivery worker
+  already accept the event type (Phase 11a step 3c part 2 ships the full
+  catalog `{ run.state_changed, run.completed, vendor.upserted, run.comment_added }`).
+  What's missing is the source: there's no `runs.addComment` procedure today
+  and no query writes to the `comment` table in [collab.ts](../packages/database/drizzle/schema/collab.ts).
+  When the comment surface ships post-v1, the emission slots in via
+  `enqueueCrossProductEventForRun` exactly where `complete-step.ts`'s cascade
+  already does -- single-line chokepoint addition. A `runs_add_comment` MCP
+  tool slots into [packages/api/mcp/tools.ts](../packages/api/mcp/tools.ts)
+  the same shape as the existing four. **Tracking:** revisit when a
+  customer-pull use case for run comments emerges (vendor-facing comment
+  thread on a work-order run is the most likely trigger).
+- **Comment authorship attribution.** Per D-035 §"Consequences", the
+  `comment` schema's `authorUserId`-only shape is insufficient for vendor /
+  agent comments. When the addComment surface ships, extend `comment` with
+  `actorKind` + `actorParticipantId` columns mirroring `audit_log` /
+  `activity_event` per D-022/D-027. Schema extension lands with the API
+  surface, not before.
+
+**Sub-phase 11b — Thin MCP wrapper (good-citizen alternative) — SHIPPED.**
+
+JSON-RPC 2.0 envelope + dispatch at
+[packages/api/mcp/server.ts](../packages/api/mcp/server.ts), tool catalog at
+[packages/api/mcp/tools.ts](../packages/api/mcp/tools.ts), HTTP endpoint
+mounted at `/api/mcp` in the Hono app
+([packages/api/index.ts:38](../packages/api/index.ts#L38)). MCP methods
+implemented: `initialize`, `ping`, `tools/list`, `tools/call`. Tool catalog
+covers the v1 action surface: `runs_launch` (with the Phase 11a step 3a/3b
+`workflow_slug` + `callback` inputs), `runs_set_field_value`,
+`runs_complete_step`, `runs_list_my_tasks`. Auth flows through the same
+`agentOrUserOrgProcedure` middleware as oRPC -- the wrapper forwards the
+inbound `Authorization` header into the procedure context, never
+reimplementing credential validation. Per-agent capability gating (Step 4)
+applies uniformly because the tools call the procedures (not the libs
+directly). oRPC errors are translated to JSON-RPC -32000 with the original
+`code` preserved under `error.data.code`.
+
 - **Branding:** "Virn Ops MCP" when referring to this wrapper specifically; the
   canonical surface is "Virn Ops Action API" (or just "the action surface" in
   internal docs).
-- **Splittable.** If 11b complicates the 11a build, ship 11a alone and split
-  11b as Phase 11.5 — the strategic value is in 11a; the wrapper is the
-  ecosystem-compatibility cherry.
+- **Deployment.** Currently mounted at `/api/mcp` on the saas app's Hono
+  router (same origin as the rest of the API). A sibling endpoint
+  (`mcp.ops.virn.com`) can be added later if MCP-host operators want a
+  cleaner separation; the wrapper itself doesn't care.
+- **Future tools.** When `runs.addComment` ships post-v1 (see step 11a
+  follow-ups), a corresponding `runs_add_comment` MCP tool slots into the
+  catalog the same way the existing four do. The wrapper is intentionally
+  shallow so adding tools is a one-file change.
 
 **Why this matters.** This is the load-bearing seam for S-07 mode (b) and (c) —
 without an agent-credentialed write path, "AI-assisted" and "automated" runs

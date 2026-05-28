@@ -41,7 +41,12 @@ export interface McpTool {
 // ---------------------------------------------------------------------------
 
 interface LaunchArgs {
-	workflow_id: string;
+	// Phase 11a step 3(a): launchers may supply EITHER a workflow_id (Ops-
+	// internal identifier) OR a workflow_slug (cross-product alias). The oRPC
+	// procedure enforces exactly-one-of; we surface both fields here so MCP
+	// hosts pick the right one for their context.
+	workflow_id?: string;
+	workflow_slug?: string;
 	workflow_version_id?: string;
 	kickoff_values?: Record<string, unknown>;
 	role_assignments?: Array<{
@@ -55,6 +60,13 @@ interface LaunchArgs {
 	title?: string;
 	mode?: "human" | "ai_assisted" | "automated";
 	agent_id?: string | null;
+	// Phase 11a step 3(b): cross-product callback echo. Persisted on the run
+	// and echoed back in every emitted webhook. All fields optional.
+	callback?: {
+		pm_service_request_id?: string;
+		pm_work_order_id?: string;
+		webhook_events?: string[];
+	};
 }
 
 interface SetFieldValueArgs {
@@ -87,11 +99,15 @@ export const tools: McpTool[] = [
 	{
 		name: "runs_launch",
 		description:
-			"Launch a new run from a published workflow version. The launching agent is added as a participant on the new run, so subsequent set_field_value / complete_step calls by the same agent are authorized. Returns the new runId.",
+			"Launch a new run from a published workflow version. Provide EXACTLY ONE of `workflow_id` (Ops-internal identifier) or `workflow_slug` (cross-product alias — used by sibling products like Virn PM that don't know Ops's per-org cuid). The launching agent is added as a participant on the new run, so subsequent set_field_value / complete_step calls by the same agent are authorized. Returns the new runId.",
 		inputSchema: {
 			type: "object",
 			properties: {
-				workflow_id: { type: "string", description: "Workflow identifier" },
+				workflow_id: { type: "string", description: "Ops-internal workflow identifier. Mutually exclusive with workflow_slug." },
+				workflow_slug: {
+					type: "string",
+					description: "Cross-product workflow alias (Phase 11a step 3a). Populated for pack-installed workflows. Mutually exclusive with workflow_id.",
+				},
 				workflow_version_id: {
 					type: "string",
 					description: "Optional pinned version. Defaults to the latest published version.",
@@ -127,8 +143,20 @@ export const tools: McpTool[] = [
 					type: ["string", "null"],
 					description: "Required when mode is ai_assisted/automated. The agent that handles AI/all steps for this run.",
 				},
+				callback: {
+					type: "object",
+					description: "Cross-product callback echo (Phase 11a step 3b). Persisted on the run and echoed in every emitted webhook so the consumer correlates without an extra round-trip. All fields optional.",
+					properties: {
+						pm_service_request_id: { type: "string" },
+						pm_work_order_id: { type: "string" },
+						webhook_events: {
+							type: "array",
+							items: { type: "string" },
+							description: "Filter for which catalog events this run emits. Null/omitted = all v1 events.",
+						},
+					},
+				},
 			},
-			required: ["workflow_id"],
 		},
 		handler: async (args, headers) => {
 			const a = asObject<LaunchArgs>(args);
@@ -136,6 +164,7 @@ export const tools: McpTool[] = [
 				launchRunProc,
 				{
 					workflowId: a.workflow_id,
+					workflowSlug: a.workflow_slug,
 					workflowVersionId: a.workflow_version_id,
 					kickoffValues: a.kickoff_values ?? {},
 					roleAssignments: (a.role_assignments ?? []).map((ra) => ({
@@ -149,6 +178,13 @@ export const tools: McpTool[] = [
 					title: a.title,
 					mode: a.mode ?? "human",
 					agentId: a.agent_id ?? null,
+					callback: a.callback
+						? {
+								pmServiceRequestId: a.callback.pm_service_request_id,
+								pmWorkOrderId: a.callback.pm_work_order_id,
+								webhookEvents: a.callback.webhook_events,
+							}
+						: undefined,
 				},
 				{ context: { headers } },
 			);

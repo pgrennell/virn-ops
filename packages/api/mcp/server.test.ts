@@ -36,6 +36,9 @@ vi.mock("@virn/database", () => ({
 	getVendorContactForLaunch: vi.fn(),
 	getVersionLaunchBundle: vi.fn(),
 	getWorkflowForOrg: vi.fn(),
+	// Phase 11a step 3a -- slug lookup is a sibling resolution path on the
+	// launchRun lib. MCP tests that exercise the slug branch mock this.
+	getWorkflowBySlugForOrg: vi.fn(),
 	getWorkflowVersionById: vi.fn(),
 	insertRunSnapshot: vi.fn(),
 	// completeStep path
@@ -45,13 +48,20 @@ vi.mock("@virn/database", () => ({
 	getRequiredFieldsForStep: vi.fn(),
 	markRunCompleted: vi.fn(),
 	markRunStepCompleted: vi.fn(),
+	// Phase 11a step 3c part 2 -- cross-product outbox enqueue fires inside
+	// the complete-step cascade; default to no-op for these tests.
+	enqueueCrossProductEventForRun: vi.fn(async () => null),
 }));
 
 import {
 	findActiveAgentByCredential,
 	findAgentParticipantForRun,
 	findFieldByVersionAndKey,
+	getLatestPublishedWorkflowVersion,
 	getRunStepWithRun,
+	getVersionLaunchBundle,
+	getWorkflowBySlugForOrg,
+	insertRunSnapshot,
 	listAssignedTasksForAgent,
 	upsertRunFieldValue,
 	writeAuditAndActivity,
@@ -392,5 +402,105 @@ describe("handleMcpRequest -- runs_set_field_value (bridge)", () => {
 		expect(result).toMatchObject({
 			error: { code: -32000 },
 		});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// tools/call -- runs_launch (Phase 11a step 3 cross-product alignment)
+// ---------------------------------------------------------------------------
+
+describe("handleMcpRequest -- runs_launch (slug + callback bridge)", () => {
+	it("translates workflow_slug + callback through to launchRun via getWorkflowBySlugForOrg + insertRunSnapshot", async () => {
+		// Slug path: getWorkflowBySlugForOrg resolves the slug to a workflow row.
+		vi.mocked(getWorkflowBySlugForOrg).mockResolvedValueOnce({
+			id: "wf_str_turnover",
+			organizationId: "org_1",
+			title: "STR Turnover",
+			type: "procedure",
+		} as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce({
+			id: "ver_1",
+			workflowId: "wf_str_turnover",
+			versionNumber: 1,
+			status: "published",
+		} as never);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [],
+			fields: [],
+			deps: [],
+		} as never);
+		vi.mocked(insertRunSnapshot).mockResolvedValueOnce({
+			runId: "run_new",
+			runStepIdByStepId: new Map(),
+			participantIdByTempKey: new Map([["p_launcher_agent", "part_launcher"]]),
+		} as never);
+
+		const result = await handleMcpRequest(
+			{
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/call",
+				params: {
+					name: "runs_launch",
+					arguments: {
+						workflow_slug: "str-turnover-housekeeping",
+						// kickoff_values omitted -- the bundle has no kickoff
+						// fields in this test; the validator would reject any key
+						// we passed. This test verifies slug + callback wiring,
+						// not the kickoff validation path (covered in
+						// launch-run.test.ts).
+						callback: {
+							pm_service_request_id: "psr_42",
+							pm_work_order_id: "pwo_7",
+							webhook_events: ["run.state_changed", "run.completed"],
+						},
+					},
+				},
+			},
+			bearer("agent_secret"),
+		);
+
+		// Slug → id resolution path was taken (not the workflowId branch).
+		expect(getWorkflowBySlugForOrg).toHaveBeenCalledWith("org_1", "str-turnover-housekeeping");
+
+		// insertRunSnapshot received the snake_case → camelCase translated callback,
+		// proving the MCP wrapper threaded all three fields through to the procedure
+		// → lib pathway intact.
+		expect(insertRunSnapshot).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workflowId: "wf_str_turnover",
+				workflowVersionId: "ver_1",
+				callback: {
+					pmServiceRequestId: "psr_42",
+					pmWorkOrderId: "pwo_7",
+					webhookEvents: ["run.state_changed", "run.completed"],
+				},
+			}),
+		);
+
+		// MCP envelope shape: { content: [{ type: "text", text: "<json>" }] }.
+		const content = (result as { result: { content: Array<{ text: string }> } }).result.content;
+		expect(JSON.parse(content[0].text)).toEqual({ runId: "run_new" });
+	});
+
+	it("supplying both workflow_id and workflow_slug surfaces the exactly-one violation as JSON-RPC -32000", async () => {
+		// launchRun's WORKFLOW_LAUNCH_TARGET_INVALID gets mapped to BAD_REQUEST by the
+		// procedure's error map, then surfaces as -32000 with the preserved code.
+		const result = await handleMcpRequest(
+			{
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/call",
+				params: {
+					name: "runs_launch",
+					arguments: {
+						workflow_id: "wf_1",
+						workflow_slug: "str-turnover-housekeeping",
+					},
+				},
+			},
+			bearer("agent_secret"),
+		);
+		expect(result).toMatchObject({ error: { code: -32000 } });
 	});
 });
