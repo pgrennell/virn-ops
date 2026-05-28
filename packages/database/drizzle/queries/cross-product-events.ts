@@ -456,6 +456,39 @@ export async function getActiveConsumerCredentialForOrg(input: {
 	return row ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Return-URL allowlist resolution (Phase 11a step 3c part 2 step d, D-037).
+// Used by the guest run view to decide whether to honor a `?returnUrl=` query
+// parameter as a "Return to <consumer brand>" affordance. Keeping the
+// resolution server-side prevents any client-side bypass.
+// ---------------------------------------------------------------------------
+
+/** Read every active credential's returnUrl allowlist for this org, merged
+ * into one array. Empty result means no consumer is registered (so no
+ * returnUrl will validate). Excludes soft-deleted + inactive credentials so
+ * disabling a consumer immediately invalidates any returnUrls it had whitelisted. */
+export async function getActiveReturnUrlAllowlistForOrg(
+	organizationId: string,
+): Promise<string[]> {
+	const rows = await db
+		.select({
+			allowedReturnUrlPrefixes: outboundWebhookCredential.allowedReturnUrlPrefixes,
+		})
+		.from(outboundWebhookCredential)
+		.where(
+			and(
+				eq(outboundWebhookCredential.organizationId, organizationId),
+				eq(outboundWebhookCredential.isActive, true),
+				isNull(outboundWebhookCredential.deletedAt),
+			),
+		);
+	const out: string[] = [];
+	for (const r of rows) {
+		for (const p of r.allowedReturnUrlPrefixes) out.push(p);
+	}
+	return out;
+}
+
 /** Forensic read for the admin UI / debug tooling: list outbox rows for one
  * run, newest first. Not part of the delivery hot path. */
 export async function listOutboxEventsForRun(

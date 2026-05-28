@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@virn/ui/components/alert";
 import { Button } from "@virn/ui/components/button";
 import { Spinner } from "@virn/ui/components/spinner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Lock } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
@@ -48,13 +48,25 @@ function readTokenFromHash(): string | null {
 	return params.get("token");
 }
 
+/** D-037 returnUrl is delivered in the URL `?returnUrl=` query string (NOT
+ * the fragment -- unlike the token, it's not secret). Server-side validation
+ * against the org's outbound_webhook_credential allowlist is the source of
+ * truth; we just pass the raw candidate through. */
+function readReturnUrlFromQuery(): string | null {
+	if (typeof window === "undefined") return null;
+	const params = new URLSearchParams(window.location.search);
+	return params.get("returnUrl");
+}
+
 export function GuestRunView() {
 	const [token, setToken] = useState<string | null>(null);
+	const [candidateReturnUrl, setCandidateReturnUrl] = useState<string | null>(null);
 	const [tokenChecked, setTokenChecked] = useState(false);
 
-	// Defer the hash read to mount so SSR doesn't try to access window.
+	// Defer the hash / query read to mount so SSR doesn't try to access window.
 	useEffect(() => {
 		setToken(readTokenFromHash());
+		setCandidateReturnUrl(readReturnUrlFromQuery());
 		setTokenChecked(true);
 	}, []);
 
@@ -73,13 +85,22 @@ export function GuestRunView() {
 		);
 	}
 
-	return <GuestRunInner token={token} />;
+	return <GuestRunInner token={token} candidateReturnUrl={candidateReturnUrl} />;
 }
 
-function GuestRunInner({ token }: { token: string }) {
+function GuestRunInner({
+	token,
+	candidateReturnUrl,
+}: {
+	token: string;
+	candidateReturnUrl: string | null;
+}) {
 	const queryClient = useQueryClient();
-	const queryOpts = orpc.runs.getForGuest.queryOptions({ input: { token } });
-	const queryKey = orpc.runs.getForGuest.queryKey({ input: { token } });
+	const queryInput = candidateReturnUrl
+		? { token, candidateReturnUrl }
+		: { token };
+	const queryOpts = orpc.runs.getForGuest.queryOptions({ input: queryInput });
+	const queryKey = orpc.runs.getForGuest.queryKey({ input: queryInput });
 	const { data, isLoading, isError, error } = useQuery(queryOpts);
 
 	const setFieldValue = useMutation(orpc.runs.setFieldValueAsGuest.mutationOptions());
@@ -161,16 +182,34 @@ function GuestRunInner({ token }: { token: string }) {
 	return (
 		<div className="mx-auto max-w-5xl px-5 py-8">
 			<header className="mb-6">
-				<p className="text-xs uppercase tracking-wider text-foreground/50">
-					{data.organization.name}
-				</p>
-				<h1 className="text-2xl font-semibold mt-1">{data.runTitle}</h1>
-				<p className="mt-1 text-sm text-foreground/60">
-					{data.participant.guestName ?? data.participant.guestEmail ?? "Guest"} ·{" "}
-					{data.steps.length === 0
-						? "Nothing assigned to you"
-						: `${data.steps.length} task${data.steps.length === 1 ? "" : "s"} for you`}
-				</p>
+				<div className="flex items-start justify-between gap-4">
+					<div className="min-w-0 flex-1">
+						<p className="text-xs uppercase tracking-wider text-foreground/50">
+							{data.organization.name}
+						</p>
+						<h1 className="text-2xl font-semibold mt-1">{data.runTitle}</h1>
+						<p className="mt-1 text-sm text-foreground/60">
+							{data.participant.guestName ?? data.participant.guestEmail ?? "Guest"} ·{" "}
+							{data.steps.length === 0
+								? "Nothing assigned to you"
+								: `${data.steps.length} task${data.steps.length === 1 ? "" : "s"} for you`}
+						</p>
+					</div>
+					{/* D-037 link-out + return convention. `data.returnUrl` is server-
+					    validated against the org's outbound_webhook_credential
+					    allowlist; null when the caller didn't pass one or it didn't
+					    match. The button is plain navigation (no token in scope),
+					    so a same-tab redirect is safe. */}
+					{data.returnUrl && (
+						<a
+							href={data.returnUrl}
+							className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted/40"
+						>
+							Return
+							<ArrowUpRight className="size-3.5" />
+						</a>
+					)}
+				</div>
 				{!runIsActive && (
 					<Alert className="mt-3">
 						<AlertDescription className="text-xs">

@@ -91,7 +91,7 @@ describe("runCrossProductDeliveryWorker", () => {
 		vi.mocked(claimNextOutboxBatch).mockResolvedValueOnce([makeRow()]);
 		vi.mocked(getActiveConsumerCredentialForOrg).mockResolvedValueOnce(CRED);
 
-		const fetchImpl = vi.fn(
+		const fetchImpl: typeof fetch = vi.fn(
 			async (): Promise<Response> => new Response(null, { status: 200 }),
 		);
 		const result = await runCrossProductDeliveryWorker({ now: FIXED_NOW, fetchImpl });
@@ -104,15 +104,17 @@ describe("runCrossProductDeliveryWorker", () => {
 		);
 
 		// Verify the request shape.
-		const [url, init] = fetchImpl.mock.calls[0];
+		const calls = vi.mocked(fetchImpl).mock.calls;
+		expect(calls.length).toBe(1);
+		const [url, init] = calls[0];
 		expect(url).toBe("https://pm.example.com/webhooks/virn-ops");
-		const initHeaders = (init as RequestInit).headers as Record<string, string>;
+		const initHeaders = (init?.headers ?? {}) as Record<string, string>;
 		expect(initHeaders["Content-Type"]).toBe("application/json");
 		expect(initHeaders["X-Virn-Event-Id"]).toBe("evt_1");
 		expect(initHeaders["X-Virn-Event-Type"]).toBe("run.completed");
 
 		// HMAC: signature = hex(hmac-sha256(secret, `${ts}.${body}`)).
-		const body = (init as RequestInit).body as string;
+		const body = init?.body as string;
 		const ts = initHeaders["X-Virn-Timestamp"];
 		const expected = createHmac("sha256", "secret_abc")
 			.update(`${ts}.${body}`)

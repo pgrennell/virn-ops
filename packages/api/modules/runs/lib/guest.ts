@@ -18,6 +18,7 @@
 // can't mutate a completed run.
 
 import {
+	getActiveReturnUrlAllowlistForOrg,
 	getGuestRunBundle,
 	touchParticipantTokenUsage,
 	verifyParticipantToken,
@@ -26,6 +27,32 @@ import {
 import { completeRunStep } from "./complete-step";
 import { RunEngineError } from "./errors";
 import { setRunFieldValue } from "./set-field-value";
+
+/** D-037 returnUrl validator. Returns the candidate URL when it parses as
+ * http(s) AND prefix-matches one of the org's active credential allowlist
+ * entries; null otherwise. Keeping this pure (no DB I/O) means the
+ * `getRunForGuest` path can do one allowlist read per request and reuse
+ * the result for validation logic. */
+export function validateGuestReturnUrl(
+	candidate: string | null | undefined,
+	allowlist: readonly string[],
+): string | null {
+	if (!candidate) return null;
+	// Defense vs. javascript:, data:, etc. The credential procedure layer
+	// already validates allowlist entries as http(s), but we re-check the
+	// candidate here -- the request boundary is the second defense.
+	let parsed: URL;
+	try {
+		parsed = new URL(candidate);
+	} catch {
+		return null;
+	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+	for (const prefix of allowlist) {
+		if (candidate.startsWith(prefix)) return candidate;
+	}
+	return null;
+}
 
 // ---------------------------------------------------------------------------
 // Hand-shaped return for getRunForGuest
@@ -61,6 +88,10 @@ export interface GuestRunView {
 	organization: { name: string };
 	participant: { guestEmail: string | null; guestName: string | null };
 	steps: GuestStep[];
+	/** D-037 link-out + return convention. Set to the validated returnUrl
+	 * when the caller supplied one AND it matched the run's org allowlist;
+	 * null otherwise. Frontend renders a "Return" affordance only when set. */
+	returnUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +106,10 @@ export interface GuestRunView {
  * `GUEST_TOKEN_INVALID` -- callers map to FORBIDDEN. We don't tell the caller whether a
  * token "exists but is expired" vs "doesn't exist", to avoid confirming token validity.
  */
-export async function getRunForGuest(token: string): Promise<GuestRunView> {
+export async function getRunForGuest(
+	token: string,
+	candidateReturnUrl?: string | null,
+): Promise<GuestRunView> {
 	const verified = await verifyParticipantToken(token);
 	if (!verified) {
 		throw new RunEngineError("GUEST_TOKEN_INVALID", "This link isn't valid (or has expired).");
@@ -94,6 +128,15 @@ export async function getRunForGuest(token: string): Promise<GuestRunView> {
 		throw new RunEngineError("GUEST_TOKEN_INVALID", "This link isn't valid (or has expired).");
 	}
 
+	// D-037 returnUrl resolution. Only fire the allowlist read when the
+	// caller actually passed a candidate -- saves a DB hit for the common
+	// case (guest opens link directly, no PM-origin returnUrl).
+	let returnUrl: string | null = null;
+	if (candidateReturnUrl) {
+		const allowlist = await getActiveReturnUrlAllowlistForOrg(organizationId);
+		returnUrl = validateGuestReturnUrl(candidateReturnUrl, allowlist);
+	}
+
 	const runHeader = {
 		runId: bundle.run.id,
 		runTitle: bundle.run.title,
@@ -102,6 +145,7 @@ export async function getRunForGuest(token: string): Promise<GuestRunView> {
 		runDueAt: bundle.run.dueAt,
 		organization: { name: bundle.run.orgName },
 		participant: { guestEmail: p.guestEmail, guestName: p.guestName },
+		returnUrl,
 	};
 
 	if (bundle.steps.length === 0) {
