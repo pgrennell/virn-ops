@@ -4,6 +4,10 @@
 		{
 			"path": "/api/cron/sla-sweep",
 			"schedule": "0 * * * *"
+		},
+		{
+			"path": "/api/cron/cross-product-deliver",
+			"schedule": "* * * * *"
 		}
 	]
 }

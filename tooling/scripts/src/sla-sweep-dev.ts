@@ -72,3 +72,8 @@ main().catch((err) => {
 	console.error(err);
 	process.exit(1);
 });
+
+// Mark this file as a module so its top-level `const CRON_SECRET` etc. don't
+// share scope with sibling dev scripts (e.g. cross-product-deliver-dev.ts that
+// also reads CRON_SECRET).
+export {};

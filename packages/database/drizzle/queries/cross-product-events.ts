@@ -308,6 +308,154 @@ export async function enqueueCrossProductEventForVendor(
 	return results;
 }
 
+// ---------------------------------------------------------------------------
+// Delivery worker (Phase 11a step 3c part 2 step 3) -- claim + mark helpers.
+// The orchestrator lives in packages/api/modules/integrations/lib; this module
+// owns the SQL for atomic state transitions.
+// ---------------------------------------------------------------------------
+
+export interface ClaimedOutboxRow {
+	id: string;
+	organizationId: string;
+	consumerProduct: string;
+	eventType: string;
+	payload: Record<string, unknown>;
+	attemptCount: number;
+}
+
+/** Atomically claim a batch of pending outbox rows. Uses
+ * `FOR UPDATE SKIP LOCKED` so concurrent workers each get a disjoint slice
+ * without blocking on each other. The UPDATE flips status to 'delivering' and
+ * bumps attempt_count in the same statement; if delivery succeeds the row
+ * goes to 'delivered', otherwise back to 'pending' (with backoff) or 'dead'
+ * via the marker helpers below.
+ *
+ * Returns the claimed rows' delivery-relevant columns -- enough to compute
+ * the HMAC + POST without re-reading. */
+export async function claimNextOutboxBatch(input: {
+	now: Date;
+	batchSize: number;
+}): Promise<ClaimedOutboxRow[]> {
+	// Raw SQL because the CTE + FOR UPDATE SKIP LOCKED + UPDATE...FROM pattern
+	// isn't ergonomic through Drizzle's query builder. Mirrors the inline-raw
+	// approach `listWorkflowsForEntity` uses for its Postgres-specific operators.
+	const result = await db.execute(sql`
+		WITH claimed AS (
+			SELECT id FROM cross_product_event_outbox
+			WHERE status = 'pending'
+			  AND next_attempt_at <= ${input.now}
+			ORDER BY next_attempt_at ASC
+			LIMIT ${input.batchSize}
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE cross_product_event_outbox o
+		SET status = 'delivering',
+		    attempt_count = o.attempt_count + 1,
+		    updated_at = now()
+		FROM claimed
+		WHERE o.id = claimed.id
+		RETURNING o.id,
+		          o.organization_id,
+		          o.consumer_product,
+		          o.event_type,
+		          o.payload,
+		          o.attempt_count
+	`);
+
+	const rows = (result as unknown as { rows: Array<Record<string, unknown>> }).rows;
+	return rows.map((r) => ({
+		id: r.id as string,
+		organizationId: r.organization_id as string,
+		consumerProduct: r.consumer_product as string,
+		eventType: r.event_type as string,
+		payload: r.payload as Record<string, unknown>,
+		attemptCount: Number(r.attempt_count),
+	}));
+}
+
+/** Mark a row as successfully delivered. Terminal state -- next_attempt_at
+ * cleared, last_error cleared, delivered_at stamped. */
+export async function markOutboxDelivered(input: {
+	id: string;
+	deliveredAt: Date;
+}): Promise<void> {
+	await db
+		.update(crossProductEventOutbox)
+		.set({
+			status: "delivered",
+			nextAttemptAt: null,
+			lastError: null,
+			deliveredAt: input.deliveredAt,
+		})
+		.where(eq(crossProductEventOutbox.id, input.id));
+}
+
+/** Mark a row as failed but retryable. The worker computes nextAttemptAt
+ * from the backoff schedule; this helper just persists the decision. */
+export async function markOutboxFailed(input: {
+	id: string;
+	lastError: string;
+	nextAttemptAt: Date;
+}): Promise<void> {
+	await db
+		.update(crossProductEventOutbox)
+		.set({
+			status: "pending",
+			nextAttemptAt: input.nextAttemptAt,
+			lastError: input.lastError,
+		})
+		.where(eq(crossProductEventOutbox.id, input.id));
+}
+
+/** Mark a row dead-lettered. Terminal state. Reasons: attempt budget
+ * exhausted, permanent 4xx from the consumer, or no credential registered
+ * for the org. Admin UI can replay these manually (future feature; today the
+ * dead row is just visible in the table). */
+export async function markOutboxDead(input: {
+	id: string;
+	lastError: string;
+}): Promise<void> {
+	await db
+		.update(crossProductEventOutbox)
+		.set({
+			status: "dead",
+			nextAttemptAt: null,
+			lastError: input.lastError,
+		})
+		.where(eq(crossProductEventOutbox.id, input.id));
+}
+
+export interface ActiveConsumerCredential {
+	id: string;
+	endpointUrl: string;
+	signingSecretEncrypted: string;
+}
+
+/** Look up the active credential for an (org, consumer_product) pair. Used by
+ * the delivery worker to resolve the row's target endpoint + signing secret.
+ * Returns null when no credential is registered or all are soft-deleted /
+ * inactive -- the worker maps that to dead-letter the row. */
+export async function getActiveConsumerCredentialForOrg(input: {
+	organizationId: string;
+	consumerProduct: string;
+}): Promise<ActiveConsumerCredential | null> {
+	const row = await db.query.outboundWebhookCredential.findFirst({
+		where: (c, { and: a, eq: e, isNull: n }) =>
+			a(
+				e(c.organizationId, input.organizationId),
+				e(c.consumerProduct, input.consumerProduct),
+				e(c.isActive, true),
+				n(c.deletedAt),
+			),
+		columns: {
+			id: true,
+			endpointUrl: true,
+			signingSecretEncrypted: true,
+		},
+	});
+	return row ?? null;
+}
+
 /** Forensic read for the admin UI / debug tooling: list outbox rows for one
  * run, newest first. Not part of the delivery hot path. */
 export async function listOutboxEventsForRun(

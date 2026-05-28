@@ -14,6 +14,8 @@
 		"walk:builder": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/walk-builder-publish-launch.ts",
 		"sla-sweep:dev": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/sla-sweep-dev.ts",
 		"sla-sweep:dev:watch": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/sla-sweep-dev.ts --watch",
+		"cross-product-deliver:dev": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/cross-product-deliver-dev.ts",
+		"cross-product-deliver:dev:watch": "dotenv -c -e ../../.env.local -e ../../.env -- tsx ./src/cross-product-deliver-dev.ts --watch",
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
