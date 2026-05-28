@@ -32,17 +32,35 @@ export const launchRunProc = agentOrUserOrgProcedure
 			"Snapshots the workflow version into run + run_step + field_value rows. Returns the new runId. Callable by a logged-in user OR by an agent presenting a Bearer credential -- for the agent path, the launching agent is added as a participant on the new run so it can subsequently complete steps via setFieldValue / completeStep.",
 	})
 	.input(
-		z.object({
-			workflowId: z.string().min(1),
-			workflowVersionId: z.string().min(1).optional(),
-			kickoffValues: z.record(z.string(), z.unknown()).default({}),
-			roleAssignments: z.array(roleAssignmentSchema).default([]),
-			title: z.string().min(1).optional(),
-			// Mode-aware launch (Phase 8 step 3). Default 'human' keeps existing callers
-			// unchanged. When mode is ai_assisted/automated, agentId is required.
-			mode: z.enum(["human", "ai_assisted", "automated"]).default("human"),
-			agentId: z.string().min(1).nullish(),
-		}),
+		z
+			.object({
+				// Workflow target -- exactly one of workflowId or workflowSlug.
+				// workflowSlug is the cross-product alias (Phase 11a step 3(a))
+				// used by PM and other sibling-product callers that don't have a
+				// stable Ops-side workflow id. Final exactly-one enforcement lives
+				// in launchRun() so the same invariant guards every caller
+				// regardless of which procedure surface they entered through.
+				workflowId: z.string().min(1).optional(),
+				workflowSlug: z.string().min(1).optional(),
+				workflowVersionId: z.string().min(1).optional(),
+				kickoffValues: z.record(z.string(), z.unknown()).default({}),
+				roleAssignments: z.array(roleAssignmentSchema).default([]),
+				title: z.string().min(1).optional(),
+				// Mode-aware launch (Phase 8 step 3). Default 'human' keeps existing callers
+				// unchanged. When mode is ai_assisted/automated, agentId is required.
+				mode: z.enum(["human", "ai_assisted", "automated"]).default("human"),
+				agentId: z.string().min(1).nullish(),
+			})
+			.refine(
+				(v) =>
+					(v.workflowId === undefined ? 0 : 1) +
+						(v.workflowSlug === undefined ? 0 : 1) ===
+					1,
+				{
+					message: "Provide exactly one of workflowId or workflowSlug.",
+					path: ["workflowId"],
+				},
+			),
 	)
 	.handler(async ({ input, context }) => {
 		const { principal, organization } = context;

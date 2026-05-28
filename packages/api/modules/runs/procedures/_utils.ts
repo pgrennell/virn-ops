@@ -10,6 +10,9 @@ import { RunEngineError, type RunEngineErrorCode } from "../lib/errors";
 
 const CODE_MAP: Record<RunEngineErrorCode, "NOT_FOUND" | "FORBIDDEN" | "BAD_REQUEST"> = {
 	WORKFLOW_NOT_FOUND: "NOT_FOUND",
+	// Phase 11a step 3(a) -- cross-product slug resolution.
+	WORKFLOW_NOT_FOUND_BY_SLUG: "NOT_FOUND",
+	WORKFLOW_LAUNCH_TARGET_INVALID: "BAD_REQUEST",
 	VERSION_NOT_FOUND: "NOT_FOUND",
 	NO_PUBLISHED_VERSION: "BAD_REQUEST",
 	VERSION_NOT_PUBLISHED: "BAD_REQUEST",

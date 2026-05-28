@@ -168,10 +168,17 @@ async function installWorkflow(
 	wf: WorkflowSeed,
 	roleIdByManifestKey: Map<string, string>,
 ): Promise<{ workflowId: string; versionId: string; title: string }> {
-	// Create the workflow + initial draft version.
+	// Create the workflow + initial draft version. Pack-installed workflows persist
+	// the manifest slug so PM (and other cross-product callers) can launch by slug
+	// per Phase 11a step 3(a).
 	const { workflowId, draftVersionId } = await createWorkflow(
 		{ organizationId: ctx.organizationId, userId: ctx.userId },
-		{ title: wf.title, description: wf.description, type: wf.type },
+		{
+			title: wf.title,
+			description: wf.description,
+			type: wf.type,
+			slug: wf.slug,
+		},
 	);
 
 	// Kickoff fields (stepId = null).

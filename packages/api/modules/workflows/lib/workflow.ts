@@ -34,6 +34,12 @@ export interface CreateWorkflowInput {
 	/** Defaults to "procedure" when omitted. The "+ Create" menu on the Library passes
 	 * this so a "+ Create SOP / Form" lands on the right type directly. */
 	type?: "procedure" | "document" | "policy" | "form";
+	/** Phase 11a step 3(a) cross-product alias. Set by the pack installer from the
+	 * manifest's workflow key (str-turnover-housekeeping etc.); never set by the
+	 * UI Builder in v1. The partial unique index on (organization_id, slug)
+	 * surfaces collisions as a database error -- the install path is responsible
+	 * for not double-installing within the same org. */
+	slug?: string | null;
 }
 
 export async function createWorkflow(
@@ -46,6 +52,7 @@ export async function createWorkflow(
 		description: input.description ?? null,
 		type: input.type ?? "procedure",
 		createdBy: ctx.userId,
+		slug: input.slug ?? null,
 	});
 
 	await writeAuditAndActivity({

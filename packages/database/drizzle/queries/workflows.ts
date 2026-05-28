@@ -51,6 +51,24 @@ export async function getWorkflowForOrg(organizationId: string, workflowId: stri
 	);
 }
 
+/** Fetch a workflow by its cross-product slug, scoped to the org (Phase 11a step
+ * 3(a)). Returns null if not found, not in this org, or the slug is unpopulated.
+ * The partial unique index on (organization_id, slug) WHERE slug IS NOT NULL AND
+ * deleted_at IS NULL guarantees at most one match. Soft-deleted workflows are
+ * intentionally not filtered here -- the caller (launchRun) needs to surface
+ * `WORKFLOW_NOT_FOUND_BY_SLUG` for archived workflows so PM can distinguish
+ * "slug never existed" from "slug was archived" with a separate error code if
+ * needed; for now they collapse to the same outcome since the partial index
+ * already excludes archived rows from the unique constraint. */
+export async function getWorkflowBySlugForOrg(organizationId: string, slug: string) {
+	return (
+		(await db.query.workflow.findFirst({
+			where: (w, { and: a, eq: e, isNull }) =>
+				a(e(w.slug, slug), e(w.organizationId, organizationId), isNull(w.deletedAt)),
+		})) ?? null
+	);
+}
+
 export interface WorkflowListRow {
 	id: string;
 	type: "procedure" | "document" | "policy" | "form";
@@ -588,6 +606,9 @@ export async function insertWorkflowWithDraft(
 		type: "procedure" | "document" | "policy" | "form";
 		createdBy: string;
 		aiAuthoringPromptId?: string | null;
+		/** Phase 11a step 3(a) cross-product alias. Populated by the pack installer
+		 * from the manifest's workflow key; null for user-authored workflows. */
+		slug?: string | null;
 	},
 	executor: DbExecutor = db,
 ): Promise<{ workflowId: string; versionId: string }> {
@@ -601,6 +622,7 @@ export async function insertWorkflowWithDraft(
 				type: input.type,
 				createdBy: input.createdBy,
 				aiAuthoringPromptId: input.aiAuthoringPromptId ?? null,
+				slug: input.slug ?? null,
 			})
 			.returning({ id: workflow.id });
 

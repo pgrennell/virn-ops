@@ -4,6 +4,7 @@ vi.mock("@virn/database", () => ({
 	getAgentForOrg: vi.fn(),
 	getVendorContactForLaunch: vi.fn(),
 	getWorkflowForOrg: vi.fn(),
+	getWorkflowBySlugForOrg: vi.fn(),
 	getLatestPublishedWorkflowVersion: vi.fn(),
 	getWorkflowVersionById: vi.fn(),
 	getVersionLaunchBundle: vi.fn(),
@@ -27,6 +28,7 @@ import {
 	getLatestPublishedWorkflowVersion,
 	getVendorContactForLaunch,
 	getVersionLaunchBundle,
+	getWorkflowBySlugForOrg,
 	getWorkflowForOrg,
 	getWorkflowVersionById,
 	insertRunSnapshot,
@@ -283,6 +285,69 @@ describe("launchRun", () => {
 				entityId: "run_new",
 			}),
 		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Slug resolution (Phase 11a step 3a) -- cross-product alias. PM and other
+// sibling-product callers launch by `workflowSlug` so they don't need to know
+// Ops's per-org workflow cuid. The exactly-one invariant is enforced in
+// launchRun() so every entry point picks up the same refusal codes.
+// ---------------------------------------------------------------------------
+
+describe("launchRun -- slug resolution (Phase 11a step 3a)", () => {
+	it("WORKFLOW_LAUNCH_TARGET_INVALID when neither workflowId nor workflowSlug is supplied", async () => {
+		await expect(
+			launchRun(CTX, { kickoffValues: {}, roleAssignments: [] } as never),
+		).rejects.toMatchObject({ code: "WORKFLOW_LAUNCH_TARGET_INVALID" });
+	});
+
+	it("WORKFLOW_LAUNCH_TARGET_INVALID when both workflowId and workflowSlug are supplied", async () => {
+		await expect(
+			launchRun(CTX, {
+				workflowId: "wf_1",
+				workflowSlug: "str-turnover-housekeeping",
+				kickoffValues: {},
+				roleAssignments: [],
+			}),
+		).rejects.toMatchObject({ code: "WORKFLOW_LAUNCH_TARGET_INVALID" });
+	});
+
+	it("WORKFLOW_NOT_FOUND_BY_SLUG when the slug doesn't resolve in this org", async () => {
+		vi.mocked(getWorkflowBySlugForOrg).mockResolvedValueOnce(null);
+		await expect(
+			launchRun(CTX, {
+				workflowSlug: "not-a-real-slug",
+				kickoffValues: {},
+				roleAssignments: [],
+			}),
+		).rejects.toMatchObject({ code: "WORKFLOW_NOT_FOUND_BY_SLUG" });
+		// And we did NOT fall back to id lookup -- the id-path mock should have been untouched.
+		expect(vi.mocked(getWorkflowForOrg)).not.toHaveBeenCalled();
+	});
+
+	it("happy path: slug-based launch resolves via getWorkflowBySlugForOrg and proceeds normally", async () => {
+		vi.mocked(getWorkflowBySlugForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(
+			VERSION_PUBLISHED as never,
+		);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [STEP_ROW()],
+			fields: [],
+			deps: [],
+		} as never);
+		const result = await launchRun(CTX, {
+			workflowSlug: "str-turnover-housekeeping",
+			kickoffValues: {},
+			roleAssignments: [],
+		});
+		expect(result).toEqual({ runId: "run_new" });
+		expect(vi.mocked(getWorkflowBySlugForOrg)).toHaveBeenCalledWith(
+			"org_1",
+			"str-turnover-housekeeping",
+		);
+		// Id-path lookup should NOT have been called for the slug case.
+		expect(vi.mocked(getWorkflowForOrg)).not.toHaveBeenCalled();
 	});
 });
 

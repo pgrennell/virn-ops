@@ -85,6 +85,13 @@
       "when": 1779973401940,
       "tag": "0011_gray_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779979279015,
+      "tag": "0012_overconfident_hammerhead",
+      "breakpoints": true
     }
   ]
 }

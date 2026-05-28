@@ -25,6 +25,7 @@ import {
 	getLatestPublishedWorkflowVersion,
 	getVendorContactForLaunch,
 	getVersionLaunchBundle,
+	getWorkflowBySlugForOrg,
 	getWorkflowForOrg,
 	getWorkflowVersionById,
 	insertRunSnapshot,
@@ -53,7 +54,13 @@ import { RunEngineError } from "./errors";
 export type LaunchMode = "human" | "ai_assisted" | "automated";
 
 export interface LaunchRunInput {
-	workflowId: string;
+	/** Workflow target — exactly one of `workflowId` or `workflowSlug` must be
+	 * supplied. `workflowSlug` is the cross-product alias (Phase 11a step 3(a))
+	 * resolved org-scoped before the normal flow runs; callers without a stable
+	 * Ops-side workflow id (e.g. PM launching a property-ops pack workflow)
+	 * pass slug, internal callers pass id. */
+	workflowId?: string;
+	workflowSlug?: string;
 	/** Optional pinned version. Defaults to the latest published version of the workflow. */
 	workflowVersionId?: string;
 	/** Map of `field.key` -> value for launch-level (stepId IS NULL) fields. Values are
@@ -99,12 +106,45 @@ export async function launchRun(
 	ctx: LaunchRunContext,
 	input: LaunchRunInput,
 ): Promise<LaunchRunResult> {
-	// 1. Workflow scoped to org (Invariant #1).
-	const workflow = await getWorkflowForOrg(ctx.organizationId, input.workflowId);
-	if (!workflow) {
-		throw new RunEngineError("WORKFLOW_NOT_FOUND", "Workflow not found in this organization.", {
-			workflowId: input.workflowId,
-		});
+	// 1. Workflow scoped to org (Invariant #1). Resolves either `workflowId`
+	// (internal callers) or `workflowSlug` (cross-product callers per Phase 11a
+	// step 3(a)); exactly one must be supplied. Slug resolution happens
+	// org-scoped against the partial unique index uq_workflow_org_slug so a
+	// bad slug surfaces as WORKFLOW_NOT_FOUND_BY_SLUG before the normal flow.
+	const hasWorkflowId = typeof input.workflowId === "string" && input.workflowId.length > 0;
+	const hasWorkflowSlug = typeof input.workflowSlug === "string" && input.workflowSlug.length > 0;
+	if (hasWorkflowId === hasWorkflowSlug) {
+		throw new RunEngineError(
+			"WORKFLOW_LAUNCH_TARGET_INVALID",
+			"Provide exactly one of workflowId or workflowSlug.",
+			{
+				workflowId: input.workflowId ?? null,
+				workflowSlug: input.workflowSlug ?? null,
+			},
+		);
+	}
+	let workflow;
+	if (hasWorkflowId) {
+		workflow = await getWorkflowForOrg(ctx.organizationId, input.workflowId as string);
+		if (!workflow) {
+			throw new RunEngineError(
+				"WORKFLOW_NOT_FOUND",
+				"Workflow not found in this organization.",
+				{ workflowId: input.workflowId },
+			);
+		}
+	} else {
+		workflow = await getWorkflowBySlugForOrg(
+			ctx.organizationId,
+			input.workflowSlug as string,
+		);
+		if (!workflow) {
+			throw new RunEngineError(
+				"WORKFLOW_NOT_FOUND_BY_SLUG",
+				"Workflow not found in this organization for the given slug.",
+				{ workflowSlug: input.workflowSlug },
+			);
+		}
 	}
 
 	// 2. Resolve version: explicit (must be published + belong to this workflow) or latest published.

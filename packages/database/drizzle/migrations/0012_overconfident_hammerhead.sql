@@ -1,0 +1,2 @@
+ALTER TABLE "workflow" ADD COLUMN "slug" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_workflow_org_slug" ON "workflow" USING btree ("organization_id","slug") WHERE "workflow"."slug" is not null and "workflow"."deleted_at" is null;

@@ -20,6 +20,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { aiAuthoringPrompt } from "./ai_authoring";
 import { reviewState } from "./entitysets";
@@ -94,6 +95,15 @@ export const workflow = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     isActive: boolean("is_active").notNull().default(true),
+    // Phase 11a step 3(a) -- cross-product alias for runs.launch by workflowSlug.
+    // Populated by the pack installer from the manifest's workflow key
+    // (str-turnover-housekeeping, property-inspection, etc.) so PM can launch
+    // without knowing Ops's per-org workflow cuid. Null for user-authored
+    // workflows in v1 (no cross-product launch use case for hand-authored
+    // workflows -- they don't have a stable cross-product identity). The
+    // partial unique index below enforces org-scoped uniqueness ONLY when slug
+    // is populated; many user-authored workflows can coexist with null slug.
+    slug: text("slug"),
     // Governance: periodic freshness review (SOP mode).
     reviewIntervalDays: integer("review_interval_days"),
     nextReviewAt: timestamp("next_review_at"),
@@ -131,7 +141,15 @@ export const workflow = pgTable(
     ...softDelete,
     ...timestamps,
   },
-  (t) => [index("idx_workflow_org").on(t.organizationId)],
+  (t) => [
+    index("idx_workflow_org").on(t.organizationId),
+    // Partial unique: org-scoped uniqueness when slug is populated. Soft-deleted
+    // workflows are excluded so an org can re-install a pack after archiving an
+    // earlier installation. Mirrors the listings.ts external-id pattern.
+    uniqueIndex("uq_workflow_org_slug")
+      .on(t.organizationId, t.slug)
+      .where(sql`${t.slug} is not null and ${t.deletedAt} is null`),
+  ],
 );
 
 export const workflowVersion = pgTable(
