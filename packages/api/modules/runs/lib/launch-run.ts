@@ -79,6 +79,17 @@ export interface LaunchRunInput {
 	 * AI-shaped (or all) steps for this run. Validated server-side: must exist in the org,
 	 * be active, and not soft-deleted. */
 	agentId?: string | null;
+	/** Phase 11a step 3(b) -- cross-product callback echo. Set by sibling-product
+	 * callers (PM in v1) so emitted webhooks can carry back enough context for
+	 * the consumer to correlate without a separate Ops API round-trip. Persisted
+	 * onto `run`; absent (or all-null) for human-UI launches and Ops-internal
+	 * agent launches. `webhookEvents`, if non-null, filters which catalog events
+	 * fire for this specific run; null means "fire every v1 catalog event." */
+	callback?: {
+		pmServiceRequestId?: string | null;
+		pmWorkOrderId?: string | null;
+		webhookEvents?: string[] | null;
+	} | null;
 }
 
 export interface LaunchRunContext {
@@ -496,6 +507,7 @@ export async function launchRun(
 		participants,
 		roleAssignments: roleAssignmentRows,
 		stepAssignments: stepAssignmentRows,
+		callback: input.callback ?? null,
 	});
 
 	// 9. Append-only writes (Invariant #6).

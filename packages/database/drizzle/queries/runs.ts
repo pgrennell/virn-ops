@@ -128,6 +128,14 @@ export async function insertRunSnapshot(input: {
 	participants: SnapshotParticipantRow[];
 	roleAssignments: SnapshotRoleAssignmentRow[];
 	stepAssignments: SnapshotStepAssignmentRow[];
+	/** Phase 11a step 3(b) cross-product callback echo. All fields nullable;
+	 * persisted onto `run` so the emission layer can read them when echoing
+	 * webhook deliveries. */
+	callback?: {
+		pmServiceRequestId?: string | null;
+		pmWorkOrderId?: string | null;
+		webhookEvents?: string[] | null;
+	} | null;
 }): Promise<{
 	runId: string;
 	runStepIdByStepId: Map<string, string>;
@@ -145,6 +153,9 @@ export async function insertRunSnapshot(input: {
 				startedAt: input.startedAt,
 				dueAt: input.runDueAt,
 				createdBy: input.createdBy,
+				callbackPmServiceRequestId: input.callback?.pmServiceRequestId ?? null,
+				callbackPmWorkOrderId: input.callback?.pmWorkOrderId ?? null,
+				callbackWebhookEvents: input.callback?.webhookEvents ?? null,
 			})
 			.returning({ id: run.id });
 		const runId = runRow.id;

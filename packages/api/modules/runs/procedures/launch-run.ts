@@ -50,6 +50,16 @@ export const launchRunProc = agentOrUserOrgProcedure
 				// unchanged. When mode is ai_assisted/automated, agentId is required.
 				mode: z.enum(["human", "ai_assisted", "automated"]).default("human"),
 				agentId: z.string().min(1).nullish(),
+				// Phase 11a step 3(b) -- cross-product callback echo. All inner fields
+				// optional so PM can populate whichever ids it has at launch time;
+				// webhookEvents narrows the catalog set for this specific run.
+				callback: z
+					.object({
+						pmServiceRequestId: z.string().min(1).optional(),
+						pmWorkOrderId: z.string().min(1).optional(),
+						webhookEvents: z.array(z.string().min(1)).optional(),
+					})
+					.optional(),
 			})
 			.refine(
 				(v) =>

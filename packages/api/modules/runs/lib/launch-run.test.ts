@@ -352,6 +352,68 @@ describe("launchRun -- slug resolution (Phase 11a step 3a)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Cross-product callback persistence (Phase 11a step 3b). PM launches with a
+// callback block; launchRun threads it into insertRunSnapshot which persists
+// the three columns on `run`. The emission layer (step 3c) reads them when
+// echoing webhook deliveries. Absence (or all-null) is the normal human-UI
+// case and must continue to insert without a callback.
+// ---------------------------------------------------------------------------
+
+describe("launchRun -- cross-product callback (Phase 11a step 3b)", () => {
+	it("threads callback fields into insertRunSnapshot when supplied", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(
+			VERSION_PUBLISHED as never,
+		);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [STEP_ROW()],
+			fields: [],
+			deps: [],
+		} as never);
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [],
+			callback: {
+				pmServiceRequestId: "psr_42",
+				pmWorkOrderId: "pwo_7",
+				webhookEvents: ["run.state_changed", "run.completed"],
+			},
+		});
+		expect(vi.mocked(insertRunSnapshot)).toHaveBeenCalledWith(
+			expect.objectContaining({
+				callback: {
+					pmServiceRequestId: "psr_42",
+					pmWorkOrderId: "pwo_7",
+					webhookEvents: ["run.state_changed", "run.completed"],
+				},
+			}),
+		);
+	});
+
+	it("passes callback=null to insertRunSnapshot when omitted (human-UI / Ops-internal launches)", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(WF as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValueOnce(
+			VERSION_PUBLISHED as never,
+		);
+		vi.mocked(getVersionLaunchBundle).mockResolvedValueOnce({
+			steps: [STEP_ROW()],
+			fields: [],
+			deps: [],
+		} as never);
+		await launchRun(CTX, {
+			workflowId: "wf_1",
+			kickoffValues: {},
+			roleAssignments: [],
+			// no callback
+		});
+		expect(vi.mocked(insertRunSnapshot)).toHaveBeenCalledWith(
+			expect.objectContaining({ callback: null }),
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Mode-aware launch (Phase 8 step 3) -- the S-07 wedge: one procedure runs
 // three ways (human / ai_assisted / automated). The role-based assignment
 // path is verified above; these tests cover the agent assignment shaping +

@@ -129,6 +129,19 @@ export const run = pgTable(
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
     }),
+    // Phase 11a step 3(b) -- cross-product callback echo. Populated when PM (or
+    // another sibling-product caller) launches with a callback block; every
+    // emitted webhook for this run echoes these values back so PM can correlate
+    // to its service_request / work_order without a separate Ops API round-trip.
+    // Null for runs launched without a cross-product callback (the human-UI
+    // case and Ops-internal agent launches both leave these null).
+    callbackPmServiceRequestId: text("callback_pm_service_request_id"),
+    callbackPmWorkOrderId: text("callback_pm_work_order_id"),
+    // Per-launch event-type filter. NULL means "send every v1 catalog event for
+    // this run"; non-null narrows. The catalog itself
+    // (run.state_changed, run.completed, vendor.upserted, run.comment_added) is
+    // owned by the emission layer per Phase 11a step 3(c).
+    callbackWebhookEvents: text("callback_webhook_events").array(),
     ...softDelete,
     ...timestamps,
   },
@@ -138,6 +151,13 @@ export const run = pgTable(
     index("idx_run_status").on(t.status),
     // H1: composite for the common UI query "active runs in org by due date".
     index("idx_run_org_status_due").on(t.organizationId, t.status, t.dueAt),
+    // Phase 11a step 3(b) -- partial index for the PM-side reverse correlation
+    // case ("which Ops run is linked to PM service_request X?"). Populated set
+    // is small (only cross-product launches) so a partial index is much
+    // cheaper than a full one.
+    index("idx_run_callback_pm_sr_id")
+      .on(t.callbackPmServiceRequestId)
+      .where(sql`${t.callbackPmServiceRequestId} is not null`),
   ],
 );
 
