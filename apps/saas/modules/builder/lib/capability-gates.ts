@@ -174,12 +174,11 @@ export interface DueTypeOption {
 	disabledReason?: string;
 }
 
-/** launchRun.computeStepDueAt (packages/api/modules/runs/lib/launch-run.ts) only
- * resolves `none` + `offset_from_start` today; the other two produce a null dueAt.
- * Surfacing them as live options would let the user configure a due rule that
- * silently no-ops -- worse than not offering. Memory:
- * project_due_type_ui_constraint.md. When launchRun's resolver is extended, flip
- * `enabled: true` on the two below. */
+/** Phase 12.2 -- launchRun.computeStepDueAt + the step-completion recompute hook
+ * now resolve all four dueTypes (memory: project_due_type_ui_constraint.md).
+ * Every option ships enabled; configuration UI for offset_from_step's anchor
+ * and from_date_field's source field lives next to the dueOffsetDays input in
+ * StepConfigForm. */
 export function getDueTypeOptions(): DueTypeOption[] {
 	return [
 		{
@@ -197,18 +196,16 @@ export function getDueTypeOptions(): DueTypeOption[] {
 		{
 			value: "offset_from_step",
 			label: "Days after another step completes",
-			description: "Reserved — coming soon.",
-			enabled: false,
-			disabledReason:
-				"Reserved — the run engine doesn't resolve this yet. Configuring it now would silently no-op.",
+			description:
+				"Due N days after a chosen anchor step's completion. Negative values mean 'before the anchor completes' (plan-only).",
+			enabled: true,
 		},
 		{
 			value: "from_date_field",
 			label: "From a date field's value",
-			description: "Reserved — coming soon.",
-			enabled: false,
-			disabledReason:
-				"Reserved — the run engine doesn't resolve this yet. Configuring it now would silently no-op.",
+			description:
+				"Due N days from a date field's value. Source can be a kickoff field (resolves at launch) or a step field (resolves when that step completes).",
+			enabled: true,
 		},
 	];
 }

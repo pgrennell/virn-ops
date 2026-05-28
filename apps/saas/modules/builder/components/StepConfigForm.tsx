@@ -5,8 +5,10 @@
 // Per-step settings:
 //   - type            -- capability-gated; approval needs governance.approvals
 //   - assignee role   -- picker over the org's workflow_role rows
-//   - due rule        -- only none + offset_from_start live; others "coming soon"
-//                        (memory: project_due_type_ui_constraint.md)
+//   - due rule        -- Phase 12.2: all four dueTypes live. offset_from_step
+//                        adds an anchor-step picker; from_date_field adds a
+//                        date-field picker over the version's date fields
+//                        (kickoff + step).
 //   - isRequired      -- when off, the run cascade can complete without this step
 //   - isStopTask      -- when on, dependent steps wait for this one
 //   - Show-when       -- gated on automation.rules; Pass 3 shows a "coming soon"
@@ -40,12 +42,24 @@ import type { VersionEditBundleResponse } from "../lib/types";
 export interface StepConfigFormProps {
 	step: VersionEditBundleResponse["steps"][number];
 	allSteps: VersionEditBundleResponse["steps"];
+	/** Phase 12.2 -- the version's full field set (kickoff + step), used by the
+	 * from_date_field source-field picker. Filtered to fieldType='date' before
+	 * rendering; an empty list disables the dueType option with a hint. */
+	allFields: VersionEditBundleResponse["fields"];
 	dependencies: VersionEditBundleResponse["dependencies"];
 	workflowRoles: Array<{ id: string; name: string }>;
 	gates: PaletteGates;
 	onChangeType: (type: StepType) => void;
 	onChangeAssignedRole: (roleId: string | null) => void;
-	onChangeDueRule: (input: { dueType: DueType; dueOffsetDays: number | null }) => void;
+	/** Phase 12.2 -- payload widens to carry the anchor / source-field refs in
+	 * one round-trip when the dueType requires them. The caller (BuilderView)
+	 * forwards everything to updateStep.mutate, which accepts the same shape. */
+	onChangeDueRule: (input: {
+		dueType: DueType;
+		dueOffsetDays: number | null;
+		dueAnchorStepId?: string | null;
+		dueSourceFieldId?: string | null;
+	}) => void;
 	onToggleRequired: (value: boolean) => void;
 	onToggleStopTask: (value: boolean) => void;
 	onAddDependency: (dependsOnStepId: string) => void;
@@ -61,6 +75,7 @@ export function StepConfigForm(props: StepConfigFormProps) {
 	const {
 		step,
 		allSteps,
+		allFields,
 		dependencies,
 		workflowRoles,
 		gates,
@@ -78,6 +93,13 @@ export function StepConfigForm(props: StepConfigFormProps) {
 	const dueOptions = getDueTypeOptions();
 	const stepDeps = dependencies.filter((d) => d.stepId === step.id);
 	const otherSteps = allSteps.filter((s) => s.id !== step.id);
+	// Date fields eligible to source a from_date_field due rule. Both kickoff
+	// (stepId === null) and step-scoped fields qualify. A field whose step IS
+	// this step is excluded -- self-reference would be circular (the step's
+	// deadline depending on a field collected during itself).
+	const dateFieldOptions = allFields.filter(
+		(f) => f.fieldType === "date" && f.stepId !== step.id,
+	);
 
 	return (
 		<div className="flex flex-col gap-5 px-5 py-4">
@@ -138,10 +160,21 @@ export function StepConfigForm(props: StepConfigFormProps) {
 						const dueType = v as DueType;
 						const supported = dueOptions.find((o) => o.value === dueType)?.enabled ?? false;
 						if (!supported) return;
-						onChangeDueRule({
+						// Seed sensible defaults for each dueType so the form lands in a
+						// state that's submittable without an extra click. Switching AWAY
+						// from a dueType clears its companion refs server-side via the
+						// explicit null assignments below (the update procedure treats
+						// undefined as "leave unchanged" and null as "clear").
+						const next: Parameters<typeof onChangeDueRule>[0] = {
 							dueType,
-							dueOffsetDays: dueType === "offset_from_start" ? (step.dueOffsetDays ?? 1) : null,
-						});
+							dueOffsetDays:
+								dueType === "none" ? null : step.dueOffsetDays ?? 1,
+							dueAnchorStepId:
+								dueType === "offset_from_step" ? step.dueAnchorStepId ?? null : null,
+							dueSourceFieldId:
+								dueType === "from_date_field" ? step.dueSourceFieldId ?? null : null,
+						};
+						onChangeDueRule(next);
 					}}
 				>
 					<SelectTrigger>
@@ -163,21 +196,127 @@ export function StepConfigForm(props: StepConfigFormProps) {
 						))}
 					</SelectContent>
 				</Select>
-				{step.dueType === "offset_from_start" && (
+
+				{/* Offset input: shown for all three dueTypes that need it. The label
+				 * adapts to the dueType. min=0 for offset_from_start (negative = before
+				 * launch makes no sense); allow negatives for offset_from_step and
+				 * from_date_field where "N days before X" is a real authoring pattern. */}
+				{(step.dueType === "offset_from_start" ||
+					step.dueType === "offset_from_step" ||
+					step.dueType === "from_date_field") && (
 					<div className="mt-2 gap-2 flex items-center">
 						<Input
 							type="number"
-							min={0}
-							value={step.dueOffsetDays ?? 1}
+							min={step.dueType === "offset_from_start" ? 0 : undefined}
+							value={step.dueOffsetDays ?? 0}
 							onChange={(e) => {
 								const n = Number.parseInt(e.target.value, 10);
-								if (Number.isFinite(n) && n >= 0) {
-									onChangeDueRule({ dueType: "offset_from_start", dueOffsetDays: n });
-								}
+								if (!Number.isFinite(n)) return;
+								if (step.dueType === "offset_from_start" && n < 0) return;
+								onChangeDueRule({
+									dueType: step.dueType,
+									dueOffsetDays: n,
+									dueAnchorStepId:
+										step.dueType === "offset_from_step"
+											? step.dueAnchorStepId ?? null
+											: null,
+									dueSourceFieldId:
+										step.dueType === "from_date_field"
+											? step.dueSourceFieldId ?? null
+											: null,
+								});
 							}}
 							className="w-24"
 						/>
-						<span className="text-xs text-foreground/60">days after run starts</span>
+						<span className="text-xs text-foreground/60">
+							{step.dueType === "offset_from_start" && "days after run starts"}
+							{step.dueType === "offset_from_step" &&
+								"days after the anchor step completes (negative = before)"}
+							{step.dueType === "from_date_field" &&
+								"days from the source field's date (negative = before)"}
+						</span>
+					</div>
+				)}
+
+				{/* Anchor step picker for offset_from_step. Pulls from all OTHER steps in
+				 * the version (self-anchor is rejected by the run engine + validator). An
+				 * empty otherSteps list disables the picker with an inline hint. */}
+				{step.dueType === "offset_from_step" && (
+					<div className="mt-2">
+						<label className="text-[11px] text-foreground/60 mb-1 block">
+							Anchor on which step's completion?
+						</label>
+						{otherSteps.length === 0 ? (
+							<p className="text-xs text-foreground/50 italic">
+								Add another step to use it as an anchor.
+							</p>
+						) : (
+							<Select
+								value={step.dueAnchorStepId ?? ""}
+								onValueChange={(v) =>
+									onChangeDueRule({
+										dueType: "offset_from_step",
+										dueOffsetDays: step.dueOffsetDays ?? 1,
+										dueAnchorStepId: v.length === 0 ? null : v,
+										dueSourceFieldId: null,
+									})
+								}
+							>
+								<SelectTrigger>
+									<SelectValue placeholder="Pick an anchor step…" />
+								</SelectTrigger>
+								<SelectContent>
+									{otherSteps.map((s) => (
+										<SelectItem key={s.id} value={s.id}>
+											{s.title}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
+					</div>
+				)}
+
+				{/* Source-field picker for from_date_field. Only date fields qualify.
+				 * Self-step fields are filtered out (circular: deadline depending on a
+				 * field collected during the same step). */}
+				{step.dueType === "from_date_field" && (
+					<div className="mt-2">
+						<label className="text-[11px] text-foreground/60 mb-1 block">
+							Date field to anchor the deadline on
+						</label>
+						{dateFieldOptions.length === 0 ? (
+							<p className="text-xs text-foreground/50 italic">
+								No eligible date fields yet — add a kickoff date or a date field
+								on another step.
+							</p>
+						) : (
+							<Select
+								value={step.dueSourceFieldId ?? ""}
+								onValueChange={(v) =>
+									onChangeDueRule({
+										dueType: "from_date_field",
+										dueOffsetDays: step.dueOffsetDays ?? 0,
+										dueAnchorStepId: null,
+										dueSourceFieldId: v.length === 0 ? null : v,
+									})
+								}
+							>
+								<SelectTrigger>
+									<SelectValue placeholder="Pick a date field…" />
+								</SelectTrigger>
+								<SelectContent>
+									{dateFieldOptions.map((f) => (
+										<SelectItem key={f.id} value={f.id}>
+											{f.label}{" "}
+											<span className="text-foreground/50">
+												({f.stepId === null ? "kickoff" : "step field"})
+											</span>
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
 					</div>
 				)}
 			</Section>

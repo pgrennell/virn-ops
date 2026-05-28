@@ -614,6 +614,7 @@ function BuilderInner({
 								<StepConfigForm
 									step={step}
 									allSteps={bundle.steps}
+									allFields={bundle.fields}
 									dependencies={bundle.dependencies}
 									workflowRoles={rolesQuery.data ?? []}
 									gates={gates}
@@ -623,11 +624,20 @@ function BuilderInner({
 									onChangeAssignedRole={(roleId) =>
 										updateStep.mutate({ stepId: step.id, assignedRoleId: roleId })
 									}
-									onChangeDueRule={({ dueType, dueOffsetDays }) =>
+									onChangeDueRule={({
+										dueType,
+										dueOffsetDays,
+										dueAnchorStepId,
+										dueSourceFieldId,
+									}) =>
 										updateStep.mutate({
 											stepId: step.id,
 											dueType,
 											dueOffsetDays,
+											// Phase 12.2 -- forward refs so the server can clear or
+											// set them in the same round-trip as the dueType change.
+											dueAnchorStepId,
+											dueSourceFieldId,
 										})
 									}
 									onToggleRequired={(value) =>

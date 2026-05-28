@@ -142,22 +142,19 @@ describe("getFieldTypeOptions -- advanced types gate on fields.custom_definition
 	});
 });
 
-describe("getDueTypeOptions -- only what launchRun resolves is live (memory: project_due_type_ui_constraint)", () => {
-	it("none + offset_from_start are enabled; offset_from_step + from_date_field are deferred", () => {
+describe("getDueTypeOptions -- Phase 12.2: all four resolvable in launchRun", () => {
+	it("all four options are enabled (memory: project_due_type_ui_constraint cleared)", () => {
 		const opts = getDueTypeOptions();
 		expect(opts.find((o) => o.value === "none")?.enabled).toBe(true);
 		expect(opts.find((o) => o.value === "offset_from_start")?.enabled).toBe(true);
-		expect(opts.find((o) => o.value === "offset_from_step")?.enabled).toBe(false);
-		expect(opts.find((o) => o.value === "from_date_field")?.enabled).toBe(false);
+		expect(opts.find((o) => o.value === "offset_from_step")?.enabled).toBe(true);
+		expect(opts.find((o) => o.value === "from_date_field")?.enabled).toBe(true);
 	});
 
-	it("disabled options say WHY (silent no-op would be worse than not offering)", () => {
+	it("no option carries a disabledReason now that the run engine resolves them all", () => {
 		const opts = getDueTypeOptions();
-		expect(opts.find((o) => o.value === "offset_from_step")?.disabledReason).toMatch(
-			/silently no-op/i,
-		);
-		expect(opts.find((o) => o.value === "from_date_field")?.disabledReason).toMatch(
-			/silently no-op/i,
-		);
+		for (const o of opts) {
+			expect(o.disabledReason).toBeUndefined();
+		}
 	});
 });
