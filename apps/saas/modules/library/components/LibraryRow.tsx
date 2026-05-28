@@ -12,7 +12,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@virn/ui/components/dropdown-menu";
-import { MoreVertical, Pencil, Play, BookOpen } from "lucide-react";
+import { BookOpen, MoreVertical, Pencil, Play, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
@@ -130,6 +130,14 @@ export function LibraryRow({
 								title="Workflow is inactive — no new runs can be launched. Edit the workflow to reactivate."
 							>
 								Inactive
+							</span>
+						)}
+						{row.aiAuthored && (
+							<span
+								className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300"
+								title="This workflow was authored via AI. Open it in the Builder to see the originating prompt."
+							>
+								<Sparkles className="size-2.5" /> AI
 							</span>
 						)}
 					</div>

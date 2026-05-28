@@ -69,6 +69,12 @@ export interface WorkflowListRow {
 	 * launchRun already validates an explicit versionId is published. */
 	latestPublishedVersionId: string | null;
 	latestPublishedAt: Date | null;
+	/** Phase 12.1 -- true when the workflow originated from agents.authorWorkflow
+	 * (workflow.aiAuthoringPromptId IS NOT NULL). The Library row renders a
+	 * Sparkles chip so admins can see at a glance which workflows came from AI.
+	 * Derived in the query rather than fetched on the row read so a stale
+	 * provenance row (FK is `on delete set null`) flips this to false. */
+	aiAuthored: boolean;
 }
 
 /** List workflows in an org (Library consumer + Builder index). Excludes soft-deleted rows
@@ -93,6 +99,7 @@ export async function listWorkflowsForOrg(input: {
 			createdAt: workflow.createdAt,
 			updatedAt: workflow.updatedAt,
 			deletedAt: workflow.deletedAt,
+			aiAuthoringPromptId: workflow.aiAuthoringPromptId,
 		})
 		.from(workflow)
 		.where(eq(workflow.organizationId, input.organizationId))
@@ -149,6 +156,7 @@ export async function listWorkflowsForOrg(input: {
 			latestPublishedVersionNumber: pub?.versionNumber ?? null,
 			latestPublishedVersionId: pub?.id ?? null,
 			latestPublishedAt: pub?.publishedAt ?? null,
+			aiAuthored: r.aiAuthoringPromptId !== null,
 		};
 	});
 }

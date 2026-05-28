@@ -36,6 +36,10 @@ export interface WorkflowListRow {
 	latestPublishedVersionNumber: number | null;
 	latestPublishedVersionId: string | null;
 	latestPublishedAt: Date | string | null;
+	/** Phase 12.1 -- true when the workflow originated from agents.authorWorkflow.
+	 * The row painter renders a Sparkles chip; optional on this type so existing
+	 * test fixtures don't need to be updated en masse (resolver doesn't read it). */
+	aiAuthored?: boolean;
 }
 
 export interface RowPermissions {
