@@ -537,10 +537,18 @@ agents need first). Find-or-create is intentionally NOT in step 1: agents in
 S-07 mode-aware launcher); the on-demand participant-create path lands with
 `runs.launch` in 11a.2.
 
-**Step 2 of 11a — next session.** `runs.launch` dual-auth (so PM-as-agent can
-launch runs); agent introspection (`runs.listMyAssignments`); per-agent
-capability checks via `agent_capability`; cross-product origin propagation
-(`crossProductOrigin='virn-pm'` when PM is the caller).
+**Step 2 of 11a — PARTIALLY SHIPPED 2026-05-27.** `runs.launch` dual-auth
+(`agentOrUserOrgProcedure` at
+[launch-run.ts:25](../packages/api/modules/runs/procedures/launch-run.ts#L25))
++ cross-product origin propagation (`crossProductOrigin='virn-pm'` threaded
+from `principal.agent.originProduct` at
+[launch-run.ts:55](../packages/api/modules/runs/procedures/launch-run.ts#L55))
+are live; the four D-038 subtasks below are the still-pending body of Phase
+11a. **Deferred to Phase 11a step 4 (introspection + capability gating):**
+agent introspection (`runs.listMyAssignments`); per-agent capability checks
+via `agent_capability`. Both are needed for full Phase 11a but neither blocks
+the cross-repo integration surface — split out so the D-038 subtasks can ship
+without waiting on capability-gating UI.
 
 - **Surface (read):** list workflows / read workflow / list runs / read run /
   list my assigned steps. Same oRPC procedures the human UI calls; no parallel
@@ -567,23 +575,169 @@ capability checks via `agent_capability`; cross-product origin propagation
   authenticating as a machine principal per D-025), the same write additionally
   sets `crossProductOrigin='virn-pm'` (D-027). Activity events mirror this for
   the user-facing run timeline.
-- **Outbound webhook deliveries from Ops → PM (per D-025).** The
-  `automation_action.actionType='call_webhook'` execution path handles delivery
-  of cross-product events to PM's `/api/webhooks/virn-ops/[orgSlug]` endpoint.
-  Each delivery carries an HMAC-SHA256 signature over body + timestamp using a
-  per-org shared secret. Per-org PM endpoint URL + secret configured at link
-  time. **v1 event catalog (cross-repo agreement, D-025):** `run.state_changed`,
-  `run.completed`, `vendor.upserted`. Everything else (escalations,
-  agent-generated artifacts, comments, etc.) deferred — additions require mutual
-  cross-repo agreement.
-- **`runs.launch` accepts the snapshot payload from PM (per D-029).** Standard
-  shape includes `workflowSlug`, `mode`, `participant: { kind, vendorId,
-  vendorContactId }`, `kickoff` data (property / unit / tenant / access /
-  description / severity / R2 photo keys), `callback.pmServiceRequestId` (echoed
-  in every webhook delivery so PM routes callbacks without an extra DB lookup),
-  `callback.webhookEvents` filter. PM is responsible for find-or-creating the
-  Ops vendor before launch (one-time setup per vendor via the action surface's
-  vendor procedures).
+- **Outbound webhook deliveries from Ops → PM (per D-025).** A dedicated
+  `cross_product_event_outbox` table is the source of truth for emitted events;
+  a Vercel Cron worker (matches Phase 8 step 5's SLA-sweep pattern; migrates to
+  Inngest in Phase 18) drains pending rows and POSTs to PM's
+  `/api/webhooks/virn-ops/[orgSlug]` endpoint. Each delivery carries an
+  HMAC-SHA256 signature over body + timestamp using a per-org shared secret.
+  Per-org PM endpoint URL + secret stored in a new `outbound_webhook_credential`
+  table (one row per consumer product per org; same row holds
+  `allowed_return_url_prefixes text[]` consumed by the guest-page returnUrl
+  affordance — see D-037 / Step 3 subtask (d)). **v1 event catalog (cross-repo
+  agreement, D-025 + D-035):** `run.state_changed`, `run.completed`,
+  `vendor.upserted`, `run.comment_added`. Everything else (escalations,
+  agent-generated artifacts, step-level state changes, etc.) deferred —
+  additions require mutual cross-repo agreement.
+  **Why outbox and not `automation_action.actionType='call_webhook'`:** the
+  automation-action path executes user-defined `automation_rule` rows on
+  event-match; cross-product catalog events fire on system lifecycle
+  transitions (run state change, vendor upsert) and need transactional
+  insert-with-the-state-write semantics so a delivery can never be lost or
+  duplicated. Different subsystems; conflating them would force the cross-product
+  emission to live inside an automation-rule indirection that doesn't fit its
+  semantics.
+- **`runs.launch` accepts the snapshot payload from PM (per D-029, corrected
+  by D-038).** The contract PM's outbound client targets:
+  `{ workflowId | workflowSlug, workflowVersionId?, kickoffValues: Record<string, unknown>,
+  roleAssignments: RoleAssignment[], title?, mode,
+  callback?: { pmServiceRequestId?, pmWorkOrderId?, webhookEvents?: string[] } }`.
+  Notes vs. D-029-as-originally-written: `workflowId | workflowSlug` (not
+  slug-only — see Step 3 subtask (a)); flat `kickoffValues` map keyed by the
+  property-ops field-key vocabulary locked at Phase 17 seed time (`property_name`,
+  `property_address`, `unit_label`, `tenant_display_name`, `lease_id`,
+  `access_instructions`, `request_description`, `severity`, `photo_r2_keys`);
+  `roleAssignments[]` not a singular `participant` (Ops's CHECK constraint per
+  D-023 dictates per-role shape, with vendor roles taking
+  `{ roleId, vendorId, vendorContactId }`); `callback` block persisted on `run`
+  per Step 3 subtask (b) and echoed in every webhook delivery so PM routes
+  callbacks without an extra DB lookup. PM is responsible for find-or-creating
+  the Ops vendor before launch (one-time setup per vendor via the action
+  surface's vendor procedures). Cross-product origin is NOT a payload field —
+  it threads from `agent.originProduct` automatically per the dual-auth wiring
+  already shipped in Step 2.
+
+**Step 3 of 11a — D-038 subtasks (next session, the cross-repo integration body).**
+
+Four subtasks surface from D-038's sanity-check of PM's §4 assumptions. Ship
+order is smallest-blast-radius first; each subtask is its own commit (or
+multi-commit sub-phase for (c)).
+
+- **(a) Optional `workflowSlug` on `runs.launch`.**
+  - **Schema:** add `workflow.slug text` (nullable) with a partial unique
+    index `(organization_id, slug) WHERE slug IS NOT NULL AND deleted_at IS NULL`.
+    [packages/database/drizzle/schema/workflows.ts:88-135](../packages/database/drizzle/schema/workflows.ts#L88-L135)
+    is the target.
+  - **Pack installer:** the property-ops pack seed
+    (`pnpm --filter @virn/scripts seed:property-ops-pack`) populates slug from
+    the pack manifest's workflow key — `str_turnover`, `property_inspection`,
+    `maintenance_routing`, `vendor_onboarding`, `tenant_onboarding`. User-
+    authored workflows leave slug null in v1 (no cross-product launch use case).
+  - **Procedure:** `runs.launch` input adds
+    `workflowSlug: z.string().min(1).optional()`, refines `workflowId` to
+    `.optional()`, validates "exactly one of {workflowId, workflowSlug}",
+    resolves slug → id scoped to `organizationId` inside `launchRun()` before
+    existing logic runs. [packages/api/modules/runs/procedures/launch-run.ts](../packages/api/modules/runs/procedures/launch-run.ts) +
+    `packages/api/modules/runs/lib/launch-run.ts`.
+  - **Open design call:** direct `workflow.slug` column vs. sibling
+    `workflow_external_key` table. **Recommendation: direct column.** One alias
+    dimension covers v1; sibling table is premature.
+
+- **(b) `callback` block on `runs.launch` + persistence.**
+  - **Schema:** add to `run` ([packages/database/drizzle/schema/runs.ts:109-142](../packages/database/drizzle/schema/runs.ts#L109-L142)):
+    - `callback_pm_service_request_id text` (nullable; indexed for any future
+      PM-side reverse correlation lookup)
+    - `callback_pm_work_order_id text` (nullable)
+    - `callback_webhook_events text[]` (nullable; null = "all v1 catalog events";
+      non-null = filter)
+  - **Procedure:** `runs.launch` input gains
+    `callback: z.object({ pmServiceRequestId?, pmWorkOrderId?, webhookEvents?: z.array(z.string()) }).optional()`;
+    `launchRun()` persists into the new columns; emission layer (c) reads them
+    when echoing.
+  - **Open design call:** flat callback columns on `run` vs. sibling
+    `run_external_link` table. **Recommendation: flat columns on `run`.** One
+    PM-side launcher per run is the v1 reality; a sibling table costs a join on
+    every webhook emission with no concrete second consumer.
+
+- **(c) Webhook emission layer — the big one (multi-commit sub-phase).**
+  - **Outbound credential table** `outbound_webhook_credential` ships first
+    (gates (c) + (d)):
+    `id`, `organization_id`, `consumer_product text` (`virn-pm` in v1),
+    `endpoint_url text`, `signing_secret_encrypted text`,
+    `allowed_return_url_prefixes text[]` (consumed by subtask (d)),
+    `is_active bool`, `created_at`. One row per consumer per org. Thin admin UI
+    on `/settings/integrations` to register PM's URL/secret/allowlist.
+  - **Outbox table** `cross_product_event_outbox`:
+    `id text PK` (wire `eventId`), `organization_id`, `sequence_number bigint`
+    (per-org monotonic), `event_type text`
+    (`run.state_changed | run.completed | vendor.upserted | run.comment_added`),
+    `run_id text nullable`, `vendor_id text nullable`, `payload jsonb`
+    (sealed at write time), `callback_pm_service_request_id text` +
+    `callback_pm_work_order_id text` (echoed from `run`), `status text`
+    (`pending | delivering | delivered | failed | dead`), `attempt_count int`,
+    `next_attempt_at timestamp`, `last_error text`, `created_at`,
+    `delivered_at`.
+  - **Emission chokepoints:** transactional outbox inserts in the same tx as
+    the state-write:
+    - [packages/api/modules/runs/lib/complete-step.ts](../packages/api/modules/runs/lib/complete-step.ts) — on
+      run-level state transitions emit `run.state_changed`; on final-step
+      completion emit `run.completed`.
+    - Vendor write paths (Phase 8) — emit `vendor.upserted`.
+    - `runs.addComment` (post-v1) — emit `run.comment_added` per D-035; slot is
+      reserved at outbox-design time but emission lands when the comment
+      procedure ships.
+    - `runs.launch` does NOT emit — PM already knows it launched.
+  - **Delivery worker:** Vercel Cron scheduled every 30s in v1. Picks
+    `status='pending' AND next_attempt_at <= now()`, POSTs with HMAC-SHA256
+    signature header, exponential backoff up to N attempts, then `dead`.
+    Migrates to Inngest in Phase 18 alongside automation execution.
+  - **Payload shape** (minimum for v1):
+    `{ eventId, sequenceNumber, eventType, occurredAt, organizationId,
+    runId?, runTitle?, workflowId?, workflowVersionId?, previousStatus?,
+    currentStatus?, vendorId?, crossProductOrigin,
+    callback?: { pmServiceRequestId?, pmWorkOrderId? } }`. Per D-038 §4.3,
+    severity / priority / category are NOT first-class fields — if PM's Scoped
+    Inbox needs them, PM tags via kickoff value at launch time and remembers
+    its own tag.
+  - **Open design calls:**
+    - Sequence-number scope — per-org vs. per-run. **Recommendation: per-org.**
+      Per-run gaps are rare and PM can compute them client-side.
+    - Cron cadence — 30s in v1 vs. faster. **Recommendation: 30s** as the
+      latency floor until Phase 18 Inngest migration removes it.
+
+- **(d) `?returnUrl` pass-through on guest run view.**
+  - **Frontend:** guest run view route reads `?returnUrl` on mount, validates
+    against `outbound_webhook_credential.allowed_return_url_prefixes` for the
+    run's org, renders a "Return to <PM brand>" affordance on completion / close
+    of the guest UI. [packages/api/modules/runs/procedures/get-run-for-guest.ts](../packages/api/modules/runs/procedures/get-run-for-guest.ts) +
+    sibling guest procedures + the guest-run page.
+  - **No new schema** beyond what (c) already ships.
+  - **Ship order:** blocks on (c)'s `outbound_webhook_credential` table so the
+    allowlist is real. (d)-by-itself with a temporary `organization`-level
+    allowlist column was considered and rejected — (d) without inbound
+    PM-as-agent registered isn't useful in isolation.
+
+**Recommended ship order for Step 3:**
+
+1. **(a)** — schema + procedure for `workflow.slug` + slug acceptance on
+   `runs.launch`. One commit. Unblocks PM's outbound client without touching
+   emission. Pack installer slug-set update follows.
+2. **(b)** — callback columns on `run` + `runs.launch` accepts `callback`. One
+   commit. Builds on (a)'s `launchRun()` signature work.
+3. **(c) part 1 — `outbound_webhook_credential` table + admin UI to register PM's
+   URL / secret / allowlist.** Schema + thin settings surface. Gates the rest of
+   (c) and all of (d).
+4. **(c) part 2 — outbox table + run-lifecycle emission + Vercel Cron delivery
+   worker + HMAC + retries + tests.** The biggest piece; multiple commits.
+5. **(d)** — frontend + validation against the credential allowlist. One commit.
+6. **`run.comment_added` emission** lands when `runs.addComment` procedure
+   ships (post-v1 per D-035); the outbox + delivery worker already accept the
+   event type as of (c).
+
+**Step 4 of 11a — agent introspection + capability gating.** Lands after Step 3's
+cross-repo integration body. `runs.listMyAssignments` + per-agent capability
+checks via `agent_capability` (D-022). Not required for PM-as-agent integration
+since PM doesn't introspect Ops; load-bearing for tenant-internal agent UX.
 
 **Sub-phase 11b — Thin MCP wrapper (good-citizen alternative).**
 
