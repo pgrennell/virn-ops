@@ -1,21 +1,32 @@
 // packages/database/drizzle/queries/cross-product-events.ts
 //
-// Transactional outbox writes for cross-product webhook events (Phase 11a
-// step 3c part 2). All enqueues happen INSIDE the same DB transaction as the
-// state-write that generated the event, so a `run.completed` outbox row
-// exists if and only if the run actually transitioned to completed.
-//
+// Outbox writes for cross-product webhook events (Phase 11a step 3c part 2).
 // The delivery worker (step 3c part 3) drains the outbox; this module never
 // performs HTTP.
+//
+// Two enqueue helpers with different transactionality posture:
+//   - enqueueCrossProductEventForRun: meant to be called INSIDE the same
+//     transaction as the state-write that generated the event (e.g. inside
+//     complete-step.ts's withTransaction block), so a `run.completed` outbox
+//     row exists if and only if the run actually transitioned to completed.
+//   - enqueueCrossProductEventForVendor: fans out to every active consumer
+//     for the org. v1 vendor write paths don't run inside a transaction (the
+//     existing audit/activity writes don't either), so this helper accepts
+//     the small inconsistency window -- a crash between vendor.update and
+//     enqueue means the consumer misses the event. Matches the existing
+//     non-transactional audit pattern; a future refactor can wrap the whole
+//     vendor surface in a tx without changing this signature.
 
 import { createId } from "@paralleldrive/cuid2";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db, type DbExecutor } from "../client";
 import {
 	crossProductEventOrgSequence,
 	crossProductEventOutbox,
+	outboundWebhookCredential,
 	run,
+	vendor,
 } from "../schema/postgres";
 
 // V1 ships a single consumer product. When future consumers (mobile app,
@@ -175,6 +186,128 @@ export async function enqueueCrossProductEventForRun(
 	return { id: eventId, sequenceNumber };
 }
 
+export interface EnqueueCrossProductEventForVendorInput {
+	vendorId: string;
+	eventType: Extract<CrossProductEventType, "vendor.upserted">;
+	occurredAt?: Date;
+	crossProductOrigin?: string | null;
+}
+
+export interface VendorEnqueueResult {
+	id: string;
+	sequenceNumber: number;
+	consumerProduct: string;
+}
+
+/** Enqueue a vendor lifecycle event. Fans out across every active consumer
+ * registered for the vendor's org; returns one result entry per outbox row
+ * written. Returns `[]` when the org has no active consumers (nobody's
+ * listening). Throws if the vendor doesn't exist.
+ *
+ * Unlike `enqueueCrossProductEventForRun`, this helper is NOT meant to live
+ * inside a transaction with the vendor write today -- the existing vendor
+ * write paths (procedures/create.ts, procedures/update.ts) call this AFTER
+ * their non-transactional audit/activity writes. A future refactor that wraps
+ * the vendor surface in `withTransaction` should thread `executor` through
+ * this call too; the signature already accepts it. */
+export async function enqueueCrossProductEventForVendor(
+	args: EnqueueCrossProductEventForVendorInput,
+	executor: DbExecutor = db,
+): Promise<VendorEnqueueResult[]> {
+	// 1. Pull the vendor's identity columns. Soft-deleted rows are excluded --
+	//    a hard-deleted vendor shouldn't fire an upsert event (the caller is a
+	//    bug if that happens).
+	const vendorRow = await executor.query.vendor.findFirst({
+		where: (v, { and: a, eq: e, isNull: n }) => a(e(v.id, args.vendorId), n(v.deletedAt)),
+		columns: {
+			id: true,
+			organizationId: true,
+			name: true,
+			description: true,
+			categoryId: true,
+			status: true,
+			isActive: true,
+		},
+	});
+	if (!vendorRow) {
+		throw new Error(
+			`enqueueCrossProductEventForVendor: vendor not found (vendorId=${args.vendorId}).`,
+		);
+	}
+
+	// 2. Find active consumers for this org. No active consumers means nobody's
+	//    listening -- skip the writes entirely. The credential-active flag is
+	//    flipped by softDelete (sets is_active=false) so the same query
+	//    excludes soft-deleted rows via the partial check.
+	const consumers = await executor
+		.select({ id: outboundWebhookCredential.id, consumerProduct: outboundWebhookCredential.consumerProduct })
+		.from(outboundWebhookCredential)
+		.where(
+			and(
+				eq(outboundWebhookCredential.organizationId, vendorRow.organizationId),
+				eq(outboundWebhookCredential.isActive, true),
+				isNull(outboundWebhookCredential.deletedAt),
+			),
+		);
+	if (consumers.length === 0) return [];
+
+	const occurredAt = args.occurredAt ?? new Date();
+	const results: VendorEnqueueResult[] = [];
+
+	// 3. Bump-and-insert per consumer. Sequence is shared across consumers per
+	//    org (v1 limitation -- with multiple consumers their individual
+	//    sequence streams have gaps; revisit when a second consumer ships).
+	for (const consumer of consumers) {
+		const eventId = createId();
+		const seqRows = await executor
+			.insert(crossProductEventOrgSequence)
+			.values({
+				organizationId: vendorRow.organizationId,
+				lastSeq: 1,
+			})
+			.onConflictDoUpdate({
+				target: crossProductEventOrgSequence.organizationId,
+				set: {
+					lastSeq: sql`${crossProductEventOrgSequence.lastSeq} + 1`,
+				},
+			})
+			.returning({ lastSeq: crossProductEventOrgSequence.lastSeq });
+		const sequenceNumber = Number(seqRows[0].lastSeq);
+
+		const payload: Record<string, unknown> = {
+			eventId,
+			sequenceNumber,
+			eventType: args.eventType,
+			occurredAt: occurredAt.toISOString(),
+			organizationId: vendorRow.organizationId,
+			vendorId: vendorRow.id,
+			vendorName: vendorRow.name,
+			vendorStatus: vendorRow.status,
+			vendorIsActive: vendorRow.isActive,
+			vendorCategoryId: vendorRow.categoryId,
+			crossProductOrigin: args.crossProductOrigin ?? null,
+		};
+
+		await executor.insert(crossProductEventOutbox).values({
+			id: eventId,
+			organizationId: vendorRow.organizationId,
+			sequenceNumber,
+			eventType: args.eventType,
+			consumerProduct: consumer.consumerProduct,
+			runId: null,
+			vendorId: vendorRow.id,
+			callbackPmServiceRequestId: null,
+			callbackPmWorkOrderId: null,
+			payload,
+			nextAttemptAt: occurredAt,
+		});
+
+		results.push({ id: eventId, sequenceNumber, consumerProduct: consumer.consumerProduct });
+	}
+
+	return results;
+}
+
 /** Forensic read for the admin UI / debug tooling: list outbox rows for one
  * run, newest first. Not part of the delivery hot path. */
 export async function listOutboxEventsForRun(
@@ -190,7 +323,8 @@ export async function listOutboxEventsForRun(
 		.orderBy(sql`${crossProductEventOutbox.sequenceNumber} desc`);
 }
 
-// Suppress an unused-import warning when the run table relation is only used
-// via `executor.query.run.findFirst` -- we still need the symbol referenced so
-// tree-shaking doesn't drop the relation registration.
+// Suppress unused-import warnings on table symbols only referenced through
+// `executor.query.<name>.findFirst` -- we still need the imports so the
+// relation registrations land for the typed query builder.
 void run;
+void vendor;

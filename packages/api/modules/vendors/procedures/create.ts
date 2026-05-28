@@ -5,7 +5,11 @@
 // 'preferred' / 'blacklisted' status flags shape selection logic).
 
 import { ORPCError } from "@orpc/server";
-import { createVendor, writeAuditAndActivity } from "@virn/database";
+import {
+	createVendor,
+	enqueueCrossProductEventForVendor,
+	writeAuditAndActivity,
+} from "@virn/database";
 import { z } from "zod";
 
 import { adminOrgProcedure } from "../../../orpc/procedures";
@@ -61,6 +65,18 @@ export const create = adminOrgProcedure
 					categoryId: result.categoryId,
 				},
 				activityData: { vendorName: result.name },
+			});
+
+			// Phase 11a step 3c part 2 -- cross-product outbox enqueue. Org-wide
+			// fan-out: one outbox row per active consumer registered for the org.
+			// No-op when no consumers exist. Non-transactional with the vendor
+			// write (matches the existing audit pattern above); a future refactor
+			// that wraps this whole handler in withTransaction would also thread
+			// `tx` into this call.
+			await enqueueCrossProductEventForVendor({
+				vendorId: result.id,
+				eventType: "vendor.upserted",
+				crossProductOrigin: null,
 			});
 
 			return result;

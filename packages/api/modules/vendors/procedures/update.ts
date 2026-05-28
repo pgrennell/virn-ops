@@ -6,7 +6,11 @@
 // signal -- the launcher should refuse selection regardless of isActive.
 
 import { ORPCError } from "@orpc/server";
-import { updateVendor, writeAuditAndActivity } from "@virn/database";
+import {
+	enqueueCrossProductEventForVendor,
+	updateVendor,
+	writeAuditAndActivity,
+} from "@virn/database";
 import { z } from "zod";
 
 import { adminOrgProcedure } from "../../../orpc/procedures";
@@ -64,6 +68,16 @@ export const update = adminOrgProcedure
 				entityId: id,
 				changes: patch,
 				activityData: { vendorName: updated.name },
+			});
+
+			// Phase 11a step 3c part 2 -- cross-product outbox enqueue. Same
+			// event type as create (vendor.upserted) -- the consumer treats both
+			// as "vendor state changed, here's the current shape" rather than
+			// caring whether it was a create or an update.
+			await enqueueCrossProductEventForVendor({
+				vendorId: id,
+				eventType: "vendor.upserted",
+				crossProductOrigin: null,
 			});
 
 			return updated;

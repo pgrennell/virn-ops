@@ -24,12 +24,18 @@ vi.mock("@virn/database", () => ({
 	createVendorContact: vi.fn(),
 	updateVendorContact: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
+	// Phase 11a step 3c part 2 -- vendor.upserted outbox enqueue. Default to
+	// "no consumers registered -> empty result"; the chokepoint tests assert
+	// the call shape rather than the resulting outbox rows (which the helper's
+	// own integration tests cover).
+	enqueueCrossProductEventForVendor: vi.fn(async () => []),
 }));
 
 import { auth } from "@virn/auth";
 import {
 	createVendor,
 	createVendorContact,
+	enqueueCrossProductEventForVendor,
 	getOrganizationMembership,
 	getVendorForOrg,
 	listVendorsForOrg,
@@ -226,6 +232,46 @@ describe("vendors procedures -- happy paths", () => {
 		await expect(
 			call(update, { id: "missing", name: "x" }, ctx),
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
+	});
+
+	// Phase 11a step 3c part 2 -- cross-product outbox enqueue. Both the
+	// create and update chokepoints fan out a `vendor.upserted` event after
+	// the audit write; the helper itself is mocked here, the fan-out logic is
+	// covered by its own integration test against a real DB.
+	it("create enqueues a vendor.upserted cross-product event", async () => {
+		const row = makeVendorDetail();
+		vi.mocked(createVendor).mockResolvedValueOnce(row as never);
+
+		await call(create, { name: "Acme Pest Control" }, ctx);
+
+		expect(enqueueCrossProductEventForVendor).toHaveBeenCalledWith(
+			expect.objectContaining({
+				vendorId: "v-1",
+				eventType: "vendor.upserted",
+			}),
+		);
+	});
+
+	it("update enqueues a vendor.upserted cross-product event", async () => {
+		const updated = { ...makeVendorDetail(), name: "Acme Pest", description: "Renamed" };
+		vi.mocked(updateVendor).mockResolvedValueOnce(updated as never);
+
+		await call(update, { id: "v-1", name: "Acme Pest" }, ctx);
+
+		expect(enqueueCrossProductEventForVendor).toHaveBeenCalledWith(
+			expect.objectContaining({
+				vendorId: "v-1",
+				eventType: "vendor.upserted",
+			}),
+		);
+	});
+
+	it("update does not enqueue when the vendor isn't found (NOT_FOUND short-circuit)", async () => {
+		vi.mocked(updateVendor).mockResolvedValueOnce(null);
+		await expect(
+			call(update, { id: "missing", name: "x" }, ctx),
+		).rejects.toMatchObject({ code: "NOT_FOUND" });
+		expect(enqueueCrossProductEventForVendor).not.toHaveBeenCalled();
 	});
 
 	it("softDelete returns deleted:true + audit-logs vendor.deleted", async () => {
