@@ -23,6 +23,7 @@
 // snapshot per Invariant #4 and are untouched.
 
 import {
+	countStepsInVersion,
 	db,
 	deleteVersion,
 	getLatestPublishedWorkflowVersion,
@@ -135,16 +136,30 @@ export async function publishVersion(
 }
 
 /** Phase 9.5g (PRD §6.6) -- approve a workflow currently in review and publish its
- * current draft. Composes (state transition in_review→published) with the existing
- * publishVersion path. The state transition's WHERE-on-from-state guard closes the
- * "two admins approve simultaneously" race -- only one observes in_review and proceeds.
+ * current draft.
  *
- * The state transition happens BEFORE the publish, so a failed publish leaves the
- * workflow at review_state='published' but with version still at draft. Recovery: an
- * admin re-submits with editPublished (which forks a fresh draft). For v1 of 9.5g this
- * trade-off is acceptable; post-publish-failure is an edge case (publish fails only on
- * VERSION_HAS_NO_STEPS or PUBLISH_RACE, both unlikely once we've passed the in_review
- * guard). */
+ * Failure-mode containment (revised 2026-05-27 after dogfooding caught state/version
+ * desync):
+ *
+ *   1. PRE-FLIGHT: validate the draft has ≥1 step BEFORE any write. This catches the
+ *      only realistic publish failure (VERSION_HAS_NO_STEPS) without touching state.
+ *   2. PUBLISH the draft via the existing publishVersion path. Its publishVersionRow
+ *      WHERE-on-status='draft' guard closes the two-admin race (the loser gets
+ *      PUBLISH_RACE and bails before the transition step ever runs).
+ *   3. TRANSITION review_state in_review → published. WHERE-on-from-state guard catches
+ *      the extreme race where someone send-back'd between our publish and our
+ *      transition (sub-100ms window; recovery is admin re-approves).
+ *   4. AUDIT the approval.
+ *
+ * Why this ordering: the original (transition first) could leave reviewState=published
+ * with the version still draft if publish failed downstream. By publishing FIRST and
+ * only transitioning state if publish succeeded, the failure modes are:
+ *   - Pre-flight fails (no steps): no writes, clean error
+ *   - Publish fails: reviewState stays in_review, version stays draft, fully consistent
+ *   - Transition fails (admin send-back race): version published, reviewState stays draft.
+ *     Recovery: admin re-approves to flip state. Strict atomicity here would require
+ *     wrapping publishVersion's logic into the same transaction (~80-line refactor);
+ *     deferred as a v1.5 polish item since the race window is sub-100ms. */
 export async function approveReview(
 	ctx: PublishContext,
 	input: { workflowId: string },
@@ -176,8 +191,28 @@ export async function approveReview(
 	}
 	const draftVersionId = wfWithVersions.currentDraft.id;
 
-	// 1. Atomic state transition (closes the two-admin race). Done FIRST so the
-	// publish path runs only for the winning approver.
+	// 1. PRE-FLIGHT: validate the draft has ≥1 step (the only realistic publish-fail
+	// mode). Done BEFORE any write so a no-steps approve refuses cleanly with no state
+	// change. publishVersion re-validates inside its own transaction anyway (defense in
+	// depth), but failing fast here is cheaper than the rollback path.
+	const stepCount = await countStepsInVersion(draftVersionId);
+	if (stepCount === 0) {
+		throw new WorkflowEngineError(
+			"VERSION_HAS_NO_STEPS",
+			"Cannot approve a workflow with no steps. Send back to draft, add at least one step, and resubmit.",
+			{ workflowId: input.workflowId, versionId: draftVersionId },
+		);
+	}
+
+	// 2. PUBLISH first. publishVersion writes its own audit row + closes the two-admin
+	// race via publishVersionRow's WHERE-on-status='draft' guard. Loser gets PUBLISH_RACE.
+	const result = await publishVersion(ctx, { versionId: draftVersionId });
+
+	// 3. TRANSITION review_state. Sub-100ms send-back race would land us here with
+	// transition.ok=false; version is already published so we surface an error the admin
+	// can resolve by re-clicking Approve (the next attempt sees state=draft and refuses
+	// at the reviewState !== 'in_review' check above; the admin uses editPublished to
+	// resync).
 	const transition = await transitionWorkflowReviewState({
 		organizationId: ctx.organizationId,
 		workflowId: input.workflowId,
@@ -187,13 +222,12 @@ export async function approveReview(
 	if (!transition.ok) {
 		throw new WorkflowEngineError(
 			"REVIEW_STATE_INVALID",
-			"Another reviewer already approved or sent back this workflow. Refresh to see the latest state.",
-			{ workflowId: input.workflowId },
+			"Workflow state changed during approval (likely sent back by another admin). The version published successfully; refresh to see the latest state.",
+			{ workflowId: input.workflowId, versionId: draftVersionId },
 		);
 	}
 
-	// 2. Audit the approval BEFORE the version publish (so the approval row exists
-	// even if the publish call surfaces a downstream error).
+	// 4. AUDIT the approval.
 	await writeAuditAndActivity({
 		organizationId: ctx.organizationId,
 		actorUserId: ctx.userId,
@@ -206,9 +240,7 @@ export async function approveReview(
 		activityData: { workflowTitle: wf.title },
 	});
 
-	// 3. Publish the underlying draft. publishVersion writes its own audit row
-	// (workflow_version.published) -- the timeline shows both: approval THEN publish.
-	return await publishVersion(ctx, { versionId: draftVersionId });
+	return result;
 }
 
 export interface EditPublishedResult {

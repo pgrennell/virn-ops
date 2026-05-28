@@ -214,10 +214,18 @@ export function BuilderView({
 
 	// Phase 9.5g review-state handlers. All invalidate workflows.get so the BuilderView
 	// re-renders against the post-transition state (which flips the top-bar buttons).
-	const refetchWorkflow = () =>
-		queryClient.invalidateQueries({
+	const refetchWorkflow = async () => {
+		await queryClient.invalidateQueries({
 			queryKey: orpc.workflows.get.queryKey({ input: { workflowId } }),
 		});
+		if (activeVersion?.id) {
+			await queryClient.invalidateQueries({
+				queryKey: orpc.workflows.getVersionBundle.queryKey({
+					input: { versionId: activeVersion.id },
+				}),
+			});
+		}
+	};
 
 	const handleSubmitForReview = async () => {
 		setTopLevelError(null);

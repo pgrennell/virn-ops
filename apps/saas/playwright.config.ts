@@ -17,11 +17,8 @@ export default defineConfig({
 	reporter: [["html"]],
 	use: {
 		baseURL: "http://localhost:3000",
-		trace: "on-first-retry",
-		video: {
-			mode: "retain-on-failure",
-			size: { width: 640, height: 480 },
-		},
+		trace: "off",
+		video: "off",
 	},
 	projects: [
 		{ name: "setup", testMatch: /.*\.setup\.ts/ },

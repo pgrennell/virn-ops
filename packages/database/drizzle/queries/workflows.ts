@@ -24,7 +24,7 @@
 // Step references: `step.dueAnchorStepId` points at another step for `offset_from_step`
 // due-rules (deferred). Step deletion enumerates referencers via the same pattern.
 
-import { and, asc, desc, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
 
 import { db, type DbExecutor } from "../client";
 import {
@@ -650,6 +650,18 @@ export type ReviewState = "draft" | "in_review" | "published" | "archived";
  * Caller responsibility: validate the (from, to) pair is a legal arrow before
  * calling. This helper just makes the write atomic; it doesn't enforce the graph
  * (keeps DB layer free of business logic). */
+/** Count steps in a workflow version. Used by approveReview (Phase 9.5g) for the
+ * pre-flight check that catches the VERSION_HAS_NO_STEPS publish-fail case BEFORE any
+ * state mutation -- avoids the desync of reviewState='published' with a still-draft
+ * version that dogfooding caught on 2026-05-27. */
+export async function countStepsInVersion(versionId: string): Promise<number> {
+	const rows = await db
+		.select({ count: count() })
+		.from(step)
+		.where(eq(step.workflowVersionId, versionId));
+	return Number(rows[0]?.count ?? 0);
+}
+
 export async function transitionWorkflowReviewState(
 	input: {
 		organizationId: string;

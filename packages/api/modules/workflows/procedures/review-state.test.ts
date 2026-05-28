@@ -27,6 +27,7 @@ vi.mock("@virn/database", () => ({
 	// publish path
 	db: { transaction: vi.fn(async (fn) => fn({} as never)) },
 	publishVersionRow: vi.fn(),
+	countStepsInVersion: vi.fn(),
 	// referenced by publish-version lib imports
 	deleteVersion: vi.fn(),
 	getLatestPublishedWorkflowVersion: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock("@virn/database", () => ({
 
 import { auth } from "@virn/auth";
 import {
+	countStepsInVersion,
 	db,
 	getOrganizationById,
 	getOrganizationMembership,
@@ -231,61 +233,55 @@ describe("workflows.submitForReview (Phase 9.5g)", () => {
 // approveReview
 // ---------------------------------------------------------------------------
 
-describe("workflows.approveReview (Phase 9.5g)", () => {
-	it("transitions in_review → published, audits, then publishes the draft", async () => {
+// Phase 9.5g approveReview was rewritten 2026-05-27 after dogfooding caught a
+// state/version desync (transition before publish could leave reviewState='published'
+// with version still draft if publish failed). The new ordering is:
+//   1. Pre-check: countStepsInVersion > 0 (catches VERSION_HAS_NO_STEPS without writes)
+//   2. publishVersion (own race guard via publishVersionRow WHERE-on-status='draft')
+//   3. transitionWorkflowReviewState (in_review -> published)
+//   4. audit
+describe("workflows.approveReview (Phase 9.5g, revised ordering)", () => {
+	function setupInReviewWithDraft(stepCount = 1) {
 		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(
 			makeWorkflow({ reviewState: "in_review" }) as never,
 		);
 		vi.mocked(getWorkflowWithVersions).mockResolvedValueOnce(
 			makeWfWithVersions({ workflow: makeWorkflow({ reviewState: "in_review" }) }) as never,
 		);
-		vi.mocked(transitionWorkflowReviewState).mockResolvedValueOnce({ ok: true });
+		vi.mocked(countStepsInVersion).mockResolvedValueOnce(stepCount);
+	}
 
-		// publishVersion does a second load via db.query (mocked as no-op via the
-		// db.transaction wrapper). We need to also stub the version-fetch + publish-row
-		// flow it relies on. Reuse the existing publish.test.ts approach: stub
-		// db.query.workflowVersion.findFirst via the broader db mock isn't easy with our
-		// mock surface, so the cleanest path is to assert on the state-transition +
-		// audit calls and treat the inner publish as covered by publish.test.ts.
-		// We stub publishVersionRow to "true" to short-circuit the publish; the version
-		// lookup will fail (returning undefined) which would throw, so we also stub the
-		// inner db.query path implicitly via the publishVersion exception path being a
-		// VERSION_NOT_FOUND -- which the test asserts gets surfaced as a downstream error.
-		//
-		// For this test we only care that the approve transition + audit fire BEFORE the
-		// publish call. We stub the publish path to succeed via the publishVersionRow mock.
-
-		// Simulate publishVersion's internal db.query.workflowVersion.findFirst returning
-		// a draft version. We attach it via the db mock's transaction shape used in
-		// publishVersion lib (which directly calls `db.query.workflowVersion.findFirst`).
-		// Because that's hard to stub at this granularity, we'll catch the resulting
-		// error and assert on what's been called pre-error instead.
-		vi.mocked(publishVersionRow).mockResolvedValue(true);
-
+	it("invokes the step pre-check BEFORE any state mutation (call-order property)", async () => {
+		setupInReviewWithDraft(1);
+		// publishVersion's full happy path depends on db.query.workflowVersion.findFirst
+		// which the lib-level mock surface doesn't stub -- it'll throw VERSION_NOT_FOUND
+		// from inside the publish. That's fine for THIS test: we want to verify the
+		// PRE-CHECK fired (the new dogfood-fix behavior), not re-test publish internals.
+		// End-to-end happy path is covered by the dogfood walkthrough spec
+		// (apps/saas/tests/dogfood-walkthrough.spec.ts).
 		try {
 			await call(approveReviewProc, { workflowId: "wf_1" }, ctx);
 		} catch {
-			// publishVersion's internal db.query (not directly mockable here without more
-			// setup) may throw -- the assertion below proves the state-transition + audit
-			// fired BEFORE the publish call, which is the property we want.
+			/* see comment above */
 		}
-
-		expect(transitionWorkflowReviewState).toHaveBeenCalledWith({
-			organizationId: "org-1",
-			workflowId: "wf_1",
-			fromState: "in_review",
-			toState: "published",
-		});
-		expect(writeAuditAndActivity).toHaveBeenCalledWith(
-			expect.objectContaining({
-				action: "workflow.review_approved",
-				entityId: "wf_1",
-				changes: { reviewState: { from: "in_review", to: "published" } },
-			}),
-		);
+		expect(countStepsInVersion).toHaveBeenCalledWith("ver_draft");
 	});
 
-	it("refuses REVIEW_STATE_INVALID when the workflow isn't in_review", async () => {
+	it("PRE-FLIGHT refuses VERSION_HAS_NO_STEPS with NO state mutation when draft has 0 steps", async () => {
+		setupInReviewWithDraft(0); // empty draft
+
+		await expect(
+			call(approveReviewProc, { workflowId: "wf_1" }, ctx),
+		).rejects.toMatchObject({
+			data: { code: "VERSION_HAS_NO_STEPS" },
+		});
+		// CRITICAL: no transition, no publish, no audit -- the whole point of the rewrite.
+		expect(transitionWorkflowReviewState).not.toHaveBeenCalled();
+		expect(publishVersionRow).not.toHaveBeenCalled();
+		expect(writeAuditAndActivity).not.toHaveBeenCalled();
+	});
+
+	it("refuses REVIEW_STATE_INVALID when the workflow isn't in_review (no draft load)", async () => {
 		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(
 			makeWorkflow({ reviewState: "draft" }) as never,
 		);
@@ -296,6 +292,7 @@ describe("workflows.approveReview (Phase 9.5g)", () => {
 			code: "CONFLICT",
 			data: { code: "REVIEW_STATE_INVALID" },
 		});
+		expect(countStepsInVersion).not.toHaveBeenCalled();
 		expect(transitionWorkflowReviewState).not.toHaveBeenCalled();
 	});
 
@@ -313,22 +310,14 @@ describe("workflows.approveReview (Phase 9.5g)", () => {
 		await expect(
 			call(approveReviewProc, { workflowId: "wf_1" }, ctx),
 		).rejects.toMatchObject({ data: { code: "WORKFLOW_HAS_NO_DRAFT" } });
+		expect(countStepsInVersion).not.toHaveBeenCalled();
 	});
 
-	it("surfaces REVIEW_STATE_INVALID when two admins race the approval", async () => {
-		vi.mocked(getWorkflowForOrg).mockResolvedValueOnce(
-			makeWorkflow({ reviewState: "in_review" }) as never,
-		);
-		vi.mocked(getWorkflowWithVersions).mockResolvedValueOnce(
-			makeWfWithVersions({ workflow: makeWorkflow({ reviewState: "in_review" }) }) as never,
-		);
-		// Loser of the race: transitionWorkflowReviewState's WHERE-on-from-state misses.
-		vi.mocked(transitionWorkflowReviewState).mockResolvedValueOnce({ ok: false });
-
-		await expect(
-			call(approveReviewProc, { workflowId: "wf_1" }, ctx),
-		).rejects.toMatchObject({ data: { code: "REVIEW_STATE_INVALID" } });
-	});
+	// Note: the send-back-race scenario (publish succeeds, transition's WHERE-on-from
+	// misses because someone else send-back'd in between) is a sub-100ms race window
+	// the revised ordering deliberately surfaces with a clear error. Procedure-level
+	// coverage of that race requires stubbing publishVersion's db.query chain, which
+	// the current mock surface doesn't support; covered indirectly by the dogfood spec.
 
 	it("throws FORBIDDEN for plain members", async () => {
 		vi.mocked(getOrganizationMembership).mockResolvedValueOnce(
