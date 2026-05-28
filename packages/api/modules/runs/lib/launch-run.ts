@@ -251,13 +251,36 @@ export async function launchRun(
 
 	// 6. Compute run.startedAt and per-step dueAt.
 	const startedAt = new Date();
+	// Build the date-field map from validated kickoff values. Only `date` fields
+	// participate -- the resolver pulls by field id (not key) so this scoping is the
+	// only thing keeping a malformed step-field write from poisoning a downstream
+	// dependent at launch time. (Step fields aren't filled at launch.)
+	const launchDateFieldValues = collectDateFieldValues(
+		kickoffValuesNorm.map((kv) => {
+			const f = kickoffFields.find((kf) => kf.id === kv.fieldId);
+			return { fieldId: kv.fieldId, fieldType: f?.fieldType ?? "", value: kv.value };
+		}),
+	);
+	const dueContext: ComputeStepDueAtContext = {
+		dateFieldValues: launchDateFieldValues,
+		anchorCompletedAt: null,
+	};
 	const snapshotSteps: SnapshotStepRow[] = steps.map((s) => ({
 		stepId: s.id,
 		title: s.title,
 		description: s.description,
 		position: s.position,
 		assignedRoleId: s.assignedRoleId,
-		dueAt: computeStepDueAt(startedAt, s.dueType, s.dueOffsetDays),
+		dueAt: computeStepDueAt(
+			startedAt,
+			{
+				dueType: s.dueType,
+				dueOffsetDays: s.dueOffsetDays,
+				dueAnchorStepId: s.dueAnchorStepId,
+				dueSourceFieldId: s.dueSourceFieldId,
+			},
+			dueContext,
+		),
 	}));
 
 	// 6.5. Mode-aware agent validation (Phase 8 step 3).
@@ -472,19 +495,96 @@ export async function launchRun(
 	return { runId };
 }
 
-/** Compute per-step due timestamp from a step's due-config. Only `none` and
- * `offset_from_start` are honored; `offset_from_step` and `from_date_field` resolve to null
- * (TODO Phase 3.x: implement once the dependee step's dueAt is known and date-field reads
- * are wired). */
+/** A step's deadline configuration as understood by the resolver. Mirrors the
+ * relevant subset of `step.$inferSelect`; callers commonly destructure the four
+ * fields from a wider row. */
+export interface ComputeStepDueAtInput {
+	dueType: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+	dueOffsetDays: number | null;
+	dueAnchorStepId: string | null;
+	dueSourceFieldId: string | null;
+}
+
+/** Resolver-time context that closes over the two non-step inputs the new dueTypes
+ * need. Either entry can be empty; the resolver returns `null` ("deferred") rather
+ * than throwing when the data isn't yet available.
+ *
+ * - `dateFieldValues`: field-id -> Date for fields that are currently resolved.
+ *   At LAUNCH this is populated only from kickoff `date` fields (which are known
+ *   at that moment). At RECOMPUTE (post step completion) the caller also adds
+ *   any newly-filled step date fields whose key matches a downstream
+ *   `dueSourceFieldId`.
+ * - `anchorCompletedAt`: the `completedAt` timestamp of the step a `offset_from_step`
+ *   step depends on. Null at launch (anchor hasn't run); populated by the
+ *   recompute path when the anchor transitions to completed. */
+export interface ComputeStepDueAtContext {
+	dateFieldValues: Map<string, Date>;
+	anchorCompletedAt?: Date | null;
+}
+
+/** Pure resolver for a step's runtime due timestamp.
+ *
+ *   `none`              -> always null
+ *   `offset_from_start` -> runStartedAt + dueOffsetDays
+ *   `offset_from_step`  -> anchor.completedAt + dueOffsetDays   (null until anchor completes)
+ *   `from_date_field`   -> sourceField.value   + dueOffsetDays   (null until source field has a date)
+ *
+ * Returning `null` means "deferred — not enough information at this resolution
+ * moment." The recompute hook in complete-step.ts patches dueAt for dependents of
+ * a step whose completion (or whose newly-filled date field) just provided the
+ * missing input. */
 export function computeStepDueAt(
 	runStartedAt: Date,
-	dueType: "none" | "offset_from_start" | "offset_from_step" | "from_date_field",
-	dueOffsetDays: number | null,
+	step: ComputeStepDueAtInput,
+	context: ComputeStepDueAtContext,
 ): Date | null {
-	if (dueType === "offset_from_start" && typeof dueOffsetDays === "number") {
-		const d = new Date(runStartedAt);
-		d.setDate(d.getDate() + dueOffsetDays);
-		return d;
+	const offset = step.dueOffsetDays;
+	switch (step.dueType) {
+		case "none":
+			return null;
+		case "offset_from_start":
+			if (typeof offset !== "number") return null;
+			return addDays(runStartedAt, offset);
+		case "offset_from_step": {
+			if (typeof offset !== "number") return null;
+			if (!step.dueAnchorStepId) return null;
+			const anchor = context.anchorCompletedAt ?? null;
+			if (!anchor) return null;
+			return addDays(anchor, offset);
+		}
+		case "from_date_field": {
+			if (typeof offset !== "number") return null;
+			if (!step.dueSourceFieldId) return null;
+			const baseDate = context.dateFieldValues.get(step.dueSourceFieldId);
+			if (!baseDate) return null;
+			return addDays(baseDate, offset);
+		}
 	}
-	return null;
+}
+
+function addDays(base: Date, days: number): Date {
+	const d = new Date(base);
+	d.setDate(d.getDate() + days);
+	return d;
+}
+
+/** Helper used by both the launch path and the recompute path: collect `date`
+ * field values into a Map<fieldId, Date>. Tolerates the validator's storage
+ * format -- ISO strings (the database `field_value` column stores TIMESTAMPTZ
+ * normalized via `new Date(v)`), Date instances (in-memory), or null/undefined
+ * (skipped). Invalid date strings are skipped (NOT thrown) -- the run is
+ * already mid-flight at recompute time and we'd rather leave the deadline
+ * deferred than blow up the completion call. */
+export function collectDateFieldValues(
+	pairs: ReadonlyArray<{ fieldId: string; fieldType: string; value: unknown }>,
+): Map<string, Date> {
+	const out = new Map<string, Date>();
+	for (const p of pairs) {
+		if (p.fieldType !== "date") continue;
+		if (p.value === null || p.value === undefined) continue;
+		const d = p.value instanceof Date ? p.value : new Date(String(p.value));
+		if (Number.isNaN(d.getTime())) continue;
+		out.set(p.fieldId, d);
+	}
+	return out;
 }

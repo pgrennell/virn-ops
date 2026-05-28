@@ -711,23 +711,148 @@ describe("launchRun -- vendor role assignment", () => {
 
 describe("computeStepDueAt", () => {
 	const start = new Date("2026-05-25T12:00:00Z");
+	const emptyCtx = { dateFieldValues: new Map<string, Date>(), anchorCompletedAt: null };
+
+	function step(overrides: Partial<{
+		dueType: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+		dueOffsetDays: number | null;
+		dueAnchorStepId: string | null;
+		dueSourceFieldId: string | null;
+	}> = {}) {
+		return {
+			dueType: "none" as const,
+			dueOffsetDays: null,
+			dueAnchorStepId: null,
+			dueSourceFieldId: null,
+			...overrides,
+		};
+	}
+
 	it("returns null for due_type=none", () => {
-		expect(computeStepDueAt(start, "none", null)).toBeNull();
+		expect(computeStepDueAt(start, step({ dueType: "none" }), emptyCtx)).toBeNull();
 	});
-	it("returns null for due_type=offset_from_step (deferred)", () => {
-		expect(computeStepDueAt(start, "offset_from_step", 3)).toBeNull();
-	});
-	it("returns null for due_type=from_date_field (deferred)", () => {
-		expect(computeStepDueAt(start, "from_date_field", 3)).toBeNull();
-	});
+
 	it("returns null for offset_from_start with no offset configured", () => {
-		expect(computeStepDueAt(start, "offset_from_start", null)).toBeNull();
+		expect(
+			computeStepDueAt(start, step({ dueType: "offset_from_start" }), emptyCtx),
+		).toBeNull();
 	});
+
 	it("adds dueOffsetDays for offset_from_start", () => {
-		const due = computeStepDueAt(start, "offset_from_start", 3);
+		const due = computeStepDueAt(
+			start,
+			step({ dueType: "offset_from_start", dueOffsetDays: 3 }),
+			emptyCtx,
+		);
 		expect(due).not.toBeNull();
 		const diffMs = due!.getTime() - start.getTime();
 		expect(diffMs).toBe(3 * 24 * 60 * 60 * 1000);
+	});
+
+	// ---- offset_from_step ----
+
+	it("defers offset_from_step at launch (anchor not yet complete)", () => {
+		expect(
+			computeStepDueAt(
+				start,
+				step({ dueType: "offset_from_step", dueOffsetDays: 3, dueAnchorStepId: "st_a" }),
+				emptyCtx,
+			),
+		).toBeNull();
+	});
+
+	it("resolves offset_from_step once anchorCompletedAt is supplied", () => {
+		const anchor = new Date("2026-05-25T18:00:00Z");
+		const due = computeStepDueAt(
+			start,
+			step({ dueType: "offset_from_step", dueOffsetDays: 2, dueAnchorStepId: "st_a" }),
+			{ dateFieldValues: new Map(), anchorCompletedAt: anchor },
+		);
+		expect(due).not.toBeNull();
+		expect(due!.getTime() - anchor.getTime()).toBe(2 * 24 * 60 * 60 * 1000);
+	});
+
+	it("offset_from_step with negative offset = 'before anchor'", () => {
+		const anchor = new Date("2026-06-01T12:00:00Z");
+		const due = computeStepDueAt(
+			start,
+			step({ dueType: "offset_from_step", dueOffsetDays: -3, dueAnchorStepId: "st_a" }),
+			{ dateFieldValues: new Map(), anchorCompletedAt: anchor },
+		);
+		expect(due).not.toBeNull();
+		expect(due!.getTime() - anchor.getTime()).toBe(-3 * 24 * 60 * 60 * 1000);
+	});
+
+	it("offset_from_step null when dueAnchorStepId missing (defensive)", () => {
+		const anchor = new Date("2026-05-25T18:00:00Z");
+		expect(
+			computeStepDueAt(
+				start,
+				step({ dueType: "offset_from_step", dueOffsetDays: 2, dueAnchorStepId: null }),
+				{ dateFieldValues: new Map(), anchorCompletedAt: anchor },
+			),
+		).toBeNull();
+	});
+
+	// ---- from_date_field ----
+
+	it("defers from_date_field at launch when source field has no value", () => {
+		expect(
+			computeStepDueAt(
+				start,
+				step({ dueType: "from_date_field", dueOffsetDays: 3, dueSourceFieldId: "fld_a" }),
+				emptyCtx,
+			),
+		).toBeNull();
+	});
+
+	it("resolves from_date_field at launch when kickoff source field has a date", () => {
+		const sourceDate = new Date("2026-06-10T00:00:00Z");
+		const due = computeStepDueAt(
+			start,
+			step({ dueType: "from_date_field", dueOffsetDays: 5, dueSourceFieldId: "fld_a" }),
+			{ dateFieldValues: new Map([["fld_a", sourceDate]]), anchorCompletedAt: null },
+		);
+		expect(due).not.toBeNull();
+		expect(due!.getTime() - sourceDate.getTime()).toBe(5 * 24 * 60 * 60 * 1000);
+	});
+
+	it("from_date_field with negative offset = 'before source date'", () => {
+		const sourceDate = new Date("2026-06-10T00:00:00Z");
+		const due = computeStepDueAt(
+			start,
+			step({ dueType: "from_date_field", dueOffsetDays: -1, dueSourceFieldId: "fld_a" }),
+			{ dateFieldValues: new Map([["fld_a", sourceDate]]), anchorCompletedAt: null },
+		);
+		expect(due).not.toBeNull();
+		expect(due!.getTime() - sourceDate.getTime()).toBe(-1 * 24 * 60 * 60 * 1000);
+	});
+
+	it("from_date_field null when dueSourceFieldId missing (defensive)", () => {
+		const sourceDate = new Date("2026-06-10T00:00:00Z");
+		expect(
+			computeStepDueAt(
+				start,
+				step({ dueType: "from_date_field", dueOffsetDays: 5, dueSourceFieldId: null }),
+				{ dateFieldValues: new Map([["fld_a", sourceDate]]), anchorCompletedAt: null },
+			),
+		).toBeNull();
+	});
+});
+
+describe("collectDateFieldValues", () => {
+	it("includes only date fields with parseable values", async () => {
+		const { collectDateFieldValues } = await import("./launch-run");
+		const map = collectDateFieldValues([
+			{ fieldId: "f1", fieldType: "date", value: "2026-06-01" },
+			{ fieldId: "f2", fieldType: "text", value: "ignored" }, // non-date type
+			{ fieldId: "f3", fieldType: "date", value: null }, // null skipped
+			{ fieldId: "f4", fieldType: "date", value: "not-a-date" }, // invalid skipped
+			{ fieldId: "f5", fieldType: "date", value: new Date("2026-06-15T00:00:00Z") },
+		]);
+		expect(map.size).toBe(2);
+		expect(map.get("f1")?.toISOString().startsWith("2026-06-01")).toBe(true);
+		expect(map.get("f5")?.toISOString()).toBe("2026-06-15T00:00:00.000Z");
 	});
 });
 
