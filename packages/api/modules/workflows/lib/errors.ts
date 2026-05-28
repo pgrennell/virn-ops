@@ -32,7 +32,12 @@ export type WorkflowEngineErrorCode =
 	| "REVIEW_STATE_INVALID"
 	// Phase 12.1 AI authoring (PRD §6.4, §8.4)
 	| "AI_AUTHORING_INVALID_OUTPUT"
-	| "AI_AUTHORING_MODEL_ERROR";
+	| "AI_AUTHORING_MODEL_ERROR"
+	// Phase 12.2 dueType ref validation
+	| "DUE_ANCHOR_INVALID"
+	| "DUE_ANCHOR_SELF_REFERENCE"
+	| "DUE_SOURCE_FIELD_INVALID"
+	| "DUE_SOURCE_FIELD_NOT_DATE";
 
 export class WorkflowEngineError extends Error {
 	readonly code: WorkflowEngineErrorCode;

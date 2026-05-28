@@ -40,6 +40,11 @@ const CODE_MAP: Record<
 	// Phase 12.1
 	AI_AUTHORING_INVALID_OUTPUT: "BAD_REQUEST",
 	AI_AUTHORING_MODEL_ERROR: "BAD_REQUEST",
+	// Phase 12.2 dueType ref validation
+	DUE_ANCHOR_INVALID: "BAD_REQUEST",
+	DUE_ANCHOR_SELF_REFERENCE: "BAD_REQUEST",
+	DUE_SOURCE_FIELD_INVALID: "BAD_REQUEST",
+	DUE_SOURCE_FIELD_NOT_DATE: "BAD_REQUEST",
 };
 
 /** Wraps a lib helper call so any WorkflowEngineError becomes an ORPCError with a

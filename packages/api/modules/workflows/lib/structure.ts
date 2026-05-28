@@ -15,6 +15,8 @@ import {
 	deleteStep,
 	deleteStepDependency,
 	findStepReferencers,
+	getFieldWithVersion,
+	getStepWithVersion,
 	insertField,
 	insertSection,
 	insertStep,
@@ -84,6 +86,77 @@ export async function deleteSectionOp(
 }
 
 // ---------------------------------------------------------------------------
+// dueType ref validation (shared by createStep + updateStepOp)
+// ---------------------------------------------------------------------------
+
+/** Validate the patch's dueAnchorStepId / dueSourceFieldId against the version
+ * the step lives in. Catches the "destructive" combinations that would silently
+ * produce null deadlines at launch:
+ *
+ *   - dueAnchorStepId points at a step in a different (or missing) version
+ *   - dueAnchorStepId points at the same step (self-anchor; circular)
+ *   - dueSourceFieldId points at a field in a different (or missing) version
+ *   - dueSourceFieldId points at a non-`date` field
+ *
+ * Does NOT enforce "dueType=offset_from_step requires an anchor" -- the
+ * Builder's two-step pattern (and the AI authoring lib's two-pass insert)
+ * legitimately set dueType BEFORE the companion ref. The launch path returns
+ * null for an incomplete config (deferred), which the recompute hook patches
+ * once the missing piece arrives. */
+async function assertDueRefs(args: {
+	versionId: string;
+	/** The step being patched. Used to reject self-anchor. For createStep this
+	 * is null (the step doesn't exist yet, so self-anchor isn't possible). */
+	stepId: string | null;
+	dueAnchorStepId?: string | null;
+	dueSourceFieldId?: string | null;
+}): Promise<void> {
+	if (
+		args.dueAnchorStepId !== undefined &&
+		args.dueAnchorStepId !== null
+	) {
+		if (args.stepId !== null && args.dueAnchorStepId === args.stepId) {
+			throw new WorkflowEngineError(
+				"DUE_ANCHOR_SELF_REFERENCE",
+				"A step cannot anchor on itself -- pick another step or clear dueAnchorStepId.",
+				{ stepId: args.stepId },
+			);
+		}
+		const anchor = await getStepWithVersion(args.dueAnchorStepId);
+		if (!anchor || anchor.version.id !== args.versionId) {
+			throw new WorkflowEngineError(
+				"DUE_ANCHOR_INVALID",
+				"dueAnchorStepId must reference a step in the same workflow version.",
+				{ dueAnchorStepId: args.dueAnchorStepId, versionId: args.versionId },
+			);
+		}
+	}
+	if (
+		args.dueSourceFieldId !== undefined &&
+		args.dueSourceFieldId !== null
+	) {
+		const src = await getFieldWithVersion(args.dueSourceFieldId);
+		if (!src || src.version.id !== args.versionId) {
+			throw new WorkflowEngineError(
+				"DUE_SOURCE_FIELD_INVALID",
+				"dueSourceFieldId must reference a field in the same workflow version.",
+				{ dueSourceFieldId: args.dueSourceFieldId, versionId: args.versionId },
+			);
+		}
+		if (src.field.fieldType !== "date") {
+			throw new WorkflowEngineError(
+				"DUE_SOURCE_FIELD_NOT_DATE",
+				`dueSourceFieldId must reference a 'date' field, not '${src.field.fieldType}'.`,
+				{
+					dueSourceFieldId: args.dueSourceFieldId,
+					actualFieldType: src.field.fieldType,
+				},
+			);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Step ops
 // ---------------------------------------------------------------------------
 
@@ -108,6 +181,16 @@ export async function createStep(
 	input: CreateStepInput,
 ): Promise<{ id: string }> {
 	await assertVersionIsDraft(ctx, input.workflowVersionId);
+	// Phase 12.2 -- validate dueAnchorStepId / dueSourceFieldId refs if present.
+	// stepId is null here: the step doesn't exist yet, so self-anchor isn't
+	// possible. (The new step's ID hasn't been minted; anchoring on yourself
+	// would require knowing the id ahead of time.)
+	await assertDueRefs({
+		versionId: input.workflowVersionId,
+		stepId: null,
+		dueAnchorStepId: input.dueAnchorStepId,
+		dueSourceFieldId: input.dueSourceFieldId,
+	});
 	return await insertStep(input);
 }
 
@@ -131,7 +214,16 @@ export async function updateStepOp(
 	ctx: StructureContext,
 	input: UpdateStepInput,
 ): Promise<void> {
-	await assertStepEditable(ctx, input.stepId);
+	const { version } = await assertStepEditable(ctx, input.stepId);
+	// Phase 12.2 -- validate dueAnchorStepId / dueSourceFieldId refs if present
+	// in the patch. Skips when neither is being changed (the common case for
+	// title/description/required patches).
+	await assertDueRefs({
+		versionId: version.id,
+		stepId: input.stepId,
+		dueAnchorStepId: input.dueAnchorStepId,
+		dueSourceFieldId: input.dueSourceFieldId,
+	});
 	await updateStep(input);
 }
 
