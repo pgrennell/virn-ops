@@ -37,6 +37,18 @@ vi.mock("@virn/database", () => ({
 	insertWorkflowWithDraft: vi.fn(),
 	updateStep: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
+	// assertStepDueRefs (called from authoring's second pass) reads these via
+	// the same path structure.ts's assertDueRefs does -- stub to return rows
+	// in the same version so the guard passes by default. Individual tests
+	// can override for failure-path coverage if needed.
+	getStepWithVersion: vi.fn(async () => ({
+		step: { id: "st_anchor" },
+		version: { id: "ver_1" },
+	})),
+	getFieldWithVersion: vi.fn(async () => ({
+		field: { id: "fld_src", fieldType: "date" },
+		version: { id: "ver_1" },
+	})),
 }));
 
 // Anthropic SDK isn't loaded in tests; the lib imports VIRN_AI_MODEL +

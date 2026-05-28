@@ -148,6 +148,20 @@ function normalizeDuePatch<T extends PatchWithDueRule>(patch: T): T {
 	return out;
 }
 
+/** Exported under an authoring-specific name so the AI authoring lib can route its
+ * second-pass updateStep writes through the same guard as the public structure
+ * API. Same body as the local `assertDueRefs` helper used by createStep +
+ * updateStepOp; kept inline (not refactored to call this) to avoid a redundant
+ * function-indirection on the hot path. */
+export async function assertStepDueRefs(args: {
+	versionId: string;
+	stepId: string | null;
+	dueAnchorStepId?: string | null;
+	dueSourceFieldId?: string | null;
+}): Promise<void> {
+	return assertDueRefs(args);
+}
+
 async function assertDueRefs(args: {
 	versionId: string;
 	/** The step being patched. Used to reject self-anchor. For createStep this

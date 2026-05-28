@@ -37,6 +37,7 @@ import { VIRN_AI_MODEL, getAnthropicClient } from "@virn/ai";
 import { adapters, type EntitySchemaForAI } from "../../../entities/adapters";
 import { autoSlugFromLabel, validateKeyShape } from "../field-key";
 import { WorkflowEngineError } from "../errors";
+import { assertStepDueRefs } from "../structure";
 import {
 	type AuthoredWorkflow,
 	AuthoredWorkflowSchema,
@@ -299,9 +300,10 @@ export async function authorWorkflow(
 		// 6b. Kickoff fields (stepId = null). Reserve all kickoff keys in `takenKeys`
 		// FIRST so the model can't accidentally have a kickoff and a step field land
 		// on the same auto-slug after normalization (Invariant #5: shared namespace).
-		// Capture each field's id keyed by both the model-emitted key and the
-		// normalized one so the 6d second pass can resolve dueSourceFieldKey
-		// regardless of which form the model used.
+		// fieldIdByKey is indexed by the MODEL'S RAW key (f.key) -- not the normalized
+		// one -- because dueSourceFieldKey references in the model's output use the
+		// same raw key the model emitted on the field. assertAuthoredWorkflowReferences
+		// already rejected duplicate raw keys upstream, so f.key is unique here.
 		const takenKeys = new Set<string>();
 		const fieldIdByKey = new Map<string, string>();
 		let fieldCount = 0;
@@ -319,8 +321,7 @@ export async function authorWorkflow(
 			};
 			const fieldRow = await insertField(payload, tx);
 			fieldCount++;
-			fieldIdByKey.set(key, fieldRow.id);
-			if (f.key !== key) fieldIdByKey.set(f.key, fieldRow.id);
+			fieldIdByKey.set(f.key, fieldRow.id);
 		}
 
 		// 6c. Steps + step fields. Anchor + source-field refs are deferred to a
@@ -366,17 +367,19 @@ export async function authorWorkflow(
 				};
 				const fieldRow = await insertField(payload, tx);
 				fieldCount++;
-				// Track BOTH the original (model-emitted) key and the normalized one
-				// so the second pass can resolve a dueSourceFieldKey whether the
-				// model used the raw key or the post-normalization one.
-				fieldIdByKey.set(key, fieldRow.id);
-				if (f.key !== key) fieldIdByKey.set(f.key, fieldRow.id);
+				// Index by the model's RAW key (same as kickoff loop) so the 6d
+				// second pass resolves dueSourceFieldKey deterministically.
+				fieldIdByKey.set(f.key, fieldRow.id);
 			}
 		}
 
 		// 6d. Second pass -- resolve dueAnchorStepId + dueSourceFieldId references
 		// now that every step + field has an id. Only steps with the relevant
-		// dueType get touched; the rest skip with no DB write.
+		// dueType get touched; the rest skip with no DB write. Each resolved ref
+		// goes through assertStepDueRefs before the updateStep write -- the same
+		// guard the public structure.updateStepOp uses -- so authoring can't
+		// smuggle a cross-version anchor / self-anchor / non-date source past the
+		// invariants even if assertAuthoredWorkflowReferences ever loosens.
 		for (const [si, s] of authored.steps.entries()) {
 			const stepId = stepIdByIndex[si];
 			if (!stepId) continue;
@@ -384,17 +387,25 @@ export async function authorWorkflow(
 			if (dueType === "offset_from_step") {
 				const idx = s.dueAnchorStepIndex;
 				if (typeof idx === "number" && idx >= 0 && idx < stepIdByIndex.length) {
-					await updateStep(
-						{ stepId, dueAnchorStepId: stepIdByIndex[idx] ?? null },
-						tx,
-					);
+					const dueAnchorStepId = stepIdByIndex[idx] ?? null;
+					await assertStepDueRefs({
+						versionId,
+						stepId,
+						dueAnchorStepId,
+					});
+					await updateStep({ stepId, dueAnchorStepId }, tx);
 				}
 			} else if (dueType === "from_date_field") {
 				const key = s.dueSourceFieldKey;
 				if (typeof key === "string" && key.length > 0) {
-					const sourceFieldId = fieldIdByKey.get(key) ?? null;
-					if (sourceFieldId) {
-						await updateStep({ stepId, dueSourceFieldId: sourceFieldId }, tx);
+					const dueSourceFieldId = fieldIdByKey.get(key) ?? null;
+					if (dueSourceFieldId) {
+						await assertStepDueRefs({
+							versionId,
+							stepId,
+							dueSourceFieldId,
+						});
+						await updateStep({ stepId, dueSourceFieldId }, tx);
 					}
 				}
 			}
