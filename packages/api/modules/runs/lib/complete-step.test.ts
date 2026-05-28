@@ -15,6 +15,24 @@ vi.mock("@virn/database", () => ({
 	// mocked above) record their calls. Real transactional semantics are exercised by
 	// integration tests.
 	withTransaction: vi.fn(async (fn) => fn({} as never)),
+	// Phase 12.2 -- recompute helpers transitively imported via ./launch-run by
+	// complete-step.ts. Default each to "no-op / empty result" so the existing
+	// completion tests stay isolated from the recompute branch (covered by its
+	// own tests in launch-run.test.ts).
+	findDueRecomputeTargets: vi.fn(async () => []),
+	getDateFieldValuesForStepInRun: vi.fn(async () => []),
+	updateRunStepDueAt: vi.fn(async () => undefined),
+	// launch-run.ts also pulls these via its own import block; safe to expose as
+	// vi.fn() shims so module load succeeds when the test's @virn/database mock
+	// shadows the real one.
+	getAgentForOrg: vi.fn(),
+	getLatestPublishedWorkflowVersion: vi.fn(),
+	getVendorContactForLaunch: vi.fn(),
+	getVersionLaunchBundle: vi.fn(),
+	getWorkflowForOrg: vi.fn(),
+	getWorkflowVersionById: vi.fn(),
+	insertRunSnapshot: vi.fn(),
+	validateFieldValue: vi.fn((_field, v) => v),
 }));
 
 import {
@@ -56,7 +74,7 @@ const RS_PENDING_AS_ASSIGNEE = {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	vi.mocked(markRunStepCompleted).mockResolvedValue(undefined);
+	vi.mocked(markRunStepCompleted).mockResolvedValue({ completedAt: new Date() });
 	// markRunCompleted now returns a boolean indicating whether it actually
 	// transitioned the row from 'active' to 'completed' (G3 race fix). Default
 	// the mock to `true` (transition succeeded) — tests that exercise the

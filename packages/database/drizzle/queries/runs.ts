@@ -24,6 +24,7 @@ import {
 	runRoleAssignment,
 	runStep,
 	runStepAssignee,
+	step,
 	stepDependency,
 	workflow,
 	type fieldType as fieldTypeEnum,
@@ -699,25 +700,154 @@ export async function findIncompleteStopDependencies(
 	return depStepIds.filter((id) => !completedSet.has(id));
 }
 
+// ---------------------------------------------------------------------------
+// dueAt recompute (post step completion -- offset_from_step + from_date_field)
+// ---------------------------------------------------------------------------
+
+/** Shape returned by `findDueRecomputeTargets`. The four `due*` columns mirror the
+ * shape `computeStepDueAt` expects so callers can hand them straight through. */
+export interface DueRecomputeTarget {
+	runStepId: string;
+	stepId: string;
+	dueType: "offset_from_step" | "from_date_field";
+	dueOffsetDays: number | null;
+	dueAnchorStepId: string | null;
+	dueSourceFieldId: string | null;
+}
+
+/** Find unresolved runSteps in `runId` whose definition step depends on EITHER
+ * `completedStepId` (via `dueType='offset_from_step'`) OR any field in
+ * `sourceFieldIds` (via `dueType='from_date_field'`). "Unresolved" = `runStep.dueAt
+ * IS NULL` AND `status != 'completed'` -- we only patch deadlines that were
+ * deferred at launch, never overwrite a resolved one (preserves the invariant
+ * that a non-null dueAt is sticky once set). */
+export async function findDueRecomputeTargets(
+	args: {
+		runId: string;
+		completedStepId: string | null;
+		sourceFieldIds: string[];
+	},
+	executor: DbExecutor = db,
+): Promise<DueRecomputeTarget[]> {
+	const orParts: ReturnType<typeof and>[] = [];
+	if (args.completedStepId) {
+		orParts.push(
+			and(
+				eq(step.dueType, "offset_from_step"),
+				eq(step.dueAnchorStepId, args.completedStepId),
+			),
+		);
+	}
+	if (args.sourceFieldIds.length > 0) {
+		orParts.push(
+			and(
+				eq(step.dueType, "from_date_field"),
+				inArray(step.dueSourceFieldId, args.sourceFieldIds),
+			),
+		);
+	}
+	if (orParts.length === 0) return [];
+	const rows = await executor
+		.select({
+			runStepId: runStep.id,
+			stepId: step.id,
+			dueType: step.dueType,
+			dueOffsetDays: step.dueOffsetDays,
+			dueAnchorStepId: step.dueAnchorStepId,
+			dueSourceFieldId: step.dueSourceFieldId,
+		})
+		.from(runStep)
+		.innerJoin(step, eq(step.id, runStep.stepId))
+		.where(
+			and(
+				eq(runStep.runId, args.runId),
+				sql`${runStep.dueAt} IS NULL`,
+				sql`${runStep.status} != 'completed'`,
+				orParts.length === 1 ? orParts[0]! : sql`(${orParts[0]} OR ${orParts[1]})`,
+			),
+		);
+	return rows
+		.filter(
+			(r): r is DueRecomputeTarget =>
+				r.dueType === "offset_from_step" || r.dueType === "from_date_field",
+		)
+		.map((r) => ({
+			runStepId: r.runStepId,
+			stepId: r.stepId,
+			dueType: r.dueType,
+			dueOffsetDays: r.dueOffsetDays,
+			dueAnchorStepId: r.dueAnchorStepId,
+			dueSourceFieldId: r.dueSourceFieldId,
+		}));
+}
+
+/** Return all date fields belonging to definition step `stepId` with their current
+ * values from `field_value` for the given run. Used by the recompute path to seed
+ * `dateFieldValues` for from_date_field dependents whose source lives on the
+ * just-completed step. Fields with no value (not yet filled) are still returned
+ * with `value: null` so the caller can distinguish "no field of that id" from
+ * "field exists but unfilled" -- the resolver treats both as "defer." */
+export async function getDateFieldValuesForStepInRun(
+	runId: string,
+	stepId: string,
+	executor: DbExecutor = db,
+): Promise<Array<{ fieldId: string; fieldType: string; value: unknown }>> {
+	const rows = await executor
+		.select({
+			fieldId: field.id,
+			fieldType: field.fieldType,
+			value: fieldValue.value,
+		})
+		.from(field)
+		.leftJoin(
+			fieldValue,
+			and(eq(fieldValue.fieldId, field.id), eq(fieldValue.runId, runId)),
+		)
+		.where(and(eq(field.stepId, stepId), eq(field.fieldType, "date")));
+	return rows.map((r) => ({
+		fieldId: r.fieldId,
+		fieldType: r.fieldType,
+		value: r.value,
+	}));
+}
+
+/** Patch a runStep's `dueAt`. Idempotent -- callers should only invoke when they
+ * have a resolved (non-null) value; the recompute path skips no-op writes. */
+export async function updateRunStepDueAt(
+	args: { runStepId: string; dueAt: Date },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
+		.update(runStep)
+		.set({ dueAt: args.dueAt })
+		.where(eq(runStep.id, args.runStepId));
+}
+
 /** Mark a runStep completed. `completedBy` is nullable -- a guest participant has no
  * Better Auth user id; the actor's identity for guests is captured in audit/activity
  * metadata (participantId) instead. No-op if already completed (caller should check
- * first to avoid duplicate audit/activity writes). */
+ * first to avoid duplicate audit/activity writes).
+ *
+ * Returns the `completedAt` timestamp the row was set to -- the caller may need it
+ * to seed the dueAt recompute for downstream offset_from_step dependents (so the
+ * recompute uses the SAME timestamp the audit row records). */
 export async function markRunStepCompleted(
 	input: {
 		runStepId: string;
 		completedBy: string | null;
 	},
 	executor: DbExecutor = db,
-): Promise<void> {
+): Promise<{ completedAt: Date }> {
+	const completedAt = new Date();
 	await executor
 		.update(runStep)
 		.set({
 			status: "completed",
-			completedAt: new Date(),
+			completedAt,
 			completedBy: input.completedBy,
 		})
 		.where(eq(runStep.id, input.runStepId));
+	return { completedAt };
 }
 
 /** Count runSteps grouped by status for cascade-to-run-complete. Returns whether every

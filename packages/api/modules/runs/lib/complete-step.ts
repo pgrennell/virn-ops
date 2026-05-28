@@ -30,6 +30,7 @@ import {
 } from "@virn/database";
 
 import { RunEngineError } from "./errors";
+import { recomputeDueAtAfterStepCompletion } from "./launch-run";
 
 export interface CompleteStepContext {
 	organizationId: string;
@@ -182,7 +183,25 @@ export async function completeRunStep(
 	// `WHERE status = 'active'` clause + boolean return prevents duplicate cascade audits
 	// when two concurrent calls both observe `areAllRequiredRunStepsComplete === true`.
 	const runCompleted = await withTransaction(async (tx) => {
-		await markRunStepCompleted({ runStepId, completedBy: ctx.userId ?? null }, tx);
+		const { completedAt } = await markRunStepCompleted(
+			{ runStepId, completedBy: ctx.userId ?? null },
+			tx,
+		);
+
+		// Phase 12.2 -- recompute dueAt for downstream dependents. Runs INSIDE the
+		// step-complete transaction so a failure rolls back the whole completion
+		// (preferable to "step recorded as done but its dependents still deferred
+		// forever"). No-op when rs.stepId is null (orphan steps from a deleted
+		// definition step, defensive). Safe to call before any cascade check: it
+		// only touches unresolved dependents in this run, never the just-completed
+		// row itself.
+		if (rs.stepId) {
+			await recomputeDueAtAfterStepCompletion(
+				{ runId: rs.run.id, completedStepId: rs.stepId, completedAt },
+				tx,
+			);
+		}
+
 		await writeAuditAndActivity(
 			{
 				organizationId: ctx.organizationId,

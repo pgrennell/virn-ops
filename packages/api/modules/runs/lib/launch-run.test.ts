@@ -12,20 +12,31 @@ vi.mock("@virn/database", () => ({
 	// validateFieldValue is pure -- test it via real behavior, no need to mock unless the
 	// test specifically exercises validation paths. We mock to a passthrough.
 	validateFieldValue: vi.fn((_field: unknown, value: unknown) => value),
+	// Phase 12.2 dueAt recompute helpers (used by recomputeDueAtAfterStepCompletion).
+	findDueRecomputeTargets: vi.fn(async () => []),
+	getDateFieldValuesForStepInRun: vi.fn(async () => []),
+	updateRunStepDueAt: vi.fn(async () => undefined),
 }));
 
 import {
+	findDueRecomputeTargets,
 	getAgentForOrg,
+	getDateFieldValuesForStepInRun,
 	getLatestPublishedWorkflowVersion,
 	getVendorContactForLaunch,
 	getVersionLaunchBundle,
 	getWorkflowForOrg,
 	getWorkflowVersionById,
 	insertRunSnapshot,
+	updateRunStepDueAt,
 	writeAuditAndActivity,
 } from "@virn/database";
 
-import { launchRun, computeStepDueAt } from "./launch-run";
+import {
+	computeStepDueAt,
+	launchRun,
+	recomputeDueAtAfterStepCompletion,
+} from "./launch-run";
 
 const CTX = { organizationId: "org_1", userId: "user_1" };
 
@@ -1019,5 +1030,144 @@ describe("launchRun -- agent launcher (Phase 11a.2)", () => {
 		expect(arg.stepAssignments).toEqual([
 			{ stepId: "step_a", participantTempKey: agentParts[0].tempKey },
 		]);
+	});
+});
+
+// ============================================================================
+// Phase 12.2 -- recomputeDueAtAfterStepCompletion
+// ============================================================================
+
+describe("recomputeDueAtAfterStepCompletion", () => {
+	const STUB_TX = {} as never;
+	const ARGS = {
+		runId: "run_1",
+		completedStepId: "step_anchor",
+		completedAt: new Date("2026-05-25T18:00:00Z"),
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([]);
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([]);
+		vi.mocked(updateRunStepDueAt).mockResolvedValue(undefined);
+	});
+
+	it("no-op when no dependents found", async () => {
+		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
+		expect(result.patchedRunStepIds).toEqual([]);
+		expect(updateRunStepDueAt).not.toHaveBeenCalled();
+	});
+
+	it("patches offset_from_step dependents with completedAt + offset", async () => {
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([
+			{
+				runStepId: "rs_dep",
+				stepId: "step_dep",
+				dueType: "offset_from_step",
+				dueOffsetDays: 2,
+				dueAnchorStepId: "step_anchor",
+				dueSourceFieldId: null,
+			},
+		]);
+
+		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
+
+		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
+		expect(updateRunStepDueAt).toHaveBeenCalledTimes(1);
+		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
+		expect(arg.runStepId).toBe("rs_dep");
+		expect(arg.dueAt.getTime() - ARGS.completedAt.getTime()).toBe(
+			2 * 24 * 60 * 60 * 1000,
+		);
+	});
+
+	it("patches from_date_field dependents from the completed step's date fields", async () => {
+		// Step S has date field F filled to 2026-06-10. Dependent D's source = F.
+		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([
+			{ fieldId: "fld_source", fieldType: "date", value: "2026-06-10" },
+		]);
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([
+			{
+				runStepId: "rs_dep",
+				stepId: "step_dep",
+				dueType: "from_date_field",
+				dueOffsetDays: 3,
+				dueAnchorStepId: null,
+				dueSourceFieldId: "fld_source",
+			},
+		]);
+
+		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
+
+		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
+		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
+		expect(arg.dueAt.toISOString().startsWith("2026-06-13")).toBe(true);
+	});
+
+	it("forwards filled source field ids to findDueRecomputeTargets", async () => {
+		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([
+			{ fieldId: "fld_a", fieldType: "date", value: "2026-06-01" },
+			{ fieldId: "fld_b", fieldType: "date", value: null }, // unfilled, skipped
+			{ fieldId: "fld_c", fieldType: "text", value: "ignored" }, // non-date, skipped
+		]);
+
+		await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
+
+		expect(findDueRecomputeTargets).toHaveBeenCalledTimes(1);
+		const [arg] = vi.mocked(findDueRecomputeTargets).mock.calls[0];
+		expect(arg.completedStepId).toBe("step_anchor");
+		expect(arg.sourceFieldIds).toEqual(["fld_a"]); // only the resolvable ones
+	});
+
+	it("skips targets whose resolver returns null (defensive)", async () => {
+		// from_date_field dependent but its source field isn't in the dateFieldValues
+		// map (the only date field on the completed step is a different id).
+		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([
+			{ fieldId: "fld_other", fieldType: "date", value: "2026-06-10" },
+		]);
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([
+			{
+				runStepId: "rs_dep",
+				stepId: "step_dep",
+				dueType: "from_date_field",
+				dueOffsetDays: 3,
+				dueAnchorStepId: null,
+				dueSourceFieldId: "fld_missing",
+			},
+		]);
+
+		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
+
+		expect(result.patchedRunStepIds).toEqual([]);
+		expect(updateRunStepDueAt).not.toHaveBeenCalled();
+	});
+
+	it("handles a mixed batch (offset_from_step + from_date_field together)", async () => {
+		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([
+			{ fieldId: "fld_src", fieldType: "date", value: "2026-06-15" },
+		]);
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([
+			{
+				runStepId: "rs_offset",
+				stepId: "step_offset",
+				dueType: "offset_from_step",
+				dueOffsetDays: 1,
+				dueAnchorStepId: "step_anchor",
+				dueSourceFieldId: null,
+			},
+			{
+				runStepId: "rs_field",
+				stepId: "step_field",
+				dueType: "from_date_field",
+				dueOffsetDays: 7,
+				dueAnchorStepId: null,
+				dueSourceFieldId: "fld_src",
+			},
+		]);
+
+		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
+
+		expect(result.patchedRunStepIds).toEqual(["rs_offset", "rs_field"]);
+		expect(updateRunStepDueAt).toHaveBeenCalledTimes(2);
 	});
 });

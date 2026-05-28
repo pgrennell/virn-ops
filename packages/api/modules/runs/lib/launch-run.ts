@@ -17,7 +17,10 @@
 //   - automation rule firing -> Phase 6
 
 import {
+	type DbExecutor,
+	findDueRecomputeTargets,
 	getAgentForOrg,
+	getDateFieldValuesForStepInRun,
 	getLatestPublishedWorkflowVersion,
 	getVendorContactForLaunch,
 	getVersionLaunchBundle,
@@ -30,6 +33,7 @@ import {
 	type SnapshotRoleAssignmentRow,
 	type SnapshotStepAssignmentRow,
 	type SnapshotStepRow,
+	updateRunStepDueAt,
 	validateFieldValue,
 	writeAuditAndActivity,
 } from "@virn/database";
@@ -587,4 +591,103 @@ export function collectDateFieldValues(
 		out.set(p.fieldId, d);
 	}
 	return out;
+}
+
+// ---------------------------------------------------------------------------
+// dueAt recompute on step completion
+// ---------------------------------------------------------------------------
+
+export interface RecomputeDueAtArgs {
+	runId: string;
+	/** Definition step id of the run-step that just completed. Drives the
+	 * offset_from_step branch (find dependents whose dueAnchorStepId points here). */
+	completedStepId: string;
+	/** Wall-clock time the completion was recorded. Threaded so the recompute
+	 * uses the SAME timestamp the audit row records (markRunStepCompleted returns
+	 * this for that reason). */
+	completedAt: Date;
+}
+
+export interface RecomputeDueAtResult {
+	/** runStep ids that had their dueAt patched. Length 0 = no dependents
+	 * resolved (either no dependents in the run, or their inputs still aren't
+	 * available). */
+	patchedRunStepIds: string[];
+}
+
+/** Patch dueAt for any unresolved dependents of the just-completed step. Two
+ * branches handled together so the dependent set is materialized once:
+ *
+ *   1. offset_from_step where dueAnchorStepId === completedStepId
+ *      Resolution: completedAt + dueOffsetDays.
+ *   2. from_date_field where dueSourceFieldId points at a date field on the
+ *      completed step that now has a value.
+ *      Resolution: sourceFieldValue + dueOffsetDays.
+ *
+ * Called inside completeRunStep's transaction (same `tx`), so a recompute
+ * failure rolls back the step completion too -- preferable to a half-applied
+ * state where the audit shows "completed" but downstream deadlines stay
+ * deferred forever.
+ *
+ * Important invariants the recompute maintains:
+ *   - Only patches dueAt when previously NULL (findDueRecomputeTargets filters
+ *     on that). A resolved deadline is sticky.
+ *   - Only resolves into non-null new values. A target whose resolver returns
+ *     null is skipped (e.g. anchor completedAt missing -- shouldn't happen in
+ *     this path, but defensive).
+ *   - Skips already-completed runSteps (findDueRecomputeTargets filters them
+ *     out). Setting a deadline on a completed step would be misleading. */
+export async function recomputeDueAtAfterStepCompletion(
+	args: RecomputeDueAtArgs,
+	executor: DbExecutor,
+): Promise<RecomputeDueAtResult> {
+	// 1. Pull date-field values for the completed step (so from_date_field
+	// dependents whose source lives here can resolve).
+	const stepDateFields = await getDateFieldValuesForStepInRun(
+		args.runId,
+		args.completedStepId,
+		executor,
+	);
+	const dateFieldValues = collectDateFieldValues(stepDateFields);
+	const filledSourceFieldIds = Array.from(dateFieldValues.keys());
+
+	// 2. Find unresolved targets matching EITHER branch.
+	const targets = await findDueRecomputeTargets(
+		{
+			runId: args.runId,
+			completedStepId: args.completedStepId,
+			sourceFieldIds: filledSourceFieldIds,
+		},
+		executor,
+	);
+
+	if (targets.length === 0) return { patchedRunStepIds: [] };
+
+	// 3. Resolve each target with the right context branch and patch.
+	// We don't have the run's startedAt here, but the only branches we resolve
+	// in the recompute path are offset_from_step + from_date_field -- neither
+	// uses runStartedAt. Pass the completedAt as a defensible placeholder; it's
+	// ignored by the relevant branches.
+	const ctx = {
+		dateFieldValues,
+		anchorCompletedAt: args.completedAt,
+	};
+
+	const patchedRunStepIds: string[] = [];
+	for (const t of targets) {
+		const due = computeStepDueAt(
+			args.completedAt,
+			{
+				dueType: t.dueType,
+				dueOffsetDays: t.dueOffsetDays,
+				dueAnchorStepId: t.dueAnchorStepId,
+				dueSourceFieldId: t.dueSourceFieldId,
+			},
+			ctx,
+		);
+		if (due === null) continue;
+		await updateRunStepDueAt({ runStepId: t.runStepId, dueAt: due }, executor);
+		patchedRunStepIds.push(t.runStepId);
+	}
+	return { patchedRunStepIds };
 }
