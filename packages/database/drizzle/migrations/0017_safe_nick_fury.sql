@@ -1,0 +1,2 @@
+CREATE TYPE "public"."step_provenance" AS ENUM('ai_generated', 'manually_edited');--> statement-breakpoint
+ALTER TABLE "step" ADD COLUMN "provenance" "step_provenance" DEFAULT 'manually_edited' NOT NULL;

@@ -72,6 +72,20 @@ export const scheduleFrequency = pgEnum("schedule_frequency", [
   "yearly",
 ]);
 
+// D-040 -- per-step regeneration safety. Tracks whether a step was last touched
+// by AI authoring (`ai_generated`) or by a human in the manual builder
+// (`manually_edited`). `agents.regenerateStep` (when it ships in v1.5b /
+// Phase 12) refuses to read or write any sibling step with
+// `manually_edited` -- the contract that protects manual edits from silent
+// overwrite during partial regeneration. Default `manually_edited` is the
+// safe choice for existing rows + manual builder inserts; AI authoring opts
+// in explicitly. Shared with playbook_step.provenance when Playbooks schema
+// ships (Phase 9.6).
+export const stepProvenance = pgEnum("step_provenance", [
+  "ai_generated",
+  "manually_edited",
+]);
+
 // Domain roles for step assignment (Approver, Initiator...). Distinct from Better Auth org
 // roles, which govern app-level permissions.
 export const workflowRole = pgTable(
@@ -217,6 +231,12 @@ export const step = pgTable(
     dueOffsetDays: integer("due_offset_days"),
     dueAnchorStepId: text("due_anchor_step_id"),
     dueSourceFieldId: text("due_source_field_id"),
+    // D-040 partial-regeneration contract. AI-emitted steps via
+    // `agents.authorWorkflow` / `agents.regenerateStep` write `ai_generated`;
+    // any manual edit through structure.updateStepOp flips back to
+    // `manually_edited` (irreversible in v1.5). The future regenerate procedure
+    // refuses to touch siblings with `manually_edited`.
+    provenance: stepProvenance("provenance").notNull().default("manually_edited"),
     ...timestamps,
   },
   (t) => [

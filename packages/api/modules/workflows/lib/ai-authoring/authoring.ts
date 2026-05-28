@@ -349,6 +349,11 @@ export async function authorWorkflow(
 				// dueAnchorStepId / dueSourceFieldId after the full id map is built.
 				dueType: s.dueType ?? "none",
 				dueOffsetDays: s.dueOffsetDays ?? null,
+				// D-040 -- AI authoring emits ai_generated. Manual edits through
+				// structure.updateStepOp flip this back to manually_edited; the
+				// second-pass updateStep calls below leave provenance untouched
+				// (they're still part of AI authoring, not manual edits).
+				provenance: "ai_generated",
 			};
 			const stepRow = await insertStep(stepInput, tx);
 			stepIdByIndex.push(stepRow.id);

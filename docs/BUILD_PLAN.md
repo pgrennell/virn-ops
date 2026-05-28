@@ -410,6 +410,21 @@ template content:
   `getVersionEditBundle`). Workflow-level lifecycle, **not** version-level — snapshot
   / publish semantics (D-019) unchanged. Audit row on every state transition. We ship
   the flag, not an in-house review service.
+- **Step provenance (D-040).** Add `step_provenance pg_enum('ai_generated','manually_edited')`
+  + `step.provenance step_provenance NOT NULL DEFAULT 'manually_edited'`. The enum
+  is the shared one reused by Phase 9.6 (`playbook_step.provenance`). Default
+  `'manually_edited'` covers backfill — all existing rows were manually authored.
+  Behavior enforcement lives in Phase 12 (`agents.regenerateStep` refuses to write
+  any sibling step with `provenance='manually_edited'`). The "AI" chip on step
+  cards in the builder also lights up in Phase 12.
+- **Builder top bar + Template Variables sidebar + Edit Action modal (R2 + R4 + C5
+  lifts from the 2026-05-28 PRD review).** Per canonical PRD §6.2 + §6.3: Author
+  view gains a persistent top bar (Enabled/Disabled toggle + Scope chip dropdown
+  + Review-state banner); bottom-left Template Variables sidebar (static token
+  list from `EntityAdapter.schemaForAI()`, drag-drop into Tiptap, no live PMS
+  hydration); per-step Edit Action modal pattern (existing Pass 3 slide-in panel
+  enhanced with `{}` Template insert button + inline Regenerate). UI work only —
+  no new server contracts beyond the procedures already in v1.5a scope.
 - **Property-ops pack content refresh (the first Vertical Pack).** Per D-034: STR
   pack remains v1 wedge; pack ordering reframe defers Commercial PM to post-v1. The
   Vertical Pack primitive (per PRD §1.1, §6.5) bundles entity schemas + workflow
@@ -439,12 +454,23 @@ Schema migration + UI + curated pack-content seed data. No new infrastructure.
 
 See [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) for full spec. Schema-only chunk; no
 procedures, no UI, no Inngest functions. Sequenced *after* Phase 9.5 so it can
-reuse the v1.5a artifacts (`entity_set`, `review_state` enum, `ai_authoring_prompt`
-table, `require_concierge_review` flag) rather than redeclare them.
+reuse the v1.5a artifacts (`entity_set`, `review_state` enum, `step_provenance`
+enum, `ai_authoring_prompt` table, `require_concierge_review` flag) rather than
+redeclare them.
 
 - New tables: `playbook`, `playbook_version`, `playbook_step`, `playbook_run`,
   `playbook_run_step` (org-scoped per D-006; snapshot-immutable on publish per
   D-018; reuse `review_state` lifecycle from v1.5a).
+- **`playbook.is_active boolean NOT NULL DEFAULT false`** — Enabled/Disabled toggle
+  surfaced on the Playbook builder top bar per [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md)
+  §6.1. Default `false` so newly authored Playbooks must be explicitly enabled
+  before the Inngest dispatcher will fire them (per §6.4). Behavior gate lives
+  in Phase 18b; column lands here so the migration window stays clean.
+- **`playbook_step.provenance step_provenance NOT NULL DEFAULT 'manually_edited'`**
+  — D-040 partial-regeneration contract for `agents.regeneratePlaybookStep`.
+  Reuses the `step_provenance` enum declared in v1.5a / Phase 9.5 (single enum
+  across Workflows + Playbooks); does **not** redeclare. Behavior enforcement
+  lives in Phase 18c.
 - New enums: `playbook_step_type` (`wait_for_duration` / `wait_for_event` /
   `launch_workflow` / `send_notification` / `branch_on_data_set` /
   `write_to_data_set`); `playbook_lifecycle_event` (`run.completed` /
@@ -516,6 +542,31 @@ bridge from day one.
 - **Permission resolution.** Author landing in `?view=read` sees a toggle; reader
   landing in `?view=author` is redirected to `?view=read`. Detail page resolves
   view-mode default based on viewer permission + URL param.
+- **Constrained-viewport flowchart render in Read view (R5 lift, D-039 — 2026-05-28).**
+  Per canonical PRD §6.4: Read view includes a read-only flowchart visualization
+  alongside the SOP/KB markdown rendering. React Flow embed, ~600px column, vertical-
+  stack layout with one branch column, deterministic (no `workflow_canvas_layout` table
+  per D-041 — no canvas authoring in v1.5). Node types mirror step types
+  (task / approval / heading / one_off); no TCA color palette (that framing was rejected
+  for Workflows per D-039). Clicking a node scrolls the SOP/KB markdown to the matching
+  step. Authoring-grade canvas is Phase 13+ behind ADR override of D-039 (see v1.1+
+  list below).
+- **Static execution timeline (R5 cont.).** When Read view opens with a `runId` query
+  param (e.g. linked from an Active Run card), the right column flips from generic
+  SOP markdown to a per-run timeline sourced from `activity_event` filtered by
+  `entity_type='run' AND entity_id=<runId>`. Static text, not animated coloring —
+  the v2.0 PRD's "real-time colored flowchart execution overlay" was rejected
+  per the screenshot-honest review (Besty reference shows static diagram + text
+  timeline, not animation).
+- **Active Run right-rail card (R6 lift — 2026-05-28).** Entity-context pages
+  (listing detail, vendor detail, work-order detail) gain a compact right-rail
+  card titled "Active Run" that surfaces in-flight `run` rows joined on entity
+  participation, plus `playbook_run` rows (per PRD_PLAYBOOKS §6.5) when Playbooks
+  ship in Phase 18b. Card row click on a Workflow run opens `/runs/[runId]`
+  (Execute view); on a Playbook run opens `/playbooks/[id]?view=read&runId=<id>`
+  (read view with execute-view timeline overlay). The card replaces the v2.0
+  PRD's rejected thread-adjacent inbox monitor and honors D-024 (virn-ops does
+  not build a symmetric PM-side inbox surface).
 
 ### Phase 11 — Agent-safe action surface (S-01a) — the unfair advantage
 
@@ -884,6 +935,23 @@ schema-emit instruction; per-customer instructions in the system slot).
   reproducibility) plus org/user/prompt/source/response/model/timestamp;
   `workflow.ai_authoring_prompt_id` FK lets the builder header link back to the
   source prompt.
+- **Per-step provenance + partial-regeneration contract (D-040, 2026-05-28).**
+  AI-emitted steps set `step.provenance = 'ai_generated'` (column lands in
+  Phase 9.5). `agents.regenerateStep` enforces the contract server-side: refuses
+  to write any sibling step where `provenance = 'manually_edited'`. Builder
+  surfaces a preview before regen fires ("Regenerate will leave manual edits to
+  steps 2, 5 untouched") and an "AI" chip on `ai_generated` step cards.
+- **Per-step Edit Action modal pattern (C5 lift, 2026-05-28).** Per canonical
+  PRD §6.3, the existing Phase 5 Pass 3 slide-in panel gains a `{}` Template
+  insert button anchored top-right of the Description editor + an inline
+  Regenerate button (fires `agents.regenerateStep`). Reuses Phase 9.5's
+  Template Variables sidebar tokens; no new picker component.
+- **Persistent right-rail Workflow Assistant chat panel (R1 lift, 2026-05-28).**
+  Per canonical PRD §6.3, the editor shell becomes tri-column (left: workflows
+  list, center: builder, right: persistent chat panel). Chat panel wired to
+  `agents.regenerateStep` for mid-edit refinement after the two-pane review
+  closes. Each interaction writes an `ai_authoring_prompt` row — uniform audit
+  with first-generation authoring.
 - **Dogfood profile (per D-034):** STR operator. AI grounding examples skew STR
   per the dogfood lead, but the schema-grounding pipeline is property-type-
   agnostic so the same pipeline serves Commercial/Residential/IT Ops packs when

@@ -349,7 +349,15 @@ export async function updateStepOp(
 		dueAnchorStepId: normalized.dueAnchorStepId,
 		dueSourceFieldId: normalized.dueSourceFieldId,
 	});
-	await updateStep(normalized);
+	// D-040 -- any manual edit through this path flips provenance to
+	// manually_edited (irreversible in v1.5). Adding the field unconditionally
+	// is intentional: it means a "no-op" update (e.g. a debounced save that
+	// happens to send the same value) still flips the bit -- correct semantic
+	// per the spec ("any step edit through the manual builder UI flips the row
+	// to manually_edited"). The future regenerateStep procedure then refuses
+	// to overwrite this step, protecting the operator's intent even when no
+	// content actually changed.
+	await updateStep({ ...normalized, provenance: "manually_edited" });
 }
 
 export async function deleteStepOp(

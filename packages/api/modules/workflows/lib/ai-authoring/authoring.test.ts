@@ -223,6 +223,16 @@ describe("authorWorkflow -- happy path", () => {
 		).resolves.toMatchObject({ workflowId: "wf_1" });
 	});
 
+	it("D-040 -- every AI-emitted step lands with provenance='ai_generated'", async () => {
+		const callClaude = makeStubClaude(validAuthoredJson());
+		await authorWorkflow({ ...CTX, callClaude }, { prompt: "anything" });
+		const calls = vi.mocked(insertStep).mock.calls;
+		expect(calls.length).toBeGreaterThan(0);
+		for (const [arg] of calls) {
+			expect(arg.provenance).toBe("ai_generated");
+		}
+	});
+
 	it("defaults workflow type to procedure when omitted", async () => {
 		const json = JSON.stringify({
 			title: "Untyped workflow",

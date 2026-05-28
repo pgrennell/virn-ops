@@ -223,6 +223,38 @@ describe("updateStepOp -- cheap path for non-due patches", () => {
 	});
 });
 
+describe("updateStepOp -- D-040 provenance flip-back", () => {
+	it("any updateStepOp call flips provenance to manually_edited", async () => {
+		await updateStepOp(CTX, { stepId: "st_1", title: "Renamed" });
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.provenance).toBe("manually_edited");
+	});
+
+	it("flips provenance even when the patch is otherwise a no-op (any-touch semantic)", async () => {
+		// An empty user-facing patch (no actual content change) still flips
+		// because the operator's intent in the manual builder is to claim
+		// ownership of the row -- protecting it from a future regenerate.
+		await updateStepOp(CTX, { stepId: "st_1" });
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.provenance).toBe("manually_edited");
+	});
+
+	it("flips provenance on a due-rule patch too (any path through updateStepOp counts as manual)", async () => {
+		vi.mocked(getStepWithVersion).mockResolvedValue({
+			step: { id: "st_anchor" },
+			version: { id: "ver_1" },
+		} as never);
+		await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "offset_from_step",
+			dueAnchorStepId: "st_anchor",
+			dueOffsetDays: 2,
+		});
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.provenance).toBe("manually_edited");
+	});
+});
+
 describe("createStep -- dueType ref validation at insert time", () => {
 	it("validates dueAnchorStepId against the new step's version", async () => {
 		vi.mocked(getStepWithVersion).mockResolvedValue({

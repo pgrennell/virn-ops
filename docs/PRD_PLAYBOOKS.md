@@ -275,6 +275,7 @@ Playbooks adopt the v1.5c three-views unification commitment ([PRD_WORKFLOW_SOP_
 - `EntityAdapter` TS interface + `ListingAdapter` implementation (v1.5 ships one adapter; future entity types add adapters without schema changes)
 - `ai_authoring_prompt` table (shared provenance for AI-authored Workflows + Playbooks)
 - `organization.require_concierge_review boolean`
+- `step_provenance` enum (`ai_generated | manually_edited`) — declared in v1.5a for Workflows per D-040, reused by `playbook_step.provenance` below
 
 Phase 9.6 (this PRD's schema seam) lands after Phase 9.5 in the build order; the SQL below assumes those v1.5a artifacts already exist.
 
@@ -488,6 +489,9 @@ The Playbook run timeline view (UX §7 Flow D) reads `activity_event` filtered b
 | `actorKind` + `crossProductOrigin` attribution | D-027 | Per-org synthetic system-agent; `crossProductOrigin` propagated from trigger |
 | No Docker | memory feedback | Inngest hosted; no compose changes |
 | Top-level routes must be in `forbiddenOrganizationSlugs` | memory feedback | Adds `playbooks` to [packages/auth/config.ts](../packages/auth/config.ts) + snapshot in the same migration |
+| Step-list canonical; render asymmetry (timeline vs flowchart) is intentional | D-039 | Playbooks were step-list-only per §5 since first draft; D-039 ratified the same posture for Workflows. Playbook Read view renders as a chronological timeline; canonical PRD's Workflow Read view renders as a constrained-viewport flowchart. Same Read-view role, different shape per object semantics. |
+| Per-step regenerate preserves manual edits | D-040 | `playbook_step.provenance` enum (reused from canonical PRD's `step_provenance` enum); `agents.regeneratePlaybookStep` never reads or writes any sibling step with `provenance='manually_edited'`. Manual editing through the Edit Action modal (§6.1) flips a row's provenance back to `'manually_edited'`. |
+| Canvas/layout state lives outside the snapshot | D-041 | No canvas in v1, but the constraint is documented in §15: if Phase 13+ ever ships canvas authoring for Playbooks, layout lives in a separate `playbook_canvas_layout` table keyed by `playbook_id` — never on `playbook_version`. |
 
 ## 11. Phasing
 
@@ -500,6 +504,8 @@ The Playbook run timeline view (UX §7 Flow D) reads `activity_event` filtered b
 Schema-only; no procedures, no UI, no Inngest functions. Goal: lock the Playbook tables (and the `label_overrides` column) before Phase 18 execution work begins.
 
 - Tables + enums per §8.1 (Playbook-specific only — v1.5a primitives are referenced, not redeclared).
+- `playbook.is_active boolean NOT NULL DEFAULT false` column (per the Inngest dispatcher gate in §6.4).
+- `playbook_step.provenance step_provenance NOT NULL DEFAULT 'manually_edited'` column (per D-040; reuses the `step_provenance` enum declared in v1.5a / Phase 9.5 for Workflows).
 - `entity_type` enum additions.
 - `organization.label_overrides` column.
 - `forbiddenOrganizationSlugs` update.
@@ -511,8 +517,11 @@ No business logic yet; no behavior change. Idempotent re-run safe.
 Authoring + read surfaces only. Nothing executes yet — wait steps make a synchronous orchestrator infeasible, so all execution waits for Inngest in 18b.
 
 - oRPC procedures per §8.2 for CRUD, publish, review-state transitions, and `playbooks.dryRender`.
-- Builder UI (vertical step list, side panel config editor, dry-render preview rendering the projected timeline against a fake trigger payload).
-- Library Playbooks tab + reader-KB integration.
+- Builder UI: tri-column shell (left rail: Playbooks list, center: vertical step list, right rail: persistent Playbook Assistant chat panel) + top bar (Enabled toggle / Scope chip / Review-state banner per §6.1).
+- **Template Variables sidebar (R4)** rendering tokens from `EntityAdapter.schemaForAI()`; drag-drop into `send_notification` body / `kickoffMapping` / `branch_on_data_set` source expressions.
+- **Edit Action modal pattern (C5)** for per-step config — Title / Description with `{}` Template insert / step-type config / Regenerate / Delete / Cancel / Save Changes.
+- Dry-render preview rendering the projected timeline against a fake trigger payload.
+- Library Playbooks tab + reader-KB integration (Read view renders timeline per §6.5).
 - `playbookRuns.list` / `playbookRuns.get` (read-only — no runs exist yet beyond the dry-render synthetic).
 
 No live triggers, no manual launch button, no cancellation surface. Published Playbooks sit dormant until 18b ships.
@@ -520,14 +529,17 @@ No live triggers, no manual launch button, no cancellation surface. Published Pl
 ### Phase 18b — Execution: Inngest orchestration + triggers + manual launch (1 week)
 
 - Inngest event emissions on `run.completed`, `run.state_changed`, `listing.entity_set_added`, `vendor.upserted` (Ops emits these to its own Inngest, not to PM).
-- Inngest dispatcher + orchestrator functions per §8.3.
-- `playbookRuns.launchManual` (lights up the "Run Playbook" button on the Playbook detail page) — dispatched through the same Inngest pipeline that handles lifecycle-event triggers.
+- Inngest dispatcher + orchestrator functions per §8.3. **Dispatcher filter includes `playbook.is_active = true`** (§6.4) — disabled Playbooks skipped at dispatch time.
+- `playbookRuns.launchManual` (lights up the "Run Playbook" button on the Playbook detail page) — dispatched through the same Inngest pipeline that handles lifecycle-event triggers; manual launch ignores `is_active` (operator-initiated, intentional override of the dispatcher gate).
 - Cancellation flow (`playbookRuns.cancel`).
+- **Active Run right-rail card (R6)** widening from canonical PRD §6.4 — entity-context pages surface both `run` and `playbook_run` rows with a type chip. Card row click on a Playbook opens `/playbooks/[id]?view=read&runId=<playbookRunId>` (execute-view timeline per §6.5).
+- **Execute-view timeline (per §6.5)** — `/playbooks/[id]?view=read&runId=<id>` flips the projected-timing timeline to actual fired-at + `next_wake_at` countdown.
 
 ### Phase 18c — AI authoring (0.5 week)
 
-- `agents.authorPlaybook` + `agents.regeneratePlaybookStep` procedures.
-- "Describe a Playbook" entry point + two-pane review UX (forks PRD_WORKFLOW_SOP_BUILDER §6.1 UI).
+- `agents.authorPlaybook` + `agents.regeneratePlaybookStep` procedures. **`regeneratePlaybookStep` enforces D-040 partial-regeneration semantics** — server-side validator refuses to write any sibling step with `provenance='manually_edited'`; surface-side preview lists which siblings are protected before the regen fires.
+- "Describe a Playbook" entry point + two-pane review UX (forks PRD_WORKFLOW_SOP_BUILDER §6.1 UI). **Right pane renders as the timeline (per §6.5), not as a flowchart** — Playbooks never render as a node-graph.
+- **Persistent Playbook Assistant chat panel** (R1) wired to `agents.regeneratePlaybookStep` as the post-generation refinement surface (per §6.2).
 - System prompt + validator per Appendix A.
 - Dogfood pass on the example prompts from §6.2.
 
@@ -581,7 +593,7 @@ Tracked in PostHog + ops dashboard, reviewed at 30 / 60 / 90 days post-launch:
 
 - **Cross-Playbook chaining** — depth-limited launch from `playbook_step` of another Playbook. Schema seam: `playbook_step.config` jsonb can carry `{ launchPlaybookId }` without ALTER when v1.1 ships.
 - **Per-step conditional visibility** — Workflows Phase 6 surface; Playbooks don't need it because branching is a step type, not a step modifier.
-- **Visual canvas authoring** — if user research demands it post-v1, the vertical step list converts to a top-down canvas trivially; the data model doesn't change.
+- **Visual canvas authoring** — if user research demands it post-v1 and a Phase 13+ ADR overrides D-039, any such canvas must follow D-041: layout state (coordinates, anchor ports, viewport zoom) lives in a separate `playbook_canvas_layout` table keyed by `playbook_id`, **never** on `playbook_version`. The current vertical step list converts to a top-down canvas trivially; only the layout-persistence shape is constrained (per D-041 snapshot-immutability rationale).
 - **Playbook templates** — `template_listing` already supports the templating mechanism; add a Playbook variant when the property-ops pack ships its starter Playbooks.
 - **Per-Playbook agent grants** — when S-07 mode (c) (fully automated runs) deepens, Playbooks may need their own agent identity rather than the shared per-org system-agent. Defer until there's a real isolation need.
 - **A/B testing cadences** — out of scope; orgs that need it fork the Playbook manually.

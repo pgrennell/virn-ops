@@ -896,6 +896,10 @@ export interface InsertStepInput {
 	dueOffsetDays?: number | null;
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
+	/** D-040 partial-regeneration contract. AI authoring passes `'ai_generated'`;
+	 * manual builder paths leave this undefined and get the schema default of
+	 * `'manually_edited'`. */
+	provenance?: "ai_generated" | "manually_edited";
 }
 
 export async function insertStep(
@@ -918,6 +922,8 @@ export async function insertStep(
 			dueOffsetDays: input.dueOffsetDays ?? null,
 			dueAnchorStepId: input.dueAnchorStepId ?? null,
 			dueSourceFieldId: input.dueSourceFieldId ?? null,
+			// Omit when undefined so the column default ('manually_edited') applies.
+			...(input.provenance !== undefined ? { provenance: input.provenance } : {}),
 		})
 		.returning({ id: step.id });
 	return row;
@@ -937,6 +943,13 @@ export interface UpdateStepInput {
 	dueOffsetDays?: number | null;
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
+	/** D-040 partial-regeneration contract. Manual builder paths
+	 * (structure.updateStepOp) pass `'manually_edited'` to flip the row's
+	 * provenance back from `'ai_generated'` when a human touches it.
+	 * AI authoring's second-pass updates leave this undefined so an
+	 * AI-emitted step stays `'ai_generated'` through subsequent due-rule
+	 * patching. */
+	provenance?: "ai_generated" | "manually_edited";
 }
 
 export async function updateStep(input: UpdateStepInput, executor: DbExecutor = db): Promise<void> {
@@ -954,6 +967,7 @@ export async function updateStep(input: UpdateStepInput, executor: DbExecutor = 
 		"dueOffsetDays",
 		"dueAnchorStepId",
 		"dueSourceFieldId",
+		"provenance",
 	] as const) {
 		if (input[k] !== undefined) patch[k] = input[k];
 	}
