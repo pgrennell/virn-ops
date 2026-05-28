@@ -734,10 +734,25 @@ multi-commit sub-phase for (c)).
    ships (post-v1 per D-035); the outbox + delivery worker already accept the
    event type as of (c).
 
-**Step 4 of 11a — agent introspection + capability gating.** Lands after Step 3's
-cross-repo integration body. `runs.listMyAssignments` + per-agent capability
-checks via `agent_capability` (D-022). Not required for PM-as-agent integration
-since PM doesn't introspect Ops; load-bearing for tenant-internal agent UX.
+**Step 4 of 11a — agent introspection + capability gating — SHIPPED.**
+Agent introspection was already in place as `runs.listMyTasks` (dual-auth,
+shipped in Phase 11a.2) -- same row shape for both user + agent principals; no
+separate `listMyAssignments` procedure was needed. Per-agent capability gating
+shipped with three action-surface capability slugs (`action.runs.launch`,
+`action.runs.set_field_value`, `action.runs.complete_step`) seeded with
+`defaultEnabled: true` at org level (org always has the surface; gating is
+per-agent). The `requireAgentCapability` helper at
+[packages/api/orpc/procedures.ts](../packages/api/orpc/procedures.ts) is the
+single chokepoint: no-op for user principals, throws FORBIDDEN with
+`{ capability, agentId }` in `data` for agent principals lacking the grant.
+Wired into `launchRunProc`, `setFieldValueProc`, `completeStepProc`. Five
+gate-behavior tests + the existing MCP tests still passing (agent mocks updated
+to grant the action set).
+
+Note: PM-as-agent receives these grants at agent-creation time (the admin
+registering the cross-product credential also grants the action capabilities);
+no special-case bypass for cross-product callers. Tenant-internal AI agents
+(ai_assisted / automated mode) are granted whichever subset matches their role.
 
 **Sub-phase 11b — Thin MCP wrapper (good-citizen alternative).**
 

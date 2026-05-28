@@ -60,12 +60,20 @@ import {
 import { handleMcpRequest } from "./server";
 import { tools } from "./tools";
 
+// Phase 11a step 4 -- action-surface procedures now gate on per-agent
+// capabilities. Grant the full action set so the existing tools/call tests
+// continue to exercise the procedures themselves rather than the gate. The
+// dedicated gate-deny tests live in orpc/procedures.test.ts.
 const AGENT = {
 	id: "agent_1",
 	organizationId: "org_1",
 	name: "Turnover AI",
 	originProduct: null,
-	capabilities: new Set<string>(),
+	capabilities: new Set<string>([
+		"action.runs.launch",
+		"action.runs.set_field_value",
+		"action.runs.complete_step",
+	]),
 };
 
 function bearer(token: string): Headers {

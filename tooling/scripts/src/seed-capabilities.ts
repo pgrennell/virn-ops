@@ -94,6 +94,37 @@ const CAPABILITIES: CapabilitySeed[] = [
 		defaultEnabled: false,
 		sortOrder: 100,
 	},
+	// Phase 11a step 4 -- per-agent action-surface gates. These are NOT feature
+	// flags in the org-settings sense (admins don't toggle them in the UI);
+	// they're capability slugs that compose the agent_capability check.
+	// `defaultEnabled: true` means the capability is "available at org level"
+	// so the agent-level grant is the operative check. PM-as-agent (D-033)
+	// receives these grants at agent-creation time; tenant-internal AI agents
+	// are granted whichever subset matches their role.
+	{
+		key: "action.runs.launch",
+		name: "Action: launch runs",
+		description:
+			"Allows an agent to call runs.launch via the action surface. Required for cross-product launches (PM-as-agent) and for tenant-internal ai_assisted / automated mode agents that kick off their own runs.",
+		defaultEnabled: true,
+		sortOrder: 200,
+	},
+	{
+		key: "action.runs.set_field_value",
+		name: "Action: write field values on assigned steps",
+		description:
+			"Allows an agent to call runs.setFieldValue on a runStep it participates on. Required for agents that fill data during a run (ai_assisted mode, automated mode).",
+		defaultEnabled: true,
+		sortOrder: 210,
+	},
+	{
+		key: "action.runs.complete_step",
+		name: "Action: complete assigned steps",
+		description:
+			"Allows an agent to call runs.completeStep on a runStep it participates on. Required for agents that drive a run to completion (automated mode) or hand control back (ai_assisted mode).",
+		defaultEnabled: true,
+		sortOrder: 220,
+	},
 ];
 
 async function main() {

@@ -186,3 +186,38 @@ export const agentOrUserOrgProcedure = publicProcedure.use(async ({ context, nex
 		},
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Phase 11a step 4 -- per-agent capability gating
+// ---------------------------------------------------------------------------
+
+/** Action-surface capability slugs. Adding a new gate slug here means a new
+ * row in the capability table (see tooling/scripts/src/seed-capabilities.ts)
+ * and a corresponding grant on every agent that should call the procedure.
+ * Kept as a literal-union type so `requireAgentCapability` callers get a
+ * typo-free key set instead of free text. */
+export type AgentActionCapability =
+	| "action.runs.launch"
+	| "action.runs.set_field_value"
+	| "action.runs.complete_step";
+
+/** Phase 11a step 4 -- per-agent capability gate. For user principals this is
+ * a no-op (users are role-gated by membership.role, not capability-gated). For
+ * agent principals we check the resolved `capabilities` Set; throws FORBIDDEN
+ * if missing. The Set is server-side filtered to `capability.status = 'active'`
+ * (see findActiveAgentByCredential), so this single check encodes both
+ * "capability enabled at org level" AND "agent granted the capability" --
+ * capability_enabled(org) ∧ agent_has_capability(agentId, capability) per
+ * D-022. */
+export function requireAgentCapability(
+	principal: DualAuthPrincipal,
+	capability: AgentActionCapability,
+): void {
+	if (principal.kind !== "agent") return;
+	if (!principal.agent.capabilities.has(capability)) {
+		throw new ORPCError("FORBIDDEN", {
+			message: `Agent "${principal.agent.name}" does not have the "${capability}" capability.`,
+			data: { capability, agentId: principal.agent.id },
+		});
+	}
+}

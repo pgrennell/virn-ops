@@ -24,8 +24,10 @@ import { findActiveAgentByCredential, getOrganizationMembership } from "@virn/da
 import {
 	adminProcedure,
 	agentOrUserOrgProcedure,
+	type DualAuthPrincipal,
 	protectedProcedure,
 	publicProcedure,
+	requireAgentCapability,
 } from "./procedures";
 
 describe("publicProcedure", () => {
@@ -346,5 +348,95 @@ describe("agentOrUserOrgProcedure", () => {
 		expect(capturedCaps.value?.has("workflows.agent_steps")).toBe(true);
 		expect(capturedCaps.value?.has("automation.rules")).toBe(true);
 		expect(capturedCaps.value?.has("library.public_listings")).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase 11a step 4 -- requireAgentCapability gate. Pure-function tests; no
+// middleware involved. The function shapes the FORBIDDEN response that every
+// action-surface procedure relies on, so its behavior is worth nailing down
+// here rather than re-testing through every procedure.
+// ---------------------------------------------------------------------------
+
+function userPrincipal(): DualAuthPrincipal {
+	// requireAgentCapability only reads `.kind` for the user branch; the other
+	// fields can be minimal-shape casts.
+	return {
+		kind: "user",
+		user: { id: "user_1" },
+		session: { id: "sess_1" },
+		membership: { organization: { id: "org_1" }, role: "admin" },
+	} as unknown as DualAuthPrincipal;
+}
+
+function agentPrincipal(capabilities: string[]): DualAuthPrincipal {
+	return {
+		kind: "agent",
+		agent: {
+			id: "agent_1",
+			organizationId: "org_1",
+			name: "Turnover AI",
+			originProduct: null,
+			capabilities: new Set(capabilities),
+		},
+	};
+}
+
+describe("requireAgentCapability", () => {
+	it("user principal -> no-op (returns without throwing, capability key is irrelevant)", () => {
+		// Empty-arg "no capability granted to anyone" case; users still pass.
+		expect(() => requireAgentCapability(userPrincipal(), "action.runs.launch")).not.toThrow();
+		expect(() =>
+			requireAgentCapability(userPrincipal(), "action.runs.set_field_value"),
+		).not.toThrow();
+		expect(() =>
+			requireAgentCapability(userPrincipal(), "action.runs.complete_step"),
+		).not.toThrow();
+	});
+
+	it("agent principal with the capability -> no-op", () => {
+		const p = agentPrincipal(["action.runs.launch", "action.runs.complete_step"]);
+		expect(() => requireAgentCapability(p, "action.runs.launch")).not.toThrow();
+		expect(() => requireAgentCapability(p, "action.runs.complete_step")).not.toThrow();
+	});
+
+	it("agent principal lacking the capability -> throws FORBIDDEN with the capability + agentId in data", () => {
+		const p = agentPrincipal(["action.runs.complete_step"]); // missing launch
+		let caught: unknown;
+		try {
+			requireAgentCapability(p, "action.runs.launch");
+		} catch (e) {
+			caught = e;
+		}
+		expect(caught).toBeInstanceOf(ORPCError);
+		const err = caught as ORPCError<string, unknown>;
+		expect(err.code).toBe("FORBIDDEN");
+		expect(err.message).toMatch(/Turnover AI/);
+		expect(err.message).toMatch(/action\.runs\.launch/);
+		expect(err.data).toMatchObject({
+			capability: "action.runs.launch",
+			agentId: "agent_1",
+		});
+	});
+
+	it("agent principal with an empty capability set -> throws FORBIDDEN for every action", () => {
+		const p = agentPrincipal([]);
+		expect(() => requireAgentCapability(p, "action.runs.launch")).toThrow(
+			/does not have the "action.runs.launch"/,
+		);
+		expect(() => requireAgentCapability(p, "action.runs.set_field_value")).toThrow(
+			/does not have the "action.runs.set_field_value"/,
+		);
+		expect(() => requireAgentCapability(p, "action.runs.complete_step")).toThrow(
+			/does not have the "action.runs.complete_step"/,
+		);
+	});
+
+	it("granting one capability does not implicitly grant others (capability set is exact)", () => {
+		const p = agentPrincipal(["action.runs.launch"]);
+		expect(() => requireAgentCapability(p, "action.runs.launch")).not.toThrow();
+		expect(() => requireAgentCapability(p, "action.runs.set_field_value")).toThrow(
+			/FORBIDDEN|does not have/,
+		);
 	});
 });

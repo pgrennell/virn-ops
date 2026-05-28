@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { agentOrUserOrgProcedure } from "../../../orpc/procedures";
+import { agentOrUserOrgProcedure, requireAgentCapability } from "../../../orpc/procedures";
 import { completeRunStep } from "../lib/complete-step";
 import { runEngineCall } from "./_utils";
 
@@ -18,6 +18,8 @@ export const completeStepProc = agentOrUserOrgProcedure
 	.input(z.object({ runStepId: z.string().min(1) }))
 	.handler(async ({ input, context }) => {
 		const { principal, organization } = context;
+		// Phase 11a step 4 -- per-agent capability gate. No-op for users.
+		requireAgentCapability(principal, "action.runs.complete_step");
 		return await runEngineCall(() => {
 			if (principal.kind === "agent") {
 				return completeRunStep(

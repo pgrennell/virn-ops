@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { agentOrUserOrgProcedure } from "../../../orpc/procedures";
+import { agentOrUserOrgProcedure, requireAgentCapability } from "../../../orpc/procedures";
 import { setRunFieldValue } from "../lib/set-field-value";
 import { runEngineCall } from "./_utils";
 
@@ -29,6 +29,8 @@ export const setFieldValueProc = agentOrUserOrgProcedure
 	)
 	.handler(async ({ input, context }) => {
 		const { principal, organization } = context;
+		// Phase 11a step 4 -- per-agent capability gate. No-op for users.
+		requireAgentCapability(principal, "action.runs.set_field_value");
 		return await runEngineCall(() => {
 			if (principal.kind === "agent") {
 				return setRunFieldValue(
