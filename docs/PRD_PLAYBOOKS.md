@@ -184,13 +184,29 @@ Playbooks adopt the v1.5c three-views unification commitment ([PRD_WORKFLOW_SOP_
 
 - **Detail page route:** `/playbooks/[id]?view=author` (default for editors) | `?view=read` (default for readers / linked from `/sop`).
 - **Author view:** the builder canvas (§6.1). Edits the Playbook's source of truth.
-- **Read view:** the published version rendered as a numbered timeline with step types, timing badges ("+7 days", "wait for run.completed"), and the trigger summary. Read-only.
+- **Read view:** the published version rendered as a numbered **timeline** with step types, timing badges ("+7 days", "wait for run.completed"), and the trigger summary. Read-only.
 - **`/sop` indexes both Workflows and Playbooks.** Operators searching `/sop` for "renewal" can find the Renewal Playbook *and* the Renewal Workflow; clicking a Playbook deep-links to `/playbooks/[id]?view=read`. The `/sop` route stays the browse-ergonomic readers' index per v1.5c; the detail pages stay canonical per object.
+
+**Deliberate render asymmetry vs Workflows (per D-039).** Workflows render in Read view as a constrained-viewport *flowchart* (canonical PRD §6.4 R5 lift) — a flowchart reads naturally for branching procedures. Playbooks render as a *chronological timeline* — a timeline reads naturally for time-staged sequences. The timeline is to Playbooks what the flowchart is to Workflows; same Read-view *role*, different shape because the underlying object is different. The Playbooks-alignment review (Reviewer 6) confirmed this asymmetry is correct and intentional, not an oversight.
 
 **Read-view behaviors.**
 - Indexed by name, description, trigger summary, and step descriptions for the `/sop` search.
 - Read receipts apply (operators "mark as read" the same way they do for workflows). The `sop_read_receipt` table from v1.5c carries `entity_type='playbook'` rows alongside workflow ones.
 - **Strict no-execution from read view.** Read view never shows a "Run Playbook" button. Manual launch lives on the author view (and on the listings / runs index surfaces); the read view is reference-only, same Process-Street-KB-gap discipline that Workflows follow.
+
+**Execute view (per-run timeline, R5-equivalent for Playbooks).** When the Read view is opened with a `runId` query param (e.g. linked from an Active Run card), the timeline flips from "projected timing" to "actual execution":
+
+- Completed steps render with a muted styling + actual fired-at timestamps.
+- The active step bolds + shows the `next_wake_at` countdown ("waits 4 more days, fires 2026-06-03 at 14:00").
+- Pending steps render with projected timings (recomputed against the actual trigger payload, not the dry-render fake).
+- Skipped branches (when a `branch_on_data_set` took a different path) render greyed-out with a "skipped: condition X" annotation.
+- Static text, no animated coloring — the v2.0 PRD's "real-time colored flowchart execution overlay" was rejected for Workflows; the timeline-style equivalent for Playbooks delivers the same "I can see what's happening" intent without animation. (The reviewer noted real-time execution overlay is actually a *more compelling* fit for Playbooks than for Workflows, since multi-week sequences benefit from "where are we in the cadence" visualization — but v1 ships the static version.)
+
+**Active Run right-rail card (R6, widened from Workflows).** Per canonical PRD §6.4, the entity-context Active Run card surfaces both `run` (Workflow) and `playbook_run` (Playbook) rows with a type chip distinguishing them. From a Playbook perspective:
+
+- A Playbook orchestrating a 30-day STR lifecycle is exactly the kind of long-running thing an operator wants visible at all times on the listing detail page.
+- Click on a Playbook row in the card opens `/playbooks/[id]?view=read&runId=<playbookRunId>` (read view with execute-view timeline overlay per the section above).
+- The card title in any v1 UI surface labels itself "Active Run" (not "Active Workflow") so the Playbook semantics are accommodated from day one. If the org has overridden `playbooks → lifecycles` (per §6.6), the card row uses the overridden label in the type chip.
 
 ### 6.6 Configurable label per org
 
@@ -317,6 +333,7 @@ CREATE TABLE playbook (
   description text,
   entity_set_ids uuid[] NOT NULL DEFAULT '{}',  -- reuses v1.5a entity_set ids; empty = applies-to-all
   review_state review_state NOT NULL DEFAULT 'draft',  -- reused from v1.5a
+  is_active boolean NOT NULL DEFAULT false,  -- top-bar Enabled/Disabled toggle (§6.1). Disabled Playbooks skipped by Inngest dispatcher (§6.4). DEFAULT false so newly authored Playbooks must be explicitly enabled.
   current_version_id text REFERENCES playbook_version(id),
   ai_authoring_prompt_id text REFERENCES ai_authoring_prompt(id),
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -348,9 +365,18 @@ CREATE TABLE playbook_step (
   parent_step_id text REFERENCES playbook_step(id) ON DELETE CASCADE, -- non-null for branch children
   type playbook_step_type NOT NULL,
   config jsonb NOT NULL,
+  -- D-040 partial-regeneration contract: `agents.regeneratePlaybookStep` must not read or
+  -- write any sibling step with `provenance = 'manually_edited'`. Default 'manually_edited'
+  -- is the safe choice for backfilling existing rows -- only newly AI-emitted steps opt in
+  -- to 'ai_generated'. Manual edits through the Edit Action modal (§6.1) flip the row back
+  -- to 'manually_edited' irreversibly for v1.
+  provenance step_provenance NOT NULL DEFAULT 'manually_edited',
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_playbook_step_version ON playbook_step(playbook_version_id, position);
+-- Note: `step_provenance` enum is declared in canonical PRD_WORKFLOW_SOP_BUILDER.md §8.1
+-- (shipped in v1.5a / Phase 9.5) and reused here -- single enum across Workflows and
+-- Playbooks per D-040. Phase 9.6 imports the existing enum; does not redeclare.
 
 -- Runtime
 CREATE TABLE playbook_run (
