@@ -31,11 +31,23 @@ import { z } from "zod";
 export const AI_ALLOWED_STEP_TYPES = ["task", "approval", "heading", "one_off"] as const;
 export type AiAllowedStepType = (typeof AI_ALLOWED_STEP_TYPES)[number];
 
-/** Due types the launch path resolves today. `offset_from_step` + `from_date_field`
- * are in the DB enum but launchRun.computeStepDueAt doesn't handle them yet (Builder
- * Pass 3 constraint; see memory `due_type_ui_constraint`). The AI must mirror that
- * constraint or runs would land with un-resolvable deadlines. */
-export const AI_ALLOWED_DUE_TYPES = ["none", "offset_from_start"] as const;
+/** Due types the launch path resolves. Phase 12.2 widened this from {none,
+ * offset_from_start} to the full DB enum once launchRun's resolver + the
+ * step-completion recompute hook landed.
+ *
+ * Resolution semantics callers must mirror:
+ *   - offset_from_start: dueAt = launch + dueOffsetDays (resolved at launch)
+ *   - offset_from_step:  dueAt = anchor.completedAt + dueOffsetDays (resolved
+ *     when the anchor step completes; recompute hook patches dependents)
+ *   - from_date_field:   dueAt = sourceField.value + dueOffsetDays (resolved at
+ *     launch when source is a kickoff date field; resolved at step completion
+ *     when source is a step-scoped date field) */
+export const AI_ALLOWED_DUE_TYPES = [
+	"none",
+	"offset_from_start",
+	"offset_from_step",
+	"from_date_field",
+] as const;
 export type AiAllowedDueType = (typeof AI_ALLOWED_DUE_TYPES)[number];
 
 /** Workflow `type` discriminator. Mirrors workflowType enum from the DB schema. */
@@ -90,6 +102,19 @@ export const AuthoredStepSchema = z.object({
 	sectionIndex: z.number().int().nonnegative().nullable().optional(),
 	dueType: z.enum(AI_ALLOWED_DUE_TYPES).optional(),
 	dueOffsetDays: z.number().int().nullable().optional(),
+	// Phase 12.2 -- anchor for offset_from_step. Step.id isn't known at authoring
+	// time (steps haven't been inserted), so the AI references the anchor by INDEX
+	// into the workflow's `steps` array. The authoring lib resolves this to a real
+	// step.id during a second pass after all steps are inserted (same pattern as
+	// editPublished's fork-and-remap loop). Out-of-range / self-anchor checks live
+	// in assertAuthoredWorkflowReferences.
+	dueAnchorStepIndex: z.number().int().nonnegative().nullable().optional(),
+	// Phase 12.2 -- source field for from_date_field. Referenced by KEY (the same
+	// stable identity merge variables use) so the authoring lib can resolve it
+	// against the inserted field rows in the second pass. Source must be a `date`
+	// field; the validator enforces that against the AuthoredWorkflow's combined
+	// kickoff + step field set.
+	dueSourceFieldKey: z.string().min(1).max(64).nullable().optional(),
 	fields: z.array(AuthoredFieldSchema).max(50).optional(),
 });
 export type AuthoredStep = z.infer<typeof AuthoredStepSchema>;
@@ -169,23 +194,157 @@ export function assertAuthoredWorkflowReferences(
 		}
 	}
 
-	// 3. offset_from_start requires dueOffsetDays. Otherwise the deadline is undefined.
-	// Symmetrically, dueOffsetDays without offset_from_start would be ignored by the run
-	// engine -- flag it so the model converges on the intended shape.
+	// 3. Per-dueType invariants. Each dueType has a required-companions set; mismatches
+	// produce a structured error so the model converges on the intended shape rather
+	// than silently emitting a partially-resolved deadline.
+	//
+	// Pre-compute the field-key -> field map for from_date_field source lookups (a
+	// kickoff or step field can serve as the source; the validator just needs the
+	// keys + their declared fieldType).
+	const fieldsByKey = new Map<string, { fieldType: string }>();
+	for (const f of wf.kickoffFields ?? []) fieldsByKey.set(f.key, { fieldType: f.fieldType });
+	for (const s of wf.steps) {
+		for (const f of s.fields ?? []) {
+			// Steps can share keys via collision (caught above as duplicate); the
+			// first occurrence wins for type-lookup purposes -- subsequent ones are
+			// already flagged. Map.set with a missing key is safe; we don't overwrite
+			// existing entries because the first occurrence is what the run engine
+			// would resolve.
+			if (!fieldsByKey.has(f.key)) {
+				fieldsByKey.set(f.key, { fieldType: f.fieldType });
+			}
+		}
+	}
+
 	for (const [si, s] of wf.steps.entries()) {
 		const dueType = s.dueType ?? "none";
 		const hasOffset = s.dueOffsetDays !== undefined && s.dueOffsetDays !== null;
-		if (dueType === "offset_from_start" && !hasOffset) {
-			issues.push({
-				path: `steps[${si}].dueOffsetDays`,
-				message: "dueType 'offset_from_start' requires dueOffsetDays.",
-			});
-		}
-		if (dueType === "none" && hasOffset) {
-			issues.push({
-				path: `steps[${si}].dueOffsetDays`,
-				message: "dueOffsetDays must be omitted when dueType is 'none' (or absent).",
-			});
+		const hasAnchor =
+			s.dueAnchorStepIndex !== undefined && s.dueAnchorStepIndex !== null;
+		const hasSourceKey =
+			s.dueSourceFieldKey !== undefined &&
+			s.dueSourceFieldKey !== null &&
+			s.dueSourceFieldKey.length > 0;
+
+		switch (dueType) {
+			case "none": {
+				if (hasOffset) {
+					issues.push({
+						path: `steps[${si}].dueOffsetDays`,
+						message: "dueOffsetDays must be omitted when dueType is 'none' (or absent).",
+					});
+				}
+				if (hasAnchor) {
+					issues.push({
+						path: `steps[${si}].dueAnchorStepIndex`,
+						message: "dueAnchorStepIndex must be omitted when dueType is 'none'.",
+					});
+				}
+				if (hasSourceKey) {
+					issues.push({
+						path: `steps[${si}].dueSourceFieldKey`,
+						message: "dueSourceFieldKey must be omitted when dueType is 'none'.",
+					});
+				}
+				break;
+			}
+			case "offset_from_start": {
+				if (!hasOffset) {
+					issues.push({
+						path: `steps[${si}].dueOffsetDays`,
+						message: "dueType 'offset_from_start' requires dueOffsetDays.",
+					});
+				}
+				if (hasAnchor) {
+					issues.push({
+						path: `steps[${si}].dueAnchorStepIndex`,
+						message:
+							"dueAnchorStepIndex must be omitted when dueType is 'offset_from_start'.",
+					});
+				}
+				if (hasSourceKey) {
+					issues.push({
+						path: `steps[${si}].dueSourceFieldKey`,
+						message:
+							"dueSourceFieldKey must be omitted when dueType is 'offset_from_start'.",
+					});
+				}
+				break;
+			}
+			case "offset_from_step": {
+				if (!hasOffset) {
+					issues.push({
+						path: `steps[${si}].dueOffsetDays`,
+						message: "dueType 'offset_from_step' requires dueOffsetDays.",
+					});
+				}
+				if (!hasAnchor) {
+					issues.push({
+						path: `steps[${si}].dueAnchorStepIndex`,
+						message:
+							"dueType 'offset_from_step' requires dueAnchorStepIndex (index of the anchor step).",
+					});
+				} else {
+					const idx = s.dueAnchorStepIndex as number;
+					if (idx >= wf.steps.length) {
+						issues.push({
+							path: `steps[${si}].dueAnchorStepIndex`,
+							message: `dueAnchorStepIndex ${idx} is out of range (workflow has ${wf.steps.length} step(s)).`,
+						});
+					} else if (idx === si) {
+						issues.push({
+							path: `steps[${si}].dueAnchorStepIndex`,
+							message:
+								"A step cannot anchor on itself -- pick another step or change the dueType.",
+						});
+					}
+				}
+				if (hasSourceKey) {
+					issues.push({
+						path: `steps[${si}].dueSourceFieldKey`,
+						message:
+							"dueSourceFieldKey must be omitted when dueType is 'offset_from_step'.",
+					});
+				}
+				break;
+			}
+			case "from_date_field": {
+				if (!hasOffset) {
+					issues.push({
+						path: `steps[${si}].dueOffsetDays`,
+						message: "dueType 'from_date_field' requires dueOffsetDays.",
+					});
+				}
+				if (!hasSourceKey) {
+					issues.push({
+						path: `steps[${si}].dueSourceFieldKey`,
+						message:
+							"dueType 'from_date_field' requires dueSourceFieldKey (the key of a date field).",
+					});
+				} else {
+					const srcKey = s.dueSourceFieldKey as string;
+					const src = fieldsByKey.get(srcKey);
+					if (!src) {
+						issues.push({
+							path: `steps[${si}].dueSourceFieldKey`,
+							message: `dueSourceFieldKey "${srcKey}" doesn't match any field in this workflow.`,
+						});
+					} else if (src.fieldType !== "date") {
+						issues.push({
+							path: `steps[${si}].dueSourceFieldKey`,
+							message: `dueSourceFieldKey "${srcKey}" must reference a 'date' field, not '${src.fieldType}'.`,
+						});
+					}
+				}
+				if (hasAnchor) {
+					issues.push({
+						path: `steps[${si}].dueAnchorStepIndex`,
+						message:
+							"dueAnchorStepIndex must be omitted when dueType is 'from_date_field'.",
+					});
+				}
+				break;
+			}
 		}
 	}
 

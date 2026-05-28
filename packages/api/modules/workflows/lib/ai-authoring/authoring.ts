@@ -29,6 +29,7 @@ import {
 	insertSection,
 	insertStep,
 	insertWorkflowWithDraft,
+	updateStep,
 	writeAuditAndActivity,
 } from "@virn/database";
 import { VIRN_AI_MODEL, getAnthropicClient } from "@virn/ai";
@@ -298,7 +299,11 @@ export async function authorWorkflow(
 		// 6b. Kickoff fields (stepId = null). Reserve all kickoff keys in `takenKeys`
 		// FIRST so the model can't accidentally have a kickoff and a step field land
 		// on the same auto-slug after normalization (Invariant #5: shared namespace).
+		// Capture each field's id keyed by both the model-emitted key and the
+		// normalized one so the 6d second pass can resolve dueSourceFieldKey
+		// regardless of which form the model used.
 		const takenKeys = new Set<string>();
+		const fieldIdByKey = new Map<string, string>();
 		let fieldCount = 0;
 		for (const [i, f] of (authored.kickoffFields ?? []).entries()) {
 			const key = normalizeFieldKey(f.key, f.label, takenKeys);
@@ -312,11 +317,19 @@ export async function authorWorkflow(
 				isRequired: f.isRequired ?? false,
 				position: i,
 			};
-			await insertField(payload, tx);
+			const fieldRow = await insertField(payload, tx);
 			fieldCount++;
+			fieldIdByKey.set(key, fieldRow.id);
+			if (f.key !== key) fieldIdByKey.set(f.key, fieldRow.id);
 		}
 
-		// 6c. Steps + step fields.
+		// 6c. Steps + step fields. Anchor + source-field refs are deferred to a
+		// second pass (6d) because at insertion time we don't yet know the new
+		// step.id for a forward reference (anchor a step on a later step). Index/
+		// key resolution after the full insert pass keeps the references safe and
+		// matches the existing editPublished fork-and-remap pattern.
+		const stepIdByIndex: string[] = [];
+
 		for (const [si, s] of authored.steps.entries()) {
 			const sectionId =
 				s.sectionIndex === null || s.sectionIndex === undefined
@@ -331,10 +344,13 @@ export async function authorWorkflow(
 				position: si,
 				isRequired: s.isRequired ?? true,
 				isStopTask: s.isStopTask ?? false,
+				// dueType pin: drop the references at insert; second pass patches
+				// dueAnchorStepId / dueSourceFieldId after the full id map is built.
 				dueType: s.dueType ?? "none",
 				dueOffsetDays: s.dueOffsetDays ?? null,
 			};
 			const stepRow = await insertStep(stepInput, tx);
+			stepIdByIndex.push(stepRow.id);
 
 			for (const [fi, f] of (s.fields ?? []).entries()) {
 				const key = normalizeFieldKey(f.key, f.label, takenKeys);
@@ -348,8 +364,39 @@ export async function authorWorkflow(
 					isRequired: f.isRequired ?? false,
 					position: fi,
 				};
-				await insertField(payload, tx);
+				const fieldRow = await insertField(payload, tx);
 				fieldCount++;
+				// Track BOTH the original (model-emitted) key and the normalized one
+				// so the second pass can resolve a dueSourceFieldKey whether the
+				// model used the raw key or the post-normalization one.
+				fieldIdByKey.set(key, fieldRow.id);
+				if (f.key !== key) fieldIdByKey.set(f.key, fieldRow.id);
+			}
+		}
+
+		// 6d. Second pass -- resolve dueAnchorStepId + dueSourceFieldId references
+		// now that every step + field has an id. Only steps with the relevant
+		// dueType get touched; the rest skip with no DB write.
+		for (const [si, s] of authored.steps.entries()) {
+			const stepId = stepIdByIndex[si];
+			if (!stepId) continue;
+			const dueType = s.dueType ?? "none";
+			if (dueType === "offset_from_step") {
+				const idx = s.dueAnchorStepIndex;
+				if (typeof idx === "number" && idx >= 0 && idx < stepIdByIndex.length) {
+					await updateStep(
+						{ stepId, dueAnchorStepId: stepIdByIndex[idx] ?? null },
+						tx,
+					);
+				}
+			} else if (dueType === "from_date_field") {
+				const key = s.dueSourceFieldKey;
+				if (typeof key === "string" && key.length > 0) {
+					const sourceFieldId = fieldIdByKey.get(key) ?? null;
+					if (sourceFieldId) {
+						await updateStep({ stepId, dueSourceFieldId: sourceFieldId }, tx);
+					}
+				}
 			}
 		}
 

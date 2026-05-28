@@ -35,6 +35,7 @@ vi.mock("@virn/database", () => ({
 	insertSection: vi.fn(),
 	insertStep: vi.fn(),
 	insertWorkflowWithDraft: vi.fn(),
+	updateStep: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
 }));
 
@@ -54,6 +55,7 @@ import {
 	insertSection,
 	insertStep,
 	insertWorkflowWithDraft,
+	updateStep,
 	writeAuditAndActivity,
 } from "@virn/database";
 
@@ -127,6 +129,7 @@ beforeEach(() => {
 	vi.mocked(insertField).mockImplementation(async (input) => ({
 		id: `fld_${input.key}`,
 	}));
+	vi.mocked(updateStep).mockResolvedValue(undefined);
 });
 
 describe("authorWorkflow -- happy path", () => {
@@ -318,5 +321,113 @@ describe("__testables -- pure helpers", () => {
 		expect(__testables.unwrapJsonFence("```json\n{}\n```")).toBe("{}");
 		expect(__testables.unwrapJsonFence("```\n{}\n```")).toBe("{}");
 		expect(__testables.unwrapJsonFence("plain")).toBe("plain");
+	});
+});
+
+// ===========================================================================
+// Phase 12.2 -- two-pass anchor + source-field resolution
+// ===========================================================================
+
+describe("authorWorkflow -- two-pass dueAnchor / dueSourceField resolution", () => {
+	it("resolves offset_from_step dueAnchorStepIndex to the inserted step id", async () => {
+		const wf = {
+			title: "Sequenced workflow",
+			steps: [
+				{ title: "Photos", type: "task" },
+				{
+					title: "Sign off",
+					type: "approval",
+					dueType: "offset_from_step",
+					dueOffsetDays: 2,
+					dueAnchorStepIndex: 0,
+				},
+			],
+		};
+		const callClaude = makeStubClaude(JSON.stringify(wf));
+
+		await authorWorkflow({ ...CTX, callClaude }, { prompt: "build the thing" });
+
+		// Two inserts (one per step), then ONE updateStep patching the anchor.
+		expect(insertStep).toHaveBeenCalledTimes(2);
+		expect(updateStep).toHaveBeenCalledTimes(1);
+		const patch = vi.mocked(updateStep).mock.calls[0][0];
+		expect(patch.stepId).toBe("st_Sign_off");
+		expect(patch.dueAnchorStepId).toBe("st_Photos");
+	});
+
+	it("resolves from_date_field dueSourceFieldKey to the inserted field id", async () => {
+		const wf = {
+			title: "Move-in workflow",
+			kickoffFields: [
+				{ key: "lease_start", label: "Lease start", fieldType: "date" },
+			],
+			steps: [
+				{
+					title: "Schedule walkthrough",
+					type: "task",
+					dueType: "from_date_field",
+					dueOffsetDays: -2,
+					dueSourceFieldKey: "lease_start",
+				},
+			],
+		};
+		const callClaude = makeStubClaude(JSON.stringify(wf));
+
+		await authorWorkflow({ ...CTX, callClaude }, { prompt: "build it" });
+
+		expect(updateStep).toHaveBeenCalledTimes(1);
+		const patch = vi.mocked(updateStep).mock.calls[0][0];
+		expect(patch.stepId).toBe("st_Schedule_walkthrough");
+		expect(patch.dueSourceFieldId).toBe("fld_lease_start");
+	});
+
+	it("from_date_field can reference a date field on another step (not just kickoff)", async () => {
+		const wf = {
+			title: "Cross-step deadline",
+			steps: [
+				{
+					title: "Capture move-in date",
+					type: "task",
+					fields: [
+						{ key: "move_in_date", label: "Move-in date", fieldType: "date" },
+					],
+				},
+				{
+					title: "Inspect before move-in",
+					type: "task",
+					dueType: "from_date_field",
+					dueOffsetDays: -3,
+					dueSourceFieldKey: "move_in_date",
+				},
+			],
+		};
+		const callClaude = makeStubClaude(JSON.stringify(wf));
+
+		await authorWorkflow({ ...CTX, callClaude }, { prompt: "go" });
+
+		expect(updateStep).toHaveBeenCalledTimes(1);
+		const patch = vi.mocked(updateStep).mock.calls[0][0];
+		expect(patch.stepId).toBe("st_Inspect_before_move-in");
+		expect(patch.dueSourceFieldId).toBe("fld_move_in_date");
+	});
+
+	it("does not call updateStep when no dueAnchor/dueSource refs exist", async () => {
+		const wf = {
+			title: "Plain workflow",
+			steps: [
+				{ title: "Step A", type: "task" },
+				{
+					title: "Step B",
+					type: "task",
+					dueType: "offset_from_start",
+					dueOffsetDays: 7,
+				},
+			],
+		};
+		const callClaude = makeStubClaude(JSON.stringify(wf));
+
+		await authorWorkflow({ ...CTX, callClaude }, { prompt: "go" });
+
+		expect(updateStep).not.toHaveBeenCalled();
 	});
 });
