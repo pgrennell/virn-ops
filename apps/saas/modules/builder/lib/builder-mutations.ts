@@ -338,6 +338,33 @@ export function useDiscardDraft() {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 9.5g -- concierge-review state transitions (PRD §6.6)
+//
+// Each hook awaits the server (no optimistic state) because the state-machine
+// transitions need server-side from-state guards to close races, and the UI's "what
+// button to show" depends on the post-transition state -- worth waiting a turn for
+// authoritative truth.
+// ---------------------------------------------------------------------------
+
+export function useSubmitForReview() {
+	return useMutation({
+		...orpc.workflows.submitForReview.mutationOptions(),
+	});
+}
+
+export function useApproveReview() {
+	return useMutation({
+		...orpc.workflows.approveReview.mutationOptions(),
+	});
+}
+
+export function useSendBackToDraft() {
+	return useMutation({
+		...orpc.workflows.sendBackToDraft.mutationOptions(),
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Bundle hook
 // ---------------------------------------------------------------------------
 

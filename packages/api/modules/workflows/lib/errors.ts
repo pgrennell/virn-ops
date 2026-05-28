@@ -25,7 +25,11 @@ export type WorkflowEngineErrorCode =
 	| "DEPENDENCY_SELF_REFERENCE"
 	| "DEPENDENCY_VERSION_MISMATCH"
 	| "WORKFLOW_ROLE_NOT_FOUND"
-	| "PUBLISH_RACE";
+	| "PUBLISH_RACE"
+	// Phase 9.5g review-state transitions (PRD §6.6)
+	| "CONCIERGE_REVIEW_NOT_ENABLED"
+	| "WORKFLOW_HAS_NO_DRAFT"
+	| "REVIEW_STATE_INVALID";
 
 export class WorkflowEngineError extends Error {
 	readonly code: WorkflowEngineErrorCode;

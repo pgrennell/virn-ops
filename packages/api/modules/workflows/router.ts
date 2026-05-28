@@ -14,6 +14,7 @@
 // Plain-object router style matches the rest of the modules.
 
 import { addStepDependencyProc } from "./procedures/add-step-dependency";
+import { approveReviewProc } from "./procedures/approve-review";
 import { archiveWorkflowProc } from "./procedures/archive-workflow";
 import { createFieldProc } from "./procedures/create-field";
 import { createSectionProc } from "./procedures/create-section";
@@ -29,11 +30,14 @@ import { editPublishedProc } from "./procedures/edit-published";
 import { getVersionBundleProc } from "./procedures/get-version-bundle";
 import { getWorkflowProc } from "./procedures/get-workflow";
 import { listForEntityProc } from "./procedures/list-for-entity";
+import { listForReviewProc } from "./procedures/list-for-review";
 import { listWorkflowRolesProc } from "./procedures/list-workflow-roles";
 import { listWorkflowsProc } from "./procedures/list-workflows";
 import { publishVersionProc } from "./procedures/publish-version";
 import { removeStepDependencyProc } from "./procedures/remove-step-dependency";
 import { reorderStepsProc } from "./procedures/reorder-steps";
+import { sendBackToDraftProc } from "./procedures/send-back-to-draft";
+import { submitForReviewProc } from "./procedures/submit-for-review";
 import { updateFieldProc } from "./procedures/update-field";
 import { updateSectionProc } from "./procedures/update-section";
 import { updateStepProc } from "./procedures/update-step";
@@ -54,6 +58,12 @@ export const workflowsRouter = {
 	publishVersion: publishVersionProc,
 	editPublished: editPublishedProc,
 	discardDraft: discardDraftProc,
+
+	// Phase 9.5g -- concierge review (PRD §6.6)
+	submitForReview: submitForReviewProc,
+	approveReview: approveReviewProc,
+	sendBackToDraft: sendBackToDraftProc,
+	listForReview: listForReviewProc,
 
 	// Section CRUD (draft-only)
 	createSection: createSectionProc,

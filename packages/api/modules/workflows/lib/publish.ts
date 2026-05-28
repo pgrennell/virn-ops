@@ -27,6 +27,7 @@ import {
 	deleteVersion,
 	getLatestPublishedWorkflowVersion,
 	getVersionLaunchBundle,
+	getWorkflowForOrg,
 	getWorkflowWithVersions,
 	insertDraftVersion,
 	insertField,
@@ -35,6 +36,7 @@ import {
 	insertStepDependency,
 	nextVersionNumber,
 	publishVersionRow,
+	transitionWorkflowReviewState,
 	updateStep,
 	writeAuditAndActivity,
 } from "@virn/database";
@@ -130,6 +132,83 @@ export async function publishVersion(
 	});
 
 	return result;
+}
+
+/** Phase 9.5g (PRD §6.6) -- approve a workflow currently in review and publish its
+ * current draft. Composes (state transition in_review→published) with the existing
+ * publishVersion path. The state transition's WHERE-on-from-state guard closes the
+ * "two admins approve simultaneously" race -- only one observes in_review and proceeds.
+ *
+ * The state transition happens BEFORE the publish, so a failed publish leaves the
+ * workflow at review_state='published' but with version still at draft. Recovery: an
+ * admin re-submits with editPublished (which forks a fresh draft). For v1 of 9.5g this
+ * trade-off is acceptable; post-publish-failure is an edge case (publish fails only on
+ * VERSION_HAS_NO_STEPS or PUBLISH_RACE, both unlikely once we've passed the in_review
+ * guard). */
+export async function approveReview(
+	ctx: PublishContext,
+	input: { workflowId: string },
+): Promise<PublishVersionResult> {
+	const wf = await getWorkflowForOrg(ctx.organizationId, input.workflowId);
+	if (!wf) {
+		throw new WorkflowEngineError("WORKFLOW_NOT_FOUND", "Workflow not found.", {
+			workflowId: input.workflowId,
+		});
+	}
+	if (wf.reviewState !== "in_review") {
+		throw new WorkflowEngineError(
+			"REVIEW_STATE_INVALID",
+			`Cannot approve from state "${wf.reviewState}". Workflow must be 'in_review'.`,
+			{ workflowId: input.workflowId, currentState: wf.reviewState },
+		);
+	}
+
+	const wfWithVersions = await getWorkflowWithVersions(
+		ctx.organizationId,
+		input.workflowId,
+	);
+	if (!wfWithVersions?.currentDraft) {
+		throw new WorkflowEngineError(
+			"WORKFLOW_HAS_NO_DRAFT",
+			"Cannot approve: workflow has no draft version. The draft may have been discarded.",
+			{ workflowId: input.workflowId },
+		);
+	}
+	const draftVersionId = wfWithVersions.currentDraft.id;
+
+	// 1. Atomic state transition (closes the two-admin race). Done FIRST so the
+	// publish path runs only for the winning approver.
+	const transition = await transitionWorkflowReviewState({
+		organizationId: ctx.organizationId,
+		workflowId: input.workflowId,
+		fromState: "in_review",
+		toState: "published",
+	});
+	if (!transition.ok) {
+		throw new WorkflowEngineError(
+			"REVIEW_STATE_INVALID",
+			"Another reviewer already approved or sent back this workflow. Refresh to see the latest state.",
+			{ workflowId: input.workflowId },
+		);
+	}
+
+	// 2. Audit the approval BEFORE the version publish (so the approval row exists
+	// even if the publish call surfaces a downstream error).
+	await writeAuditAndActivity({
+		organizationId: ctx.organizationId,
+		actorUserId: ctx.userId,
+		action: "workflow.review_approved",
+		verb: "approved",
+		entityType: "workflow",
+		entityId: input.workflowId,
+		changes: { reviewState: { from: "in_review", to: "published" } },
+		metadata: { draftVersionId },
+		activityData: { workflowTitle: wf.title },
+	});
+
+	// 3. Publish the underlying draft. publishVersion writes its own audit row
+	// (workflow_version.published) -- the timeline shows both: approval THEN publish.
+	return await publishVersion(ctx, { versionId: draftVersionId });
 }
 
 export interface EditPublishedResult {

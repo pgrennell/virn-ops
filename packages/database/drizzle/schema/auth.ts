@@ -179,6 +179,14 @@ export const organization = pgTable(
 		createdAt: timestamp("createdAt").notNull(),
 		metadata: text("metadata"),
 		paymentsCustomerId: text("paymentsCustomerId"),
+		// Phase 9.5g (PRD §6.6) -- when true, "Publish" on a draft becomes "Submit for
+		// review" and a separate admin approval is required before the version actually
+		// publishes. Defaults to false so existing orgs keep direct-publish behavior. The
+		// publish path itself (D-019) is unchanged; this flag adds an editorial-state
+		// gate (workflow.review_state) on TOP of the existing per-version publish state.
+		// Camel-case column name follows this table's Better-Auth-driven convention
+		// (matches createdAt / paymentsCustomerId).
+		requireConciergeReview: boolean("requireConciergeReview").notNull().default(false),
 	},
 	(table) => [uniqueIndex("organization_slug_uidx").on(table.slug)],
 );

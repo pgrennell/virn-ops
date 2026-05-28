@@ -631,6 +631,136 @@ export async function archiveWorkflow(
 }
 
 // ---------------------------------------------------------------------------
+// Review-state transitions (Phase 9.5g / PRD §6.6)
+// ---------------------------------------------------------------------------
+
+export type ReviewState = "draft" | "in_review" | "published" | "archived";
+
+/** Atomic state transition that refuses (returns `{ ok: false }`) when the row's
+ * current state doesn't match `fromState`. The WHERE-on-from-state closes the same
+ * race the publish path closes -- two concurrent transitions can't both "succeed"
+ * without one of them observing the wrong source state.
+ *
+ * The transition is REQUIRED to be valid per the state machine:
+ *   draft     -> in_review (submitForReview, when concierge-review is on)
+ *   in_review -> published (approveReview, internally also runs publishVersion)
+ *   in_review -> draft     (sendBackToDraft)
+ *   draft     -> published (publishVersion, when concierge-review is off)
+ *
+ * Caller responsibility: validate the (from, to) pair is a legal arrow before
+ * calling. This helper just makes the write atomic; it doesn't enforce the graph
+ * (keeps DB layer free of business logic). */
+export async function transitionWorkflowReviewState(
+	input: {
+		organizationId: string;
+		workflowId: string;
+		fromState: ReviewState;
+		toState: ReviewState;
+	},
+	executor: DbExecutor = db,
+): Promise<{ ok: boolean }> {
+	const result = await executor
+		.update(workflow)
+		.set({ reviewState: input.toState })
+		.where(
+			and(
+				eq(workflow.id, input.workflowId),
+				eq(workflow.organizationId, input.organizationId),
+				eq(workflow.reviewState, input.fromState),
+			),
+		)
+		.returning({ id: workflow.id });
+	return { ok: result.length > 0 };
+}
+
+export interface WorkflowInReviewRow {
+	id: string;
+	title: string;
+	description: string | null;
+	type: "procedure" | "document" | "policy" | "form";
+	updatedAt: Date;
+	/** The current draft version (the one waiting to be approved). Null only if the
+	 * draft was deleted between submit and review-time, which is a data-integrity
+	 * issue the UI surfaces as "stale review request." */
+	currentDraftVersionId: string | null;
+	currentDraftVersionNumber: number | null;
+	/** Latest published version (used by the review pane to render a diff against). */
+	latestPublishedVersionId: string | null;
+	latestPublishedVersionNumber: number | null;
+}
+
+/** Admin review inbox -- workflows currently waiting for approval. Sorted by oldest-
+ * updated-first so the staleness signal (long pending) is visible at the top.
+ * Org-scoped via the workflow row's organizationId. */
+export async function listWorkflowsInReview(
+	organizationId: string,
+): Promise<WorkflowInReviewRow[]> {
+	const rows = await db
+		.select({
+			id: workflow.id,
+			title: workflow.title,
+			description: workflow.description,
+			type: workflow.type,
+			updatedAt: workflow.updatedAt,
+		})
+		.from(workflow)
+		.where(
+			and(
+				eq(workflow.organizationId, organizationId),
+				eq(workflow.reviewState, "in_review"),
+				isNull(workflow.deletedAt),
+			),
+		)
+		.orderBy(asc(workflow.updatedAt));
+
+	if (rows.length === 0) return [];
+
+	const ids = rows.map((r) => r.id);
+	const versions = await db
+		.select({
+			id: workflowVersion.id,
+			workflowId: workflowVersion.workflowId,
+			status: workflowVersion.status,
+			versionNumber: workflowVersion.versionNumber,
+		})
+		.from(workflowVersion)
+		.where(inArray(workflowVersion.workflowId, ids));
+
+	const draftByWf = new Map<string, { id: string; versionNumber: number }>();
+	const latestPubByWf = new Map<string, { id: string; versionNumber: number }>();
+	for (const v of versions) {
+		if (v.status === "draft") {
+			// At most one draft per workflow (enforced by editPublished/createWorkflow).
+			draftByWf.set(v.workflowId, { id: v.id, versionNumber: v.versionNumber });
+		} else if (v.status === "published") {
+			const cur = latestPubByWf.get(v.workflowId);
+			if (!cur || v.versionNumber > cur.versionNumber) {
+				latestPubByWf.set(v.workflowId, {
+					id: v.id,
+					versionNumber: v.versionNumber,
+				});
+			}
+		}
+	}
+
+	return rows.map((r) => {
+		const draft = draftByWf.get(r.id);
+		const pub = latestPubByWf.get(r.id);
+		return {
+			id: r.id,
+			title: r.title,
+			description: r.description,
+			type: r.type,
+			updatedAt: r.updatedAt,
+			currentDraftVersionId: draft?.id ?? null,
+			currentDraftVersionNumber: draft?.versionNumber ?? null,
+			latestPublishedVersionId: pub?.id ?? null,
+			latestPublishedVersionNumber: pub?.versionNumber ?? null,
+		};
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Section CRUD (draft-only -- caller enforces via assertVersionIsDraft)
 // ---------------------------------------------------------------------------
 

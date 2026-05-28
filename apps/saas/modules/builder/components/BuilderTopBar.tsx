@@ -12,7 +12,16 @@
 
 import { Button } from "@virn/ui/components/button";
 import { cn } from "@virn/ui";
-import { Eye, Pencil, Settings, Trash2, UploadCloud } from "lucide-react";
+import {
+	CheckCircle2,
+	Eye,
+	Pencil,
+	RotateCcw,
+	Send,
+	Settings,
+	Trash2,
+	UploadCloud,
+} from "lucide-react";
 
 interface BuilderTopBarProps {
 	workflowTitle: string;
@@ -40,6 +49,22 @@ interface BuilderTopBarProps {
 	/** Phase 9.5e -- opens the workflow-level config panel (Scope + future workflow
 	 * settings). Optional so callers that don't have the wiring yet just omit it. */
 	onConfigureWorkflow?: () => void;
+	// Phase 9.5g -- concierge-review state. When `reviewState` is omitted (preview /
+	// view shells), the review-state UI is not rendered. When present, the Publish
+	// button's behavior depends on requireConciergeReview + reviewState:
+	//   flag off OR reviewState='draft' (flag off)        -> Publish button (existing)
+	//   flag on  AND reviewState='draft'                  -> "Submit for review" button
+	//   flag on  AND reviewState='in_review'              -> "Review pending" badge +
+	//                                                        Approve + Send-back buttons
+	//   reviewState='published'                           -> standard published view
+	reviewState?: "draft" | "in_review" | "published" | "archived";
+	requireConciergeReview?: boolean;
+	submitForReviewPending?: boolean;
+	onSubmitForReview?: () => void;
+	approveReviewPending?: boolean;
+	onApproveReview?: () => void;
+	sendBackToDraftPending?: boolean;
+	onSendBackToDraft?: () => void;
 }
 
 export function BuilderTopBar({
@@ -60,7 +85,27 @@ export function BuilderTopBar({
 	discardPending,
 	onDiscard,
 	onConfigureWorkflow,
+	reviewState,
+	requireConciergeReview,
+	submitForReviewPending,
+	onSubmitForReview,
+	approveReviewPending,
+	onApproveReview,
+	sendBackToDraftPending,
+	onSendBackToDraft,
 }: BuilderTopBarProps) {
+	// Phase 9.5g -- choose which publish-area button(s) to render based on the
+	// concierge-review state machine. Flag off OR review_state is draft (flag off
+	// case) -> direct Publish. Flag on + draft -> Submit for review. In review ->
+	// Approve + Send back (no direct Publish; the flag forces the review gate).
+	const inReviewBranch =
+		reviewState === "in_review" && requireConciergeReview === true;
+	const submitForReviewBranch =
+		reviewState === "draft" &&
+		requireConciergeReview === true &&
+		!!onSubmitForReview;
+	const directPublishBranch = canPublish && !inReviewBranch && !submitForReviewBranch;
+
 	return (
 		<header className="gap-3 flex items-center px-4 py-2.5 border-b border-border bg-background">
 			<div className="flex-1 min-w-0">
@@ -71,6 +116,11 @@ export function BuilderTopBar({
 						status={versionStatus}
 						forkedFromVersionNumber={forkedFromVersionNumber}
 					/>
+					{inReviewBranch && (
+						<span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-indigo-100 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-300">
+							<Send className="size-3" /> In review
+						</span>
+					)}
 				</div>
 			</div>
 
@@ -103,7 +153,7 @@ export function BuilderTopBar({
 						Edit
 					</Button>
 				)}
-				{canDiscard && (
+				{canDiscard && !inReviewBranch && (
 					<Button
 						variant="ghost"
 						size="sm"
@@ -115,7 +165,44 @@ export function BuilderTopBar({
 						Discard draft
 					</Button>
 				)}
-				{canPublish && (
+				{/* In-review state: approve + send-back instead of publish/discard. */}
+				{inReviewBranch && onSendBackToDraft && (
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={onSendBackToDraft}
+						loading={sendBackToDraftPending}
+						className="text-foreground/70"
+					>
+						<RotateCcw className="size-3.5 mr-1.5" />
+						Send back
+					</Button>
+				)}
+				{inReviewBranch && onApproveReview && (
+					<Button
+						variant="primary"
+						size="sm"
+						onClick={onApproveReview}
+						loading={approveReviewPending}
+					>
+						<CheckCircle2 className="size-3.5 mr-1.5" />
+						Approve &amp; publish
+					</Button>
+				)}
+				{/* Draft + flag on: submit for review (replaces Publish). */}
+				{submitForReviewBranch && (
+					<Button
+						variant="primary"
+						size="sm"
+						onClick={onSubmitForReview}
+						loading={submitForReviewPending}
+					>
+						<Send className="size-3.5 mr-1.5" />
+						Submit for review
+					</Button>
+				)}
+				{/* Default: direct publish (flag off, or pre-9.5g caller). */}
+				{directPublishBranch && (
 					<Button variant="primary" size="sm" onClick={onPublish} loading={publishPending}>
 						<UploadCloud className="size-3.5 mr-1.5" />
 						Publish

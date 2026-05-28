@@ -33,6 +33,7 @@ import { buildGatingSnapshot } from "@shared/lib/gating";
 
 import {
 	useAddStepDependency,
+	useApproveReview,
 	useCreateField,
 	useCreateSection,
 	useCreateStep,
@@ -45,6 +46,8 @@ import {
 	useRemoveStepDependency,
 	useRenameField,
 	useReorderSteps,
+	useSendBackToDraft,
+	useSubmitForReview,
 	useUpdateField,
 	useUpdateStep,
 } from "../lib/builder-mutations";
@@ -79,6 +82,11 @@ interface BuilderViewProps {
 	 * because Set doesn't cross the server/client boundary; rebuilt into a Set in
 	 * the snapshot reconstruction below. */
 	enabledCapabilityKeys: readonly string[];
+	/** Phase 9.5g (PRD §6.6) -- when true, "Publish" becomes "Submit for review" and
+	 * the in_review state surfaces Approve / Send-back actions. The flag is read
+	 * server-side from the org row (Better Auth's ActiveOrganization doesn't include
+	 * custom columns). */
+	requireConciergeReview: boolean;
 }
 
 export function BuilderView({
@@ -87,6 +95,7 @@ export function BuilderView({
 	isAdminOrOwner,
 	role,
 	enabledCapabilityKeys,
+	requireConciergeReview,
 }: BuilderViewProps) {
 	const queryClient = useQueryClient();
 	const workflowQuery = useQuery(orpc.workflows.get.queryOptions({ input: { workflowId } }));
@@ -112,6 +121,10 @@ export function BuilderView({
 	const editPublishedMutation = useEditPublished();
 	const publishMutation = usePublishVersion();
 	const discardMutation = useDiscardDraft();
+	// Phase 9.5g review mutations.
+	const submitForReviewMutation = useSubmitForReview();
+	const approveReviewMutation = useApproveReview();
+	const sendBackToDraftMutation = useSendBackToDraft();
 
 	// Reconstruct the gating snapshot from the serialized props + derive the
 	// per-affordance palette gates the config forms read. Memoized so the gates
@@ -199,12 +212,61 @@ export function BuilderView({
 		}
 	};
 
+	// Phase 9.5g review-state handlers. All invalidate workflows.get so the BuilderView
+	// re-renders against the post-transition state (which flips the top-bar buttons).
+	const refetchWorkflow = () =>
+		queryClient.invalidateQueries({
+			queryKey: orpc.workflows.get.queryKey({ input: { workflowId } }),
+		});
+
+	const handleSubmitForReview = async () => {
+		setTopLevelError(null);
+		try {
+			await submitForReviewMutation.mutateAsync({ workflowId });
+			await refetchWorkflow();
+		} catch (err) {
+			setTopLevelError(
+				err instanceof Error ? err.message : "Couldn't submit for review.",
+			);
+		}
+	};
+
+	const handleApproveReview = async () => {
+		setTopLevelError(null);
+		try {
+			await approveReviewMutation.mutateAsync({ workflowId });
+			await refetchWorkflow();
+		} catch (err) {
+			setTopLevelError(err instanceof Error ? err.message : "Couldn't approve.");
+		}
+	};
+
+	const handleSendBackToDraft = async () => {
+		setTopLevelError(null);
+		try {
+			await sendBackToDraftMutation.mutateAsync({ workflowId, comment: null });
+			await refetchWorkflow();
+		} catch (err) {
+			setTopLevelError(
+				err instanceof Error ? err.message : "Couldn't send back to draft.",
+			);
+		}
+	};
+
+	const workflowReviewState = (workflowQuery.data.workflow.reviewState ?? "draft") as
+		| "draft"
+		| "in_review"
+		| "published"
+		| "archived";
+
 	return (
 		<BuilderInner
 			bundle={bundle}
 			workflowId={workflowId}
 			workflowTitle={workflowQuery.data.workflow.title}
 			workflowEntitySetIds={workflowQuery.data.workflow.entitySetIds ?? []}
+			workflowReviewState={workflowReviewState}
+			requireConciergeReview={requireConciergeReview}
 			organizationSlug={organizationSlug}
 			forkedFromVersionNumber={forkedFromVersionNumber}
 			isDraft={isDraft}
@@ -219,6 +281,12 @@ export function BuilderView({
 			onPublish={handlePublish}
 			discardPending={discardMutation.isPending}
 			onDiscard={handleDiscard}
+			submitForReviewPending={submitForReviewMutation.isPending}
+			onSubmitForReview={handleSubmitForReview}
+			approveReviewPending={approveReviewMutation.isPending}
+			onApproveReview={handleApproveReview}
+			sendBackToDraftPending={sendBackToDraftMutation.isPending}
+			onSendBackToDraft={handleSendBackToDraft}
 		/>
 	);
 }
@@ -234,6 +302,10 @@ interface BuilderInnerProps {
 	workflowTitle: string;
 	/** Current workflow-level entity-set scope (Phase 9.5e). Empty array = applies-to-all. */
 	workflowEntitySetIds: string[];
+	/** Phase 9.5g (PRD §6.6) -- editorial review state. Drives top-bar Publish vs
+	 * Submit-for-review vs Approve+SendBack buttons. */
+	workflowReviewState: "draft" | "in_review" | "published" | "archived";
+	requireConciergeReview: boolean;
 	organizationSlug: string;
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
@@ -248,6 +320,13 @@ interface BuilderInnerProps {
 	onPublish: () => void;
 	discardPending: boolean;
 	onDiscard: () => void;
+	// Phase 9.5g
+	submitForReviewPending: boolean;
+	onSubmitForReview: () => void;
+	approveReviewPending: boolean;
+	onApproveReview: () => void;
+	sendBackToDraftPending: boolean;
+	onSendBackToDraft: () => void;
 }
 
 function BuilderInner({
@@ -255,6 +334,8 @@ function BuilderInner({
 	workflowId,
 	workflowTitle,
 	workflowEntitySetIds,
+	workflowReviewState,
+	requireConciergeReview,
 	organizationSlug,
 	forkedFromVersionNumber,
 	isDraft,
@@ -269,6 +350,12 @@ function BuilderInner({
 	onPublish,
 	discardPending,
 	onDiscard,
+	submitForReviewPending,
+	onSubmitForReview,
+	approveReviewPending,
+	onApproveReview,
+	sendBackToDraftPending,
+	onSendBackToDraft,
 }: BuilderInnerProps) {
 	// Mutation hooks (mount unconditionally; they no-op if not invoked).
 	const mutArgs = { versionId: bundle.version.id };
@@ -440,6 +527,14 @@ function BuilderInner({
 				setKeyRenameRefs(null);
 				setPanelFocus({ kind: "workflow" });
 			}}
+			reviewState={workflowReviewState}
+			requireConciergeReview={requireConciergeReview}
+			submitForReviewPending={submitForReviewPending}
+			onSubmitForReview={onSubmitForReview}
+			approveReviewPending={approveReviewPending}
+			onApproveReview={onApproveReview}
+			sendBackToDraftPending={sendBackToDraftPending}
+			onSendBackToDraft={onSendBackToDraft}
 			topLevelError={topLevelError}
 		>
 			<div className="flex flex-1 min-h-0">
@@ -644,6 +739,15 @@ interface BuilderShellProps {
 	/** Phase 9.5e -- optional callback for the top-bar gear that opens the workflow
 	 * settings panel. Threaded through from BuilderInner; view/preview shells omit it. */
 	onConfigureWorkflow?: () => void;
+	// Phase 9.5g -- review-state controls (only meaningful in author mode).
+	reviewState?: "draft" | "in_review" | "published" | "archived";
+	requireConciergeReview?: boolean;
+	submitForReviewPending?: boolean;
+	onSubmitForReview?: () => void;
+	approveReviewPending?: boolean;
+	onApproveReview?: () => void;
+	sendBackToDraftPending?: boolean;
+	onSendBackToDraft?: () => void;
 	topLevelError: string | null;
 	children: React.ReactNode;
 }
@@ -667,6 +771,14 @@ function BuilderShell({
 	discardPending,
 	onDiscard,
 	onConfigureWorkflow,
+	reviewState,
+	requireConciergeReview,
+	submitForReviewPending,
+	onSubmitForReview,
+	approveReviewPending,
+	onApproveReview,
+	sendBackToDraftPending,
+	onSendBackToDraft,
 	topLevelError,
 	children,
 }: BuilderShellProps) {
@@ -690,6 +802,14 @@ function BuilderShell({
 				discardPending={discardPending}
 				onDiscard={onDiscard}
 				onConfigureWorkflow={onConfigureWorkflow}
+				reviewState={reviewState}
+				requireConciergeReview={requireConciergeReview}
+				submitForReviewPending={submitForReviewPending}
+				onSubmitForReview={onSubmitForReview}
+				approveReviewPending={approveReviewPending}
+				onApproveReview={onApproveReview}
+				sendBackToDraftPending={sendBackToDraftPending}
+				onSendBackToDraft={onSendBackToDraft}
 			/>
 			{topLevelError && (
 				<div className="px-4 py-2">

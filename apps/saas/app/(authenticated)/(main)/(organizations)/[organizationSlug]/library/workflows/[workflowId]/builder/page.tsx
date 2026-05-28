@@ -18,6 +18,7 @@
 import { BuilderView } from "@builder/components/BuilderView";
 import { assertCanSee } from "@shared/lib/gating-server";
 import { NAV_AREAS } from "@shared/lib/nav";
+import { getOrganizationById } from "@virn/database";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Workflow Builder" };
@@ -28,13 +29,22 @@ export default async function WorkflowBuilderPage({
 	params: Promise<{ organizationSlug: string; workflowId: string }>;
 }) {
 	const { organizationSlug, workflowId } = await params;
-	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.library);
+	const { organization, snapshot } = await assertCanSee(
+		organizationSlug,
+		NAV_AREAS.library,
+	);
 
 	// Serialize the snapshot to the client: Sets don't cross the server/client
 	// boundary cleanly, so we hand over the enabled-capability array; BuilderView
 	// reconstructs a snapshot client-side via buildGatingSnapshot for the palette
 	// gates (UX_SPEC §4.3).
 	const enabledCapabilityKeys = [...snapshot.enabledCapabilities];
+
+	// Phase 9.5g (PRD §6.6) -- concierge-review flag. ActiveOrganization (from
+	// Better Auth) doesn't include custom columns, so we read directly from the
+	// org row. The flag flips the Publish button's behavior to "Submit for review."
+	const orgRow = await getOrganizationById(organization.id);
+	const requireConciergeReview = orgRow?.requireConciergeReview ?? false;
 
 	return (
 		<div className="h-full min-h-0 p-4">
@@ -44,6 +54,7 @@ export default async function WorkflowBuilderPage({
 				isAdminOrOwner={snapshot.isAdminSuperset}
 				role={snapshot.role}
 				enabledCapabilityKeys={enabledCapabilityKeys}
+				requireConciergeReview={requireConciergeReview}
 			/>
 		</div>
 	);

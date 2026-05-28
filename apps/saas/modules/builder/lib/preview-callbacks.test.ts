@@ -136,7 +136,10 @@ describe("builder/page.tsx threads the snapshot.isAdminSuperset flag", () => {
 	it("captures snapshot from assertCanSee and passes isAdminSuperset to BuilderView", () => {
 		// Caught regression: the page discards the snapshot (`await assertCanSee(...)`
 		// with no destructure), losing the admin-vs-member axis entirely.
-		expect(pageSrc).toMatch(/const\s*\{\s*snapshot\s*\}\s*=\s*await\s+assertCanSee/);
+		// Match allows for additional destructured fields (e.g. `organization` added in
+		// Phase 9.5g for the requireConciergeReview lookup) -- the property we care
+		// about is `snapshot` being captured.
+		expect(pageSrc).toMatch(/await\s+assertCanSee[\s\S]*?snapshot/);
 		expect(pageSrc).toMatch(/isAdminOrOwner={snapshot\.isAdminSuperset}/);
 	});
 });

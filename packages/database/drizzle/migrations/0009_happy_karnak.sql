@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "requireConciergeReview" boolean DEFAULT false NOT NULL;
