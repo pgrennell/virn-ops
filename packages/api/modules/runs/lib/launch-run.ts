@@ -697,3 +697,86 @@ export async function recomputeDueAtAfterStepCompletion(
 	}
 	return { patchedRunStepIds };
 }
+
+export interface RecomputeAfterFieldValueChangeArgs {
+	runId: string;
+	fieldId: string;
+	fieldType: string;
+	/** The newly-written value (already validated by validateFieldValue). For a
+	 * 'date' field this is an ISO string; for non-date fieldTypes the recompute
+	 * short-circuits to a no-op since only 'date' fields are valid
+	 * dueSourceFieldId targets. */
+	newValue: unknown;
+}
+
+/** Field-value-change variant of the recompute hook. Called from setRunFieldValue
+ * after a successful upsert, INSIDE the same transaction so dependents whose
+ * dueSourceFieldId points at the just-updated field can resolve against the
+ * uncommitted value. Two flows this catches that the step-completion hook
+ * misses:
+ *
+ *   1. Admin edits a kickoff date field post-launch -- no step completion
+ *      event fires, but downstream from_date_field dependents need to re-
+ *      resolve against the new value.
+ *   2. A step-scoped date field is filled BEFORE the step completes (the
+ *      assignee fills the date, then someone else completes the step later).
+ *      Step-completion hook only runs at the completion event, so the value
+ *      would otherwise stay deferred until completion -- which is fine for
+ *      that one event, but if the dependent's step had already completed by
+ *      then the completion hook filters it out (status != 'completed' gate).
+ *      This hook fires at the moment the value lands so the dependent's
+ *      dueAt is set before any completion sequence reorders the picture. */
+export async function recomputeDueAtAfterFieldValueChange(
+	args: RecomputeAfterFieldValueChangeArgs,
+	executor: DbExecutor,
+): Promise<RecomputeDueAtResult> {
+	// Non-date fields can't legally be a dueSourceFieldId (assertDueRefs
+	// rejects, AI validator rejects). Bail fast so the rest of setFieldValue's
+	// hot path doesn't pay the query cost.
+	if (args.fieldType !== "date") return { patchedRunStepIds: [] };
+
+	const dateFieldValues = collectDateFieldValues([
+		{ fieldId: args.fieldId, fieldType: args.fieldType, value: args.newValue },
+	]);
+	if (dateFieldValues.size === 0) {
+		// Value is null/undefined or unparseable -- nothing to resolve against.
+		return { patchedRunStepIds: [] };
+	}
+
+	const targets = await findDueRecomputeTargets(
+		{
+			runId: args.runId,
+			completedStepId: null,
+			sourceFieldIds: [args.fieldId],
+		},
+		executor,
+	);
+	if (targets.length === 0) return { patchedRunStepIds: [] };
+
+	// from_date_field's resolver doesn't read runStartedAt; passing the current
+	// wall-clock time is safe (any value would be, since the resolver short-
+	// circuits to the dateFieldValues map for this branch).
+	const placeholderRunStart = new Date();
+	const ctx: ComputeStepDueAtContext = {
+		dateFieldValues,
+		anchorCompletedAt: null,
+	};
+
+	const patchedRunStepIds: string[] = [];
+	for (const t of targets) {
+		const due = computeStepDueAt(
+			placeholderRunStart,
+			{
+				dueType: t.dueType,
+				dueOffsetDays: t.dueOffsetDays,
+				dueAnchorStepId: t.dueAnchorStepId,
+				dueSourceFieldId: t.dueSourceFieldId,
+			},
+			ctx,
+		);
+		if (due === null) continue;
+		await updateRunStepDueAt({ runStepId: t.runStepId, dueAt: due }, executor);
+		patchedRunStepIds.push(t.runStepId);
+	}
+	return { patchedRunStepIds };
+}

@@ -35,6 +35,7 @@ import {
 import {
 	computeStepDueAt,
 	launchRun,
+	recomputeDueAtAfterFieldValueChange,
 	recomputeDueAtAfterStepCompletion,
 } from "./launch-run";
 
@@ -1169,5 +1170,111 @@ describe("recomputeDueAtAfterStepCompletion", () => {
 
 		expect(result.patchedRunStepIds).toEqual(["rs_offset", "rs_field"]);
 		expect(updateRunStepDueAt).toHaveBeenCalledTimes(2);
+	});
+});
+
+// ============================================================================
+// Phase 12.2 -- recomputeDueAtAfterFieldValueChange (setFieldValue hook)
+// ============================================================================
+
+describe("recomputeDueAtAfterFieldValueChange", () => {
+	const STUB_TX = {} as never;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([]);
+		vi.mocked(updateRunStepDueAt).mockResolvedValue(undefined);
+	});
+
+	it("no-op for non-date fields (short-circuit before any query)", async () => {
+		const result = await recomputeDueAtAfterFieldValueChange(
+			{ runId: "run_1", fieldId: "fld_1", fieldType: "text", newValue: "hello" },
+			STUB_TX,
+		);
+		expect(result.patchedRunStepIds).toEqual([]);
+		expect(findDueRecomputeTargets).not.toHaveBeenCalled();
+		expect(updateRunStepDueAt).not.toHaveBeenCalled();
+	});
+
+	it("no-op when the date value is unparseable", async () => {
+		const result = await recomputeDueAtAfterFieldValueChange(
+			{ runId: "run_1", fieldId: "fld_1", fieldType: "date", newValue: "not-a-date" },
+			STUB_TX,
+		);
+		expect(result.patchedRunStepIds).toEqual([]);
+		expect(findDueRecomputeTargets).not.toHaveBeenCalled();
+	});
+
+	it("no-op when the date value is null (clearing the field)", async () => {
+		const result = await recomputeDueAtAfterFieldValueChange(
+			{ runId: "run_1", fieldId: "fld_1", fieldType: "date", newValue: null },
+			STUB_TX,
+		);
+		expect(result.patchedRunStepIds).toEqual([]);
+		expect(findDueRecomputeTargets).not.toHaveBeenCalled();
+	});
+
+	it("queries findDueRecomputeTargets with the field id as the only source", async () => {
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([]);
+		await recomputeDueAtAfterFieldValueChange(
+			{ runId: "run_1", fieldId: "fld_src", fieldType: "date", newValue: "2026-06-15" },
+			STUB_TX,
+		);
+		const [arg] = vi.mocked(findDueRecomputeTargets).mock.calls[0];
+		expect(arg.runId).toBe("run_1");
+		expect(arg.completedStepId).toBeNull();
+		expect(arg.sourceFieldIds).toEqual(["fld_src"]);
+	});
+
+	it("patches each from_date_field dependent with sourceValue + offset", async () => {
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([
+			{
+				runStepId: "rs_dep",
+				stepId: "step_dep",
+				dueType: "from_date_field",
+				dueOffsetDays: 7,
+				dueAnchorStepId: null,
+				dueSourceFieldId: "fld_src",
+			},
+		]);
+
+		const result = await recomputeDueAtAfterFieldValueChange(
+			{ runId: "run_1", fieldId: "fld_src", fieldType: "date", newValue: "2026-06-15" },
+			STUB_TX,
+		);
+
+		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
+		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
+		expect(arg.runStepId).toBe("rs_dep");
+		// "2026-06-15" + 7d (UTC math) = 2026-06-22T00:00:00Z
+		expect(arg.dueAt.toISOString().startsWith("2026-06-22")).toBe(true);
+	});
+
+	it("supports negative offsets ('1 day before guest_arrival')", async () => {
+		vi.mocked(findDueRecomputeTargets).mockResolvedValue([
+			{
+				runStepId: "rs_dep",
+				stepId: "step_dep",
+				dueType: "from_date_field",
+				dueOffsetDays: -1,
+				dueAnchorStepId: null,
+				dueSourceFieldId: "fld_arrival",
+			},
+		]);
+
+		const result = await recomputeDueAtAfterFieldValueChange(
+			{
+				runId: "run_1",
+				fieldId: "fld_arrival",
+				fieldType: "date",
+				newValue: "2026-06-15",
+			},
+			STUB_TX,
+		);
+
+		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
+		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
+		// "2026-06-15" - 1d (UTC math) = 2026-06-14T00:00:00Z
+		expect(arg.dueAt.toISOString().startsWith("2026-06-14")).toBe(true);
 	});
 });

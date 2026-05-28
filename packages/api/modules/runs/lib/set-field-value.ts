@@ -24,6 +24,7 @@ import {
 } from "@virn/database";
 
 import { RunEngineError } from "./errors";
+import { recomputeDueAtAfterFieldValueChange } from "./launch-run";
 
 export interface SetFieldValueContext {
 	organizationId: string;
@@ -234,6 +235,21 @@ export async function setRunFieldValue(
 				runStepId: input.runStepId,
 				fieldId: f.id,
 				value: validated,
+			},
+			tx,
+		);
+
+		// Phase 12.2 -- recompute dueAt for any from_date_field dependents that
+		// source this field. Catches the two flows the step-completion hook
+		// misses: admin-edits-kickoff-date-after-launch and step-field-filled-
+		// before-step-completes. No-op when the field isn't a date type (the
+		// resolver short-circuits inside the helper).
+		await recomputeDueAtAfterFieldValueChange(
+			{
+				runId,
+				fieldId: f.id,
+				fieldType: f.fieldType,
+				newValue: validated,
 			},
 			tx,
 		);
