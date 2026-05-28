@@ -7,6 +7,7 @@ export * from "./entitysets";
 export * from "./listings";
 export * from "./notifications";
 export * from "./organizations";
+export * from "./outbound-webhook-credentials";
 export * from "./packs";
 export * from "./participant-tokens";
 export * from "./purchases";

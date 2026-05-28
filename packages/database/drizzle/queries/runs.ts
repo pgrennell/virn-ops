@@ -1032,7 +1032,8 @@ export async function writeAuditAndActivity(
 			| "agent"
 			| "vendor"
 			| "vendor_contact"
-			| "listing";
+			| "listing"
+			| "outbound_webhook_credential";
 		entityId: string;
 		changes?: Record<string, unknown>;
 		metadata?: Record<string, unknown>;

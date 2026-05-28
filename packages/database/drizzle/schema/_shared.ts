@@ -77,6 +77,9 @@ export const entityType = pgEnum("entity_type", [
   "vendor",
   "vendor_contact",
   "listing",
+  // Phase 11a step 3(c) -- cross-product integration credential. Admin-action
+  // audit rows (create / rotate secret / delete) attribute to the credential id.
+  "outbound_webhook_credential",
 ]);
 
 // Content-type discriminator (ARCHITECTURE.md §5). Lives here rather than in workflows.ts
