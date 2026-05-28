@@ -104,6 +104,50 @@ export async function deleteSectionOp(
  * legitimately set dueType BEFORE the companion ref. The launch path returns
  * null for an incomplete config (deferred), which the recompute hook patches
  * once the missing piece arrives. */
+/** Companion field key used by the auto-clear helper below. */
+type DueCompanion = "dueOffsetDays" | "dueAnchorStepId" | "dueSourceFieldId";
+
+/** Which companion fields a given dueType USES. Anything not in this set must be
+ * null/cleared on the row -- the auto-clear helper enforces that on every write
+ * that includes dueType in the patch. Source of truth shared by createStep +
+ * updateStepOp; mirrors the per-dueType invariants in the AI authoring schema
+ * validator (ai-authoring/schema.ts:assertAuthoredWorkflowReferences). */
+const DUE_COMPANIONS_USED: Record<
+	"none" | "offset_from_start" | "offset_from_step" | "from_date_field",
+	ReadonlySet<DueCompanion>
+> = {
+	none: new Set<DueCompanion>(),
+	offset_from_start: new Set<DueCompanion>(["dueOffsetDays"]),
+	offset_from_step: new Set<DueCompanion>(["dueOffsetDays", "dueAnchorStepId"]),
+	from_date_field: new Set<DueCompanion>(["dueOffsetDays", "dueSourceFieldId"]),
+};
+
+/** Patch shape that may carry dueType + companions. Used by both createStep and
+ * updateStepOp; the helper returns a normalized patch where companions not used
+ * by the (incoming or implicit) dueType are explicitly cleared to null. */
+type PatchWithDueRule = {
+	dueType?: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+	dueOffsetDays?: number | null;
+	dueAnchorStepId?: string | null;
+	dueSourceFieldId?: string | null;
+};
+
+/** If the patch includes a dueType, force any companion field that this dueType
+ * doesn't use to null in the returned patch. This prevents the "narrow dueType
+ * without explicitly nulling old refs" footgun: a direct API call posting
+ * `{ stepId, dueType: 'none' }` on a step with a previously-set dueAnchorStepId
+ * would otherwise leave the stale FK alive, blocking deletion of the previously-
+ * anchored step. */
+function normalizeDuePatch<T extends PatchWithDueRule>(patch: T): T {
+	if (patch.dueType === undefined) return patch;
+	const used = DUE_COMPANIONS_USED[patch.dueType];
+	const out = { ...patch };
+	if (!used.has("dueOffsetDays")) out.dueOffsetDays = null;
+	if (!used.has("dueAnchorStepId")) out.dueAnchorStepId = null;
+	if (!used.has("dueSourceFieldId")) out.dueSourceFieldId = null;
+	return out;
+}
+
 async function assertDueRefs(args: {
 	versionId: string;
 	/** The step being patched. Used to reject self-anchor. For createStep this
@@ -182,6 +226,11 @@ export async function createStep(
 	input: CreateStepInput,
 ): Promise<{ id: string }> {
 	await assertVersionIsDraft(ctx, input.workflowVersionId);
+	// Auto-clear companion fields that the supplied dueType doesn't use, so a
+	// caller passing { dueType: 'none', dueAnchorStepId: '...' } can't smuggle a
+	// stale FK onto a brand-new row. Applied BEFORE assertDueRefs so the cleared
+	// refs skip the lookup entirely.
+	const normalized = normalizeDuePatch(input);
 	// Phase 12.2 -- validate dueAnchorStepId / dueSourceFieldId refs if present.
 	// stepId is null here: the step doesn't exist yet, so self-anchor isn't
 	// possible. (The new step's ID hasn't been minted; anchoring on yourself
@@ -189,10 +238,10 @@ export async function createStep(
 	await assertDueRefs({
 		versionId: input.workflowVersionId,
 		stepId: null,
-		dueAnchorStepId: input.dueAnchorStepId,
-		dueSourceFieldId: input.dueSourceFieldId,
+		dueAnchorStepId: normalized.dueAnchorStepId,
+		dueSourceFieldId: normalized.dueSourceFieldId,
 	});
-	return await insertStep(input);
+	return await insertStep(normalized);
 }
 
 export interface UpdateStepInput {
@@ -216,16 +265,22 @@ export async function updateStepOp(
 	input: UpdateStepInput,
 ): Promise<void> {
 	const { version } = await assertStepEditable(ctx, input.stepId);
+	// Auto-clear stale FK companions when dueType narrows. Direct API call
+	// posting { stepId, dueType: 'none' } on a row with a previously-set
+	// dueAnchorStepId would otherwise leave the stale FK alive, blocking
+	// deletion of the previously-anchored step. Applied BEFORE assertDueRefs so
+	// the cleared refs skip the lookup entirely.
+	const normalized = normalizeDuePatch(input);
 	// Phase 12.2 -- validate dueAnchorStepId / dueSourceFieldId refs if present
 	// in the patch. Skips when neither is being changed (the common case for
 	// title/description/required patches).
 	await assertDueRefs({
 		versionId: version.id,
 		stepId: input.stepId,
-		dueAnchorStepId: input.dueAnchorStepId,
-		dueSourceFieldId: input.dueSourceFieldId,
+		dueAnchorStepId: normalized.dueAnchorStepId,
+		dueSourceFieldId: normalized.dueSourceFieldId,
 	});
-	await updateStep(input);
+	await updateStep(normalized);
 }
 
 export async function deleteStepOp(

@@ -566,9 +566,15 @@ export function computeStepDueAt(
 	}
 }
 
+/** Add `days` calendar days to `base`, working in UTC. Using local-time
+ * `setDate`/`getDate` would silently shift the result by ±1 hour around DST
+ * transitions when the server timezone is not UTC, and would land on the wrong
+ * calendar day for date-only ISO inputs ('2026-06-15' parses as UTC midnight,
+ * which getDate() in a UTC-offset timezone reports as the previous day). UTC
+ * math is deterministic regardless of the server's TZ env. */
 function addDays(base: Date, days: number): Date {
 	const d = new Date(base);
-	d.setDate(d.getDate() + days);
+	d.setUTCDate(d.getUTCDate() + days);
 	return d;
 }
 

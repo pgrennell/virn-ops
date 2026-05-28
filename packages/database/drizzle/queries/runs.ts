@@ -852,9 +852,18 @@ export async function markRunStepCompleted(
 
 /** Count runSteps grouped by status for cascade-to-run-complete. Returns whether every
  * REQUIRED step (i.e. step.isRequired = true) is `completed`. Heading/optional steps don't
- * block run completion. */
-export async function areAllRequiredRunStepsComplete(runId: string): Promise<boolean> {
-	const rows = await db
+ * block run completion.
+ *
+ * Accepts an executor so callers inside a transaction can see their own uncommitted
+ * writes -- before this took an executor, completeRunStep's cascade check ran on the
+ * package-level `db` connection and could not observe the just-applied
+ * `markRunStepCompleted(tx)` UPDATE, so the LAST step's completion never triggered the
+ * cascade and the run silently stayed `active`. */
+export async function areAllRequiredRunStepsComplete(
+	runId: string,
+	executor: DbExecutor = db,
+): Promise<boolean> {
+	const rows = await executor
 		.select({
 			runStepStatus: runStep.status,
 			isRequired: sql<boolean>`COALESCE(s.is_required, false)`,

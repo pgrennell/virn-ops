@@ -231,7 +231,7 @@ export async function completeRunStep(
 		if (rs.run.status !== "active") {
 			return false;
 		}
-		const allDone = await areAllRequiredRunStepsComplete(rs.run.id);
+		const allDone = await areAllRequiredRunStepsComplete(rs.run.id, tx);
 		if (!allDone) {
 			return false;
 		}

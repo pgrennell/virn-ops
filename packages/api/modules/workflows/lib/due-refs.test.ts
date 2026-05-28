@@ -291,6 +291,86 @@ describe("createStep -- dueType ref validation at insert time", () => {
 	});
 });
 
+describe("updateStepOp + createStep -- normalize stale companions on dueType narrow", () => {
+	it("dueType='none' patch nulls dueAnchorStepId + dueSourceFieldId + dueOffsetDays in the write", async () => {
+		await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "none",
+			// Caller deliberately did NOT pass nulls for the companions
+		});
+		expect(updateStep).toHaveBeenCalledTimes(1);
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.dueAnchorStepId).toBeNull();
+		expect(arg.dueSourceFieldId).toBeNull();
+		expect(arg.dueOffsetDays).toBeNull();
+	});
+
+	it("dueType='offset_from_start' patch nulls dueAnchorStepId + dueSourceFieldId", async () => {
+		await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "offset_from_start",
+			dueOffsetDays: 3,
+		});
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.dueAnchorStepId).toBeNull();
+		expect(arg.dueSourceFieldId).toBeNull();
+		expect(arg.dueOffsetDays).toBe(3);
+	});
+
+	it("dueType='offset_from_step' patch nulls dueSourceFieldId but keeps dueAnchorStepId", async () => {
+		vi.mocked(getStepWithVersion).mockResolvedValue({
+			step: { id: "st_2" },
+			version: { id: "ver_1" },
+		} as never);
+		await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "offset_from_step",
+			dueAnchorStepId: "st_2",
+			dueOffsetDays: 2,
+		});
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.dueAnchorStepId).toBe("st_2");
+		expect(arg.dueSourceFieldId).toBeNull();
+	});
+
+	it("dueType='from_date_field' patch nulls dueAnchorStepId but keeps dueSourceFieldId", async () => {
+		vi.mocked(getFieldWithVersion).mockResolvedValue({
+			field: { id: "fld_1", fieldType: "date" },
+			version: { id: "ver_1" },
+		} as never);
+		await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "from_date_field",
+			dueSourceFieldId: "fld_1",
+			dueOffsetDays: 5,
+		});
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.dueSourceFieldId).toBe("fld_1");
+		expect(arg.dueAnchorStepId).toBeNull();
+	});
+
+	it("title-only patch (no dueType) leaves companion fields untouched", async () => {
+		await updateStepOp(CTX, { stepId: "st_1", title: "Renamed" });
+		const arg = vi.mocked(updateStep).mock.calls[0][0];
+		expect(arg.dueAnchorStepId).toBeUndefined();
+		expect(arg.dueSourceFieldId).toBeUndefined();
+	});
+
+	it("createStep with dueType='none' but stray dueAnchorStepId still null-clears it", async () => {
+		vi.mocked(insertStep).mockResolvedValue({ id: "st_new" });
+		await createStep(CTX, {
+			workflowVersionId: "ver_1",
+			title: "Step",
+			dueType: "none",
+			dueAnchorStepId: "st_stray",
+		});
+		const arg = vi.mocked(insertStep).mock.calls[0][0];
+		expect(arg.dueAnchorStepId).toBeNull();
+		// Lookup never happens because normalize nulled the ref before assertDueRefs ran.
+		expect(getStepWithVersion).not.toHaveBeenCalled();
+	});
+});
+
 describe("updateFieldOp -- fieldType change guard (FIELD_TYPE_CHANGE_LOCKED)", () => {
 	it("allows fieldType change when nothing references the field", async () => {
 		vi.mocked(findFieldReferencers).mockResolvedValue([]);
