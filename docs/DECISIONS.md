@@ -1489,3 +1489,248 @@ which matters for getting to first revenue.
   (entity model + workflow engine + AI authoring) and three-views unification
   proceed in v1.5 as planned. This decision is purely about which sub-vertical's
   *content* ships first.
+
+---
+
+## 2026-05-27 — Stakeholder Stack paste-back response (cross-repo)
+
+Mirrors the PM-session paste-back returned 2026-05-27 in response to Ops's outbound
+brief at [PM_PASTE_BACK_2026-05-27_stakeholder_stack.md](PM_PASTE_BACK_2026-05-27_stakeholder_stack.md).
+PM produced three PRD drafts (Stakeholder Portal Engine, Scoped Stakeholder Inbox,
+Unified Inbox) and returned three candidate cross-repo decisions plus five
+assumptions about Ops behavior that needed verification. PM's paste-back lives in
+the PM repo (`virn-pm/docs/PASTE_BACK_STAKEHOLDER_STACK_TO_OPS.md`); this block
+captures the Ops-side response. None of the three PRDs are PM v1-blocking; all of
+PM's `D-034+` candidates are post-wedge enrichments.
+
+### D-035 — `run.comment_added` webhook event accepted in principle; lands with the D-025 emission layer
+
+**Context:** PM's §3.1 proposes a new event in the D-025 catalog: when a comment
+is added to a run launched with PM-callback context, Ops emits a webhook so PM's
+Unified Inbox can surface the thread under the linked work_order entity. PM's
+proposed payload (per PRD §7.2): `{ runId, commentId, authorPrincipalKind,
+authorDisplayName, body, bodyFormat, attachmentUrls, isInternal, parentCommentId,
+createdAt, pmCallback: { pmServiceRequestId, pmWorkOrderId } }`. PM ships Unified
+Inbox v1 without the event; it's purely additive.
+
+**Decision:** Accept in principle. The D-025 catalog is extended to
+`{ run.state_changed, run.completed, vendor.upserted, run.comment_added }`. Payload
+fields per PM's proposal are accepted as the v1 starting point; the final wire
+shape gets locked in the same exchange that finalizes the other three v1 event
+payloads (gating item — none of them are wired in code today; see D-038 §4.2).
+
+**Rationale:** Ops's schema already supports run comments via the polymorphic
+`comment` table (`entityType='run', entityId=<runId>`,
+[packages/database/drizzle/schema/collab.ts:32](../packages/database/drizzle/schema/collab.ts#L32)).
+Surfacing vendor-and-agent-authored run comments in PM's Unified Inbox is exactly
+the cross-product enrichment the integration exists for. No architectural friction;
+the Ops-side change is purely an emission hook on the (post-v1) `runs.addComment`
+API procedure.
+
+**Consequences:**
+
+- **Ops has no `runs.addComment` API procedure today.** Run-comment authoring
+  surface lands post-v1 alongside the webhook emission layer.
+- **Comment authorship attribution needs an upgrade** before this is useful. The
+  `comment` schema today is `authorUserId`-only — vendor comments (via the guest
+  path) and agent comments (via the action surface) round-trip as faceless "user
+  said" without it. When the run-comment surface ships, extend `comment` with
+  `actorKind` + `actorParticipantId` columns mirroring `audit_log` /
+  `activity_event` per D-022/D-027. Schema extension lands with the API surface,
+  not before.
+- **PM-callback echo gating.** `pmCallback` fields in the payload only work once
+  `runs.launch` accepts and persists a `callback` block (the missing piece in
+  §4.5 below). Both PRs ship together or PM gets nullable callback fields.
+- **Timing relative to Ops's roadmap.** Phase 11 (action surface) is the natural
+  landing for the catalog-emission layer; this event joins at the same moment.
+  No separate Phase line item — `run.comment_added` is bundled into the
+  emission-layer work whenever it ships.
+
+### D-036 — `run.step_state_changed` not adopted in v1 catalog; logged for future
+
+**Context:** PM's §3.2 floats a per-step state-change event for Tenant Portal
+surfaces ("we're at Step 3 of 5 on your maintenance request"). PM explicitly
+notes no commitment is needed — current portal surfaces work with
+`run.state_changed` granularity alone.
+
+**Decision:** Logged. Not adopted in the v1 catalog. Revisited if PM's portals
+later surface step-level "where are we right now?" affordances.
+
+**Rationale:** Every catalog event adds emission cost (chokepoint wiring, payload
+design, de-dup contract, PM-side handler). With no concrete v1 consumer, that
+cost outweighs the benefit. Existing `run.state_changed` is the right granularity
+for the portal surfaces PM is shipping.
+
+**Consequences:** If pulled forward, emission slots into the same chokepoint
+`run_step` status transitions already use for activity/audit writes
+([packages/api/modules/runs/lib/complete-step.ts](../packages/api/modules/runs/lib/complete-step.ts)).
+Payload mirrors `run.state_changed`'s shape plus `runStepId`, `stepTitle`,
+`previousStatus`, `currentStatus`. No schema change required — only emission.
+
+### D-037 — Cross-product tokenized-page render convention: link-out + return (PM's option (b)) adopted for v1
+
+**Context:** PM's §3.3 asks how PM's Vendor/Owner portals should render Ops's
+tokenized-guest pages (vendor accepting a work order, owner approving). Two
+options floated: (a) iframe-embed Ops's tokenized page with theme params, or
+(b) link-out to Ops with a "return to portal" button hitting a PM-supplied return
+URL. PM leans (b).
+
+**Decision:** Adopt (b) link-out + return for v1. Ops's tokenized-guest URL
+(`https://ops.virn.com/run-guest/#token=<plaintext>`) accepts an optional
+`?returnUrl=<encoded>` query parameter; on completion or explicit close, the
+guest page renders a "Return to <PM brand>" affordance that navigates to the
+supplied URL. The `returnUrl` is validated against an allowlist of PM-side
+domains registered at link time per D-025 (PM's outbound credential record gains
+an `allowedReturnUrlPrefixes text[]` field) to prevent open-redirect abuse.
+
+**Rationale:** (a) embed requires both sides to coordinate CSP +
+`X-Frame-Options` + theme-parameter contracts AND papers over a single-context
+UX that doesn't actually exist (the user is still authenticating to Ops via the
+token; the iframe just hides that fact). (b) matches how the user *actually*
+authenticates (token to Ops, separate context from PM portal) with a one-click
+return path that flattens the UX cliff PM was worried about. Cheap on both sides;
+preserves Ops's existing guest-page surface unchanged except for the returnUrl
+pass-through and exit affordance. Aligns with D-031: shared sign-in deferred to
+roadmap, so the embed pattern (a) presupposes work that hasn't shipped.
+
+**Consequences:**
+
+- **Ops guest run view gains a small UI addition.** Read `?returnUrl` on page
+  load; render "Return to <displayName>" in page chrome when set; validate
+  against the registered allowlist. Small enough to bundle into whichever phase
+  ships next-touching the guest UI; not a phase of its own. The Ops-side
+  procedures live at
+  [packages/api/modules/runs/procedures/get-run-for-guest.ts](../packages/api/modules/runs/procedures/get-run-for-guest.ts)
+  + sibling files; the frontend at the guest run view route.
+- **D-025's outbound-credential record gains the allowlist column.** Schema
+  extension lands when the emission layer ships; PM registers one or more return
+  URL prefixes alongside its inbound webhook URL.
+- **(a) embed becomes a v2 enrichment** once D-031 shared sign-in lands. At that
+  point a per-portal-config flag can pick render mode without breaking the (b)
+  default.
+
+### D-038 — Sanity-check responses to PM's §4.1–§4.5 assumptions about Ops behavior
+
+**Context:** PM's §4 lists five assumptions about Ops behavior that need
+verification before PM commits to any of the three Stakeholder Stack PRDs.
+Verified 2026-05-27 against Ops code at HEAD.
+
+**Decision (per-item responses):**
+
+1. **§4.1 — Tokenized-guest pages reachable from a fresh browser session: TRUE.**
+   The guest-token flow is shipped. See
+   [packages/api/modules/runs/procedures/issue-participant-token.ts](../packages/api/modules/runs/procedures/issue-participant-token.ts),
+   `get-run-for-guest.ts`, `complete-step-as-guest.ts`,
+   `set-field-value-as-guest.ts`. The token lives in the URL fragment
+   (`#token=<…>`) and authorizes the guest page without an Ops login. Default
+   TTL 7 days; revocable via `revoke-participant-token.ts`. PM can rely on this
+   for Vendor + Owner portal render-as-link behavior per D-037.
+
+2. **§4.2 — D-025 catalog events fire reliably with at-least-once / stable
+   eventId: NOT YET WIRED.** No Ops source code emits `run.state_changed`,
+   `run.completed`, or `vendor.upserted` today (grep across
+   `packages/**/*.ts` — only doc references in DECISIONS.md / ARCHITECTURE.md /
+   BUILD_PLAN.md). The D-025 catalog is a forward spec; emission lands no earlier
+   than Phase 11 (action surface). When it ships, the design commitment is:
+   at-least-once delivery, stable `eventId` (cuid) per event, plus a `runId`-
+   scoped monotonic `sequenceNumber` so PM can detect gaps. PM's idempotency-key
+   column on the inbound webhook log is the right defense; add it now even
+   though emissions haven't started.
+
+3. **§4.3 — `run.state_changed` payload carries enough metadata for Scoped Inbox
+   filtering: PAYLOAD NOT YET DESIGNED (because not yet emitted).** When the
+   emission layer lands, the minimum payload is:
+   `{ eventId, sequenceNumber, runId, workflowId, workflowVersionId,
+   previousStatus, currentStatus, occurredAt, organizationId, runTitle,
+   crossProductOrigin, callback?: { pmServiceRequestId?, pmWorkOrderId? } }`.
+   Sufficient for PM's Scoped Inbox dimensions (entity type + originator) without
+   forcing a per-webhook Ops API lookup. **Severity / priority / category are
+   not currently first-class fields on Ops's `run` schema** — if PM's Scoped
+   Inbox needs them as a filter dimension, that's a separate cross-repo
+   conversation: either Ops adds a `run.severity` column (top-level decision)
+   or PM tags the run via a kickoff value at launch time and PM remembers its
+   own tag without echo. Recommend the latter for v1 (no Ops-side schema
+   change).
+
+4. **§4.4 — Vendor sync surface stability, no Ops-side creep: CONFIRMED.** D-028
+   locks the synced field set; Ops will not extend it unilaterally. The
+   `serviceCategories` slug-sharing dependency on PM's controlled-vocabulary
+   promotion remains unchanged. Ops's `vendor_category` lookup table is in place
+   per D-023 and ready to accept the shared slug set once PM's vocabulary lands.
+   Any future surface extension routes through a cross-repo paste-back loop first.
+
+5. **§4.5 — `runs.launch` accepts D-029's payload shape: PARTIAL — concrete
+   drift exists.** Today's implementation at
+   [packages/api/modules/runs/procedures/launch-run.ts](../packages/api/modules/runs/procedures/launch-run.ts)
+   accepts: `{ workflowId, workflowVersionId?, kickoffValues: Record<string, unknown>,
+   roleAssignments: RoleAssignment[], title?, mode, agentId? }`. Drift vs.
+   D-029-as-written:
+   - **`workflowId` not `workflowSlug`.** PM either looks up via a separate
+     procedure first (no slug→id procedure currently exposed) or Ops adds
+     optional slug support. Decision: add optional `workflowSlug` (accepted
+     alongside `workflowId`, mutually exclusive) to `runs.launch` input in
+     Phase 11; until then PM passes `workflowId` directly after a one-time
+     bootstrap lookup.
+   - **Vendor participant is a `roleAssignments[]` entry, not a top-level
+     singular `participant` block.** PM's launch client emits one
+     `roleAssignment` per workflow_role; for vendor roles it sets
+     `{ roleId, vendorId, vendorContactId }`. This matches Ops's schema (vendor
+     CHECK constraint per D-023); D-029's "single participant" framing was
+     underspecified.
+   - **`kickoff` is a flat `kickoffValues: Record<string, unknown>` keyed by
+     `field.key`, NOT a structured property/tenant block.** D-029's listed
+     fields (propertyName, propertyAddress, unitLabel, tenantDisplayName,
+     leaseId, accessInstructions, requestDescription, severity, photoR2Keys)
+     become the **canonical kickoff field key vocabulary** for the property-ops
+     vertical's workflows. PM translates its structured service-request data
+     into that key-value map. Phase 17 (property-ops pack seed) locks the
+     vocabulary on the Ops side; both products use the same keys.
+   - **No `callback` block accepted today.** This is the gating item — without
+     `pmServiceRequestId` echoing, PM cannot correlate inbound webhooks to its
+     `service_requests` without a separate Ops round-trip. Decision: add
+     `callback: { pmServiceRequestId?, pmWorkOrderId?, webhookEvents?: string[] }`
+     to `runs.launch` input in Phase 11; persist on `run` (new nullable columns
+     `callbackPmServiceRequestId text` + `callbackPmWorkOrderId text` + jsonb
+     for the rest) or on a sibling `run_external_link` table — schema shape
+     finalized when the work lands. Every emitted webhook echoes the callback
+     fields back.
+   - **Cross-product origin already threads server-side** via
+     `agent.originProduct` (set when PM registers as an Ops agent — visible in
+     `launchRun`'s `ctx.crossProductOrigin` path,
+     `packages/api/modules/runs/procedures/launch-run.ts:55`). PM does not need
+     to send a `crossProductOrigin` field; audit rows pick it up automatically.
+
+**Consequences:**
+
+- **BUILD_PLAN.md Phase 11 gains explicit subtasks** (to be wired into the
+  phase write-up next time Phase 11 is touched):
+  (a) optional `workflowSlug` lookup on `runs.launch`;
+  (b) `callback` block on `runs.launch` input + persistence;
+  (c) webhook emission layer — catalog `{ run.state_changed, run.completed,
+  vendor.upserted, run.comment_added }`, eventId + sequenceNumber + at-least-once
+  + callback echo;
+  (d) `?returnUrl` pass-through on the guest run view + allowlist validation
+  per D-037.
+  (a)+(b) are the gating items for PM's Service Request Router outbound-client
+  work; (c) is the gating item for any of PM's three PRDs that consume Ops
+  events.
+- **Phase 17 (property-ops pack) seed locks the kickoff field key vocabulary**
+  shared with PM: `property_name`, `property_address`, `unit_label`,
+  `tenant_display_name`, `lease_id`, `access_instructions`, `request_description`,
+  `severity`, `photo_r2_keys` (array). Both sides treat this as the contract for
+  STR / property-ops-pack workflows. Cross-repo memory entry on D-034
+  (STR pack stays v1 wedge) is unchanged; this entry just nails the kickoff
+  vocabulary.
+- **D-029's payload shape needs a minor revision in PM's local DECISIONS.md** to
+  reflect (i) `workflowId | workflowSlug` (not slug-only); (ii) `kickoffValues`
+  as a flat map with the field-key vocabulary moved into the pack spec;
+  (iii) `roleAssignments[]` shape for vendor participation (not a single
+  `participant`); (iv) `callback` block still planned but not yet accepted by
+  today's implementation. None change the underlying agreement — these are
+  shape corrections, not architectural shifts. PM's BACKLOG entry "Virn Ops
+  integration: outbound credentials + webhook receiver + first AI agent" can
+  proceed against the corrected shape.
+- **D-027 attribution columns are already in place on Ops's audit/activity
+  tables** (per D-022 + D-027). The `crossProductOrigin` column is wired through
+  `launchRun` today; the rest of the catalog-emitting procedures pick up the
+  same threading when they ship.
