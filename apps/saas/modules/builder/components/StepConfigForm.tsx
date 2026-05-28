@@ -160,15 +160,17 @@ export function StepConfigForm(props: StepConfigFormProps) {
 						const dueType = v as DueType;
 						const supported = dueOptions.find((o) => o.value === dueType)?.enabled ?? false;
 						if (!supported) return;
-						// Seed sensible defaults for each dueType so the form lands in a
-						// state that's submittable without an extra click. Switching AWAY
-						// from a dueType clears its companion refs server-side via the
-						// explicit null assignments below (the update procedure treats
-						// undefined as "leave unchanged" and null as "clear").
+						// Seed default offset to 0 (not 1) so the seeded value MATCHES what
+						// the offset input below renders via `step.dueOffsetDays ?? 0`.
+						// Pre-fix, the seed sent 1 while the input read 0 -- a brief
+						// state-truth divergence until the next bundle refetch landed.
+						// Companion refs are nulled here in addition to the structure-
+						// layer's normalizeDuePatch so the optimistic-render path doesn't
+						// briefly show stale anchor/source choices in the picker.
 						const next: Parameters<typeof onChangeDueRule>[0] = {
 							dueType,
 							dueOffsetDays:
-								dueType === "none" ? null : step.dueOffsetDays ?? 1,
+								dueType === "none" ? null : step.dueOffsetDays ?? 0,
 							dueAnchorStepId:
 								dueType === "offset_from_step" ? step.dueAnchorStepId ?? null : null,
 							dueSourceFieldId:
@@ -210,7 +212,14 @@ export function StepConfigForm(props: StepConfigFormProps) {
 							min={step.dueType === "offset_from_start" ? 0 : undefined}
 							value={step.dueOffsetDays ?? 0}
 							onChange={(e) => {
-								const n = Number.parseInt(e.target.value, 10);
+								// Empty string -> 0 so a user backspacing the field to clear
+								// it can actually land on zero. Pre-fix, parseInt('') = NaN
+								// and the change was silently dropped, so 'clear to zero'
+								// required typing the digit. Any other non-numeric input
+								// (parseInt returning NaN) still drops -- the type=number
+								// input itself prevents most such cases at the browser layer.
+								const raw = e.target.value;
+								const n = raw === "" ? 0 : Number.parseInt(raw, 10);
 								if (!Number.isFinite(n)) return;
 								if (step.dueType === "offset_from_start" && n < 0) return;
 								onChangeDueRule({
