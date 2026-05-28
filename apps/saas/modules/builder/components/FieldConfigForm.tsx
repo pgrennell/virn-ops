@@ -48,6 +48,12 @@ export interface FieldConfigFormProps {
 	 * succeeded. */
 	keyRenameRefusalRefs: FieldReferencer[] | null;
 	keyRenamePending: boolean;
+	/** Phase 12.2 -- mirrors keyRenameRefusalRefs but for the field-type guard.
+	 * Set when the last type change refused with FIELD_TYPE_CHANGE_LOCKED; the
+	 * referencer list comes back in the same shape so the same chip render
+	 * works. Null when no type change has been attempted or the last one
+	 * succeeded. */
+	typeChangeRefusalRefs: FieldReferencer[] | null;
 	onChangeLabel: (value: string) => void;
 	onChangeKey: (value: string) => void;
 	onChangeType: (value: FieldType) => void;
@@ -65,6 +71,7 @@ export function FieldConfigForm(props: FieldConfigFormProps) {
 		gates,
 		keyRenameRefusalRefs,
 		keyRenamePending,
+		typeChangeRefusalRefs,
 		onChangeLabel,
 		onChangeKey,
 		onChangeType,
@@ -134,6 +141,18 @@ export function FieldConfigForm(props: FieldConfigFormProps) {
 						))}
 					</SelectContent>
 				</Select>
+				{typeChangeRefusalRefs && typeChangeRefusalRefs.length > 0 && (
+					<Alert variant="error" className="mt-2">
+						<AlertDescription className="text-[11px]">
+							Type change refused -- clear these references first:{" "}
+							{typeChangeRefusalRefs
+								.map((r) =>
+									r.type === "condition" ? "show-when condition" : "step due-rule",
+								)
+								.join(", ")}
+						</AlertDescription>
+					</Alert>
+				)}
 			</Section>
 
 			{(field.fieldType === "select" || field.fieldType === "multiselect") && (

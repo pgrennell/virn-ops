@@ -422,6 +422,9 @@ function BuilderInner({
 	// Server-supplied referencer list when the last rename refused with
 	// FIELD_KEY_LOCKED. Cleared on successful rename or panel close.
 	const [keyRenameRefs, setKeyRenameRefs] = useState<FieldReferencer[] | null>(null);
+	// Phase 12.2 -- parallel state for FIELD_TYPE_CHANGE_LOCKED. Cleared on
+	// successful change or panel close (same lifecycle as keyRenameRefs).
+	const [typeChangeRefs, setTypeChangeRefs] = useState<FieldReferencer[] | null>(null);
 
 	// Default to first step (or to the same step across mode toggles when it survives).
 	const activeStep = useMemo(() => {
@@ -540,6 +543,7 @@ function BuilderInner({
 			onDiscard={onDiscard}
 			onConfigureWorkflow={() => {
 				setKeyRenameRefs(null);
+				setTypeChangeRefs(null);
 				setPanelFocus({ kind: "workflow" });
 			}}
 			reviewState={workflowReviewState}
@@ -581,10 +585,12 @@ function BuilderInner({
 						reorderSteps={reorderSteps}
 						onConfigureStep={(stepId) => {
 							setKeyRenameRefs(null);
+							setTypeChangeRefs(null);
 							setPanelFocus({ kind: "step", stepId });
 						}}
 						onConfigureField={(fieldId) => {
 							setKeyRenameRefs(null);
+							setTypeChangeRefs(null);
 							setPanelFocus({ kind: "field", fieldId });
 						}}
 					/>
@@ -604,6 +610,7 @@ function BuilderInner({
 					onClose={() => {
 						setPanelFocus(null);
 						setKeyRenameRefs(null);
+						setTypeChangeRefs(null);
 					}}
 				>
 					{panelFocus?.kind === "step" &&
@@ -671,6 +678,7 @@ function BuilderInner({
 									gates={gates}
 									keyRenameRefusalRefs={keyRenameRefs}
 									keyRenamePending={renameField.isPending}
+									typeChangeRefusalRefs={typeChangeRefs}
 									onChangeLabel={(label) =>
 										updateField.mutate({ fieldId: f.id, label })
 									}
@@ -690,9 +698,27 @@ function BuilderInner({
 											},
 										);
 									}}
-									onChangeType={(fieldType) =>
-										updateField.mutate({ fieldId: f.id, fieldType })
-									}
+									onChangeType={(fieldType) => {
+										// Clear any prior refusal before retrying so the form
+										// doesn't show a stale "clear references" hint while the
+										// new mutation is in flight.
+										setTypeChangeRefs(null);
+										updateField.mutate(
+											{ fieldId: f.id, fieldType },
+											{
+												onError: (err) => {
+													const data = (
+														err as {
+															data?: { code?: string; referencers?: FieldReferencer[] };
+														}
+													).data;
+													if (data?.code === "FIELD_TYPE_CHANGE_LOCKED" && data.referencers) {
+														setTypeChangeRefs(data.referencers);
+													}
+												},
+											},
+										);
+									}}
 									onChangeRequired={(isRequired) =>
 										updateField.mutate({ fieldId: f.id, isRequired })
 									}
