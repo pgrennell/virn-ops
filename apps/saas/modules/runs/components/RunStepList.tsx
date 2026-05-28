@@ -41,6 +41,17 @@ export interface RunStepListDefinitionStep {
 	position: number;
 	isRequired: boolean;
 	type: StepType;
+	/** Phase 12.2 -- per-step due-rule summary for the author-mode chip. The
+	 * caller (BuilderView) resolves dueAnchorStepId to its title + dueSourceFieldId
+	 * to its key before passing this in so the rendered chip never has to do its
+	 * own lookups. Omitted for runs/preview modes, where the runtime dueAt drives
+	 * the deadline display instead. */
+	dueRule?: {
+		dueType: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+		dueOffsetDays: number | null;
+		dueAnchorStepTitle: string | null;
+		dueSourceFieldKey: string | null;
+	};
 }
 
 export interface RunStepListItem {
@@ -233,7 +244,7 @@ function RunStepRow({
 			</span>
 			<span
 				className={cn(
-					"flex-1 min-w-0 truncate",
+					"flex-1 min-w-0 truncate flex flex-col gap-0.5",
 					isCompleted && !authorMode && "line-through",
 				)}
 				title={
@@ -242,7 +253,10 @@ function RunStepRow({
 						: undefined
 				}
 			>
-				{runStep.title}
+				<span className="truncate">{runStep.title}</span>
+				{authorMode && def?.dueRule && def.dueRule.dueType !== "none" && (
+					<DueRuleSummary rule={def.dueRule} />
+				)}
 			</span>
 			{showOptionalPill && (
 				<span
@@ -259,6 +273,82 @@ function RunStepRow({
 // ---------------------------------------------------------------------------
 // Author-mode composed pieces
 // ---------------------------------------------------------------------------
+
+/** Author-mode chip rendered under the step title when a non-`none` due rule is
+ * configured. Renders a single short line of plain text (truncated by the parent
+ * column) plus a hover-title with the full description. Color-neutral on purpose:
+ * the chip is reference information about the authored config, not a status
+ * signal -- a colored badge here would compete visually with the run-status
+ * cluster that lives in the same row when these defs are reused in run mode
+ * (which never happens today because the run path doesn't pass dueRule, but the
+ * caution is cheap). */
+function DueRuleSummary({
+	rule,
+}: {
+	rule: NonNullable<RunStepListDefinitionStep["dueRule"]>;
+}) {
+	const { text, title } = formatDueRule(rule);
+	if (!text) return null;
+	return (
+		<span
+			className="text-[10px] text-foreground/55 truncate font-normal"
+			title={title}
+		>
+			{text}
+		</span>
+	);
+}
+
+/** Exported for unit tests; the component itself wraps the output in a chip. */
+export function formatDueRule(rule: NonNullable<RunStepListDefinitionStep["dueRule"]>): {
+	text: string;
+	title: string;
+} {
+	const offset = rule.dueOffsetDays;
+	// Phrase positive/negative offsets naturally: "3d after X" / "2d before X".
+	// dueOffsetDays = 0 is "on" the anchor moment.
+	const fmtOffset = (n: number, after: string, before: string) =>
+		n === 0
+			? `on ${after}`
+			: n > 0
+				? `${n}d after ${after}`
+				: `${Math.abs(n)}d before ${before}`;
+
+	switch (rule.dueType) {
+		case "offset_from_start": {
+			if (offset === null) return { text: "", title: "" };
+			return {
+				text: offset === 0 ? "due at launch" : `due ${offset}d after launch`,
+				title:
+					offset === 0
+						? "Due at launch."
+						: `Due ${offset} day(s) after the run launches.`,
+			};
+		}
+		case "offset_from_step": {
+			if (offset === null || !rule.dueAnchorStepTitle) {
+				return { text: "due rule incomplete", title: "Anchor step or offset not set yet." };
+			}
+			const anchor = rule.dueAnchorStepTitle;
+			return {
+				text: `due ${fmtOffset(offset, anchor, anchor)}`,
+				title: `Due ${Math.abs(offset)} day(s) ${offset >= 0 ? "after" : "before"} "${anchor}" completes.`,
+			};
+		}
+		case "from_date_field": {
+			if (offset === null || !rule.dueSourceFieldKey) {
+				return { text: "due rule incomplete", title: "Source field or offset not set yet." };
+			}
+			const src = `{{${rule.dueSourceFieldKey}}}`;
+			return {
+				text: `due ${fmtOffset(offset, src, src)}`,
+				title: `Due ${Math.abs(offset)} day(s) ${offset >= 0 ? "after" : "before"} the value of field "${rule.dueSourceFieldKey}".`,
+			};
+		}
+		case "none":
+			return { text: "", title: "" };
+	}
+}
 
 function AuthorAddStepRow({ onClick }: { onClick: () => void }) {
 	return (

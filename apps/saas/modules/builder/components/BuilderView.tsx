@@ -928,12 +928,29 @@ function AuthorBody({
 	onConfigureField: (fieldId: string) => void;
 }) {
 	const sections: RunStepListSection[] = bundle.sections;
+	// Phase 12.2 -- pre-resolve anchor/source titles + keys so the RunStepList's
+	// row chip never has to do its own lookups (and so a passing-by reader can see
+	// at a glance "this step is due 2d after Inspect kitchen" without opening the
+	// config panel). Anchor lookup misses (anchor was deleted, say) fall through
+	// to null + the chip renders "due rule incomplete."
+	const stepTitleById = new Map(bundle.steps.map((s) => [s.id, s.title] as const));
+	const fieldKeyById = new Map(bundle.fields.map((f) => [f.id, f.key] as const));
 	const definitionSteps: RunStepListDefinitionStep[] = bundle.steps.map((s) => ({
 		id: s.id,
 		sectionId: s.sectionId,
 		position: s.position,
 		isRequired: s.isRequired,
 		type: s.type as StepType,
+		dueRule: {
+			dueType: s.dueType,
+			dueOffsetDays: s.dueOffsetDays,
+			dueAnchorStepTitle: s.dueAnchorStepId
+				? stepTitleById.get(s.dueAnchorStepId) ?? null
+				: null,
+			dueSourceFieldKey: s.dueSourceFieldId
+				? fieldKeyById.get(s.dueSourceFieldId) ?? null
+				: null,
+		},
 	}));
 	const runStepListItems: RunStepListItem[] = bundle.steps.map((s) => ({
 		id: s.id,
