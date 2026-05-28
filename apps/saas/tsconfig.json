@@ -19,7 +19,8 @@
 			"@shared/*": ["./modules/shared/*"],
 			"@builder/*": ["./modules/builder/*"],
 			"@library/*": ["./modules/library/*"],
-			"@listings/*": ["./modules/listings/*"]
+			"@listings/*": ["./modules/listings/*"],
+			"@entitysets/*": ["./modules/entitysets/*"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.mjs", ".next/types/**/*.ts"],

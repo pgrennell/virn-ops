@@ -40,7 +40,7 @@ export default async function OrganizationListingsPage({
 				title="Listings"
 				subtitle="The units this organization manages — short-term rentals, leased apartments, commercial suites, multifamily units. Workflows can be scoped to subsets via entity sets (coming next in v1.5a)."
 			/>
-			<ListingsPanel canMutate={isAdmin} />
+			<ListingsPanel canMutate={isAdmin} organizationSlug={organizationSlug} />
 		</>
 	);
 }

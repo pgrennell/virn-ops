@@ -22,6 +22,7 @@ vi.mock("@virn/database", () => ({
 	removeEntitySetMember: vi.fn(),
 	listMembersForEntitySet: vi.fn(),
 	listEntitySetsForEntity: vi.fn(),
+	listEntitySetsForEntities: vi.fn(),
 	// EntityAdapter touches the underlying entity query (listings) on add-member.
 	getListingForOrg: vi.fn(),
 	listListingsForOrg: vi.fn(),
@@ -35,6 +36,7 @@ import {
 	getEntitySetForOrg,
 	getListingForOrg,
 	getOrganizationMembership,
+	listEntitySetsForEntities,
 	listEntitySetsForEntity,
 	listEntitySetsForOrg,
 	listMembersForEntitySet,
@@ -47,6 +49,7 @@ import { create } from "./create";
 import { remove } from "./delete";
 import { get } from "./get";
 import { list } from "./list";
+import { listForEntities } from "./list-for-entities";
 import { listForEntity } from "./list-for-entity";
 import { listMembers } from "./list-members";
 import { removeMember } from "./remove-member";
@@ -338,5 +341,74 @@ describe("entitySets -- happy paths", () => {
 			ctx,
 		);
 		expect(res).toEqual(chips);
+	});
+
+	// -------------------------------------------------------------------------
+	// listForEntities -- batched reverse lookup (Phase 9.5f index chip strip)
+	// -------------------------------------------------------------------------
+
+	it("listForEntities returns {} for an empty entityIds list without hitting the DB", async () => {
+		const res = await call(
+			listForEntities,
+			{ entityType: "listing", entityIds: [] },
+			ctx,
+		);
+		expect(res).toEqual({});
+		expect(listEntitySetsForEntities).not.toHaveBeenCalled();
+	});
+
+	it("listForEntities serializes the Map<entityId, ChipRow[]> as a JSON object", async () => {
+		const map = new Map<
+			string,
+			Array<{ id: string; name: string; color: string | null }>
+		>([
+			[
+				"lst_1",
+				[
+					{ id: "es_1", name: "STR penthouses", color: "#ff00aa" },
+					{ id: "es_2", name: "Beachfront", color: null },
+				],
+			],
+			["lst_2", [{ id: "es_2", name: "Beachfront", color: null }]],
+		]);
+		vi.mocked(listEntitySetsForEntities).mockResolvedValueOnce(map);
+
+		const res = await call(
+			listForEntities,
+			{ entityType: "listing", entityIds: ["lst_1", "lst_2", "lst_3"] },
+			ctx,
+		);
+
+		// JSON-friendly object shape (Map doesn't cross the oRPC wire).
+		expect(res).toEqual({
+			lst_1: [
+				{ id: "es_1", name: "STR penthouses", color: "#ff00aa" },
+				{ id: "es_2", name: "Beachfront", color: null },
+			],
+			lst_2: [{ id: "es_2", name: "Beachfront", color: null }],
+		});
+		// lst_3 had no memberships -- query returns no entry; result object omits the key.
+		expect(res).not.toHaveProperty("lst_3");
+	});
+
+	it("listForEntities rejects batches larger than 200", async () => {
+		const tooMany = Array.from({ length: 201 }, (_, i) => `lst_${i}`);
+		await expect(
+			call(listForEntities, { entityType: "listing", entityIds: tooMany }, ctx),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+	});
+
+	it("listForEntities works for plain members (read access)", async () => {
+		vi.mocked(getOrganizationMembership).mockResolvedValueOnce(
+			makeMembership("member") as never,
+		);
+		vi.mocked(listEntitySetsForEntities).mockResolvedValueOnce(new Map());
+		await expect(
+			call(
+				listForEntities,
+				{ entityType: "listing", entityIds: ["lst_1"] },
+				ctx,
+			),
+		).resolves.toEqual({});
 	});
 });

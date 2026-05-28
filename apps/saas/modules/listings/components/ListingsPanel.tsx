@@ -9,7 +9,7 @@ import { Button } from "@virn/ui/components/button";
 import { Spinner } from "@virn/ui/components/spinner";
 import { useQuery } from "@tanstack/react-query";
 import { Home, Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
@@ -18,6 +18,7 @@ import { ListingRowMenu } from "./ListingRowMenu";
 
 interface ListingsPanelProps {
 	canMutate: boolean;
+	organizationSlug: string;
 }
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
@@ -33,11 +34,23 @@ function propertyTypeLabel(value: string | null): string | null {
 	return PROPERTY_TYPE_LABELS[value] ?? value;
 }
 
-export function ListingsPanel({ canMutate }: ListingsPanelProps) {
+export function ListingsPanel({ canMutate, organizationSlug }: ListingsPanelProps) {
 	const listingsQuery = useQuery(orpc.listings.list.queryOptions({ input: {} }));
 	const [createOpen, setCreateOpen] = useState(false);
 
 	const listings = listingsQuery.data ?? [];
+
+	// Phase 9.5f: batched chip badges. One query per listings-list render,
+	// returning the set memberships keyed by listing id. Enabled only when we
+	// actually have listings to look up (avoids a no-op POST on an empty page).
+	const listingIds = useMemo(() => listings.map((l) => l.id), [listings]);
+	const tagsQuery = useQuery({
+		...orpc.entitySets.listForEntities.queryOptions({
+			input: { entityType: "listing", entityIds: listingIds },
+		}),
+		enabled: listingIds.length > 0,
+	});
+	const tagsByListing = tagsQuery.data ?? {};
 
 	return (
 		<>
@@ -101,6 +114,7 @@ export function ListingsPanel({ canMutate }: ListingsPanelProps) {
 				<ul className="divide-y divide-border border border-border rounded-md overflow-hidden">
 					{listings.map((l) => {
 						const typeLabel = propertyTypeLabel(l.propertyType);
+						const tags = tagsByListing[l.id] ?? [];
 						return (
 							<li
 								key={l.id}
@@ -110,13 +124,34 @@ export function ListingsPanel({ canMutate }: ListingsPanelProps) {
 									<Home className="size-4 text-foreground/70" />
 								</div>
 								<div className="flex-1 min-w-0 gap-0.5 flex flex-col">
-									<div className="gap-2 flex items-center">
+									<div className="gap-2 flex items-center flex-wrap">
 										<span className="font-medium text-sm truncate">{l.name}</span>
 										{typeLabel && (
 											<span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-muted text-foreground/70 font-medium uppercase tracking-wide">
 												{typeLabel}
 											</span>
 										)}
+										{tags.map((t) => (
+											<span
+												key={t.id}
+												className="shrink-0 px-1.5 py-0.5 text-[10px] rounded font-medium gap-1 inline-flex items-center"
+												style={{
+													backgroundColor: t.color
+														? `${t.color}20` // 12.5% opacity tint
+														: "var(--muted)",
+													color: "var(--foreground)",
+												}}
+												title={`Entity set: ${t.name}`}
+											>
+												<span
+													className="size-1.5 rounded-full"
+													style={{
+														backgroundColor: t.color ?? "var(--foreground)",
+													}}
+												/>
+												{t.name}
+											</span>
+										))}
 									</div>
 									{l.description && (
 										<p className="text-xs text-foreground/60 truncate">
@@ -140,6 +175,7 @@ export function ListingsPanel({ canMutate }: ListingsPanelProps) {
 										description={l.description}
 										propertyType={l.propertyType}
 										externalListingId={l.externalListingId}
+										organizationSlug={organizationSlug}
 									/>
 								)}
 							</li>

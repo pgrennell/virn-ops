@@ -10,6 +10,7 @@ import { create } from "./procedures/create";
 import { remove } from "./procedures/delete";
 import { get } from "./procedures/get";
 import { list } from "./procedures/list";
+import { listForEntities } from "./procedures/list-for-entities";
 import { listForEntity } from "./procedures/list-for-entity";
 import { listMembers } from "./procedures/list-members";
 import { removeMember } from "./procedures/remove-member";
@@ -26,4 +27,5 @@ export const entitysetsRouter = {
 	removeMember,
 	listMembers,
 	listForEntity,
+	listForEntities, // batched reverse lookup -- Phase 9.5f index-row chip rendering
 };

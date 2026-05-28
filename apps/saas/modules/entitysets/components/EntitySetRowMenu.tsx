@@ -1,6 +1,9 @@
 "use client";
 
-// ListingRowMenu — edit / archive actions per listing row. Mirrors VendorRowMenu.
+// EntitySetRowMenu — manage members / edit / delete actions per entity-set row.
+// Members management opens a dialog that toggles which listings belong to this
+// set (set-perspective membership; the listing-perspective is in the listings
+// page's Manage-tags dialog).
 
 import { Button } from "@virn/ui/components/button";
 import {
@@ -21,53 +24,49 @@ import {
 import { Spinner } from "@virn/ui/components/spinner";
 import { toastError, toastSuccess } from "@virn/ui/components/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Edit3, MoreVertical, Tag, Trash2 } from "lucide-react";
+import { Edit3, MoreVertical, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
-import { EditListingDialog } from "./EditListingDialog";
-import { ManageListingTagsDialog } from "./ManageListingTagsDialog";
+import { EditEntitySetDialog } from "./EditEntitySetDialog";
+import { EntitySetMembersDialog } from "./EntitySetMembersDialog";
 
-interface ListingRowMenuProps {
-	listingId: string;
-	listingName: string;
+interface EntitySetRowMenuProps {
+	entitySetId: string;
+	entitySetName: string;
+	color: string | null;
 	description: string | null;
-	propertyType: string | null;
-	externalListingId: string | null;
-	/** For the Manage-tags dialog's deep-link to /library/entity-sets when the org
-	 * hasn't authored any sets yet. */
 	organizationSlug: string;
 }
 
-export function ListingRowMenu({
-	listingId,
-	listingName,
+export function EntitySetRowMenu({
+	entitySetId,
+	entitySetName,
+	color,
 	description,
-	propertyType,
-	externalListingId,
 	organizationSlug,
-}: ListingRowMenuProps) {
+}: EntitySetRowMenuProps) {
 	const queryClient = useQueryClient();
 	const [editOpen, setEditOpen] = useState(false);
-	const [tagsOpen, setTagsOpen] = useState(false);
+	const [membersOpen, setMembersOpen] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 
-	const deleteMutation = useMutation(orpc.listings.softDelete.mutationOptions());
+	const deleteMutation = useMutation(orpc.entitySets.delete.mutationOptions());
 
 	const handleDelete = () => {
 		deleteMutation.mutate(
-			{ id: listingId },
+			{ id: entitySetId },
 			{
 				onSuccess: () => {
 					queryClient.invalidateQueries({
-						queryKey: orpc.listings.list.queryKey(),
+						queryKey: orpc.entitySets.list.queryKey(),
 					});
 					setConfirmDelete(false);
-					toastSuccess("Listing archived.");
+					toastSuccess("Entity set deleted.");
 				},
 				onError: (err) =>
-					toastError(err.message ?? "Couldn't archive the listing."),
+					toastError(err.message ?? "Couldn't delete the entity set."),
 			},
 		);
 	};
@@ -79,20 +78,20 @@ export function ListingRowMenu({
 					<Button
 						variant="ghost"
 						size="sm"
-						aria-label={`Actions for ${listingName}`}
+						aria-label={`Actions for ${entitySetName}`}
 						className="size-8 p-0"
 					>
 						<MoreVertical className="size-4" />
 					</Button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" className="w-44">
-					<DropdownMenuItem onClick={() => setTagsOpen(true)}>
-						<Tag className="size-3.5 mr-2" />
-						Manage tags
+				<DropdownMenuContent align="end" className="w-48">
+					<DropdownMenuItem onClick={() => setMembersOpen(true)}>
+						<Users className="size-3.5 mr-2" />
+						Manage members
 					</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => setEditOpen(true)}>
 						<Edit3 className="size-3.5 mr-2" />
-						Edit listing
+						Edit set
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
@@ -100,26 +99,25 @@ export function ListingRowMenu({
 						className="text-destructive focus:text-destructive"
 					>
 						<Trash2 className="size-3.5 mr-2" />
-						Archive
+						Delete set
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 
-			<EditListingDialog
+			<EditEntitySetDialog
 				open={editOpen}
 				onOpenChange={setEditOpen}
-				listingId={listingId}
-				initialName={listingName}
+				entitySetId={entitySetId}
+				initialName={entitySetName}
+				initialColor={color}
 				initialDescription={description}
-				initialPropertyType={propertyType}
-				initialExternalListingId={externalListingId}
 			/>
 
-			<ManageListingTagsDialog
-				open={tagsOpen}
-				onOpenChange={setTagsOpen}
-				listingId={listingId}
-				listingName={listingName}
+			<EntitySetMembersDialog
+				open={membersOpen}
+				onOpenChange={setMembersOpen}
+				entitySetId={entitySetId}
+				entitySetName={entitySetName}
 				organizationSlug={organizationSlug}
 			/>
 
@@ -129,11 +127,12 @@ export function ListingRowMenu({
 			>
 				<DialogContent className="max-w-md">
 					<DialogHeader>
-						<DialogTitle>Archive "{listingName}"?</DialogTitle>
+						<DialogTitle>Delete "{entitySetName}"?</DialogTitle>
 						<DialogDescription>
-							The listing will be soft-archived — it won't appear in the launcher's
-							picker anymore, but past run + activity-feed references stay intact.
-							This can't be undone from the UI.
+							This deletes the set and removes the membership of every entity it
+							currently holds. Any workflow that scoped itself to this set will keep
+							the dangling id in its scope array — it'll just stop matching anything.
+							This can't be undone.
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter className="mt-4">
@@ -150,7 +149,7 @@ export function ListingRowMenu({
 							disabled={deleteMutation.isPending}
 						>
 							{deleteMutation.isPending && <Spinner className="size-3.5 mr-1.5" />}
-							Archive listing
+							Delete set
 						</Button>
 					</DialogFooter>
 				</DialogContent>
