@@ -71,6 +71,13 @@
       "when": 1779927590773,
       "tag": "0009_happy_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779933285275,
+      "tag": "0010_unique_mentor",
+      "breakpoints": true
     }
   ]
 }

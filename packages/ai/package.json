@@ -10,7 +10,9 @@
 	"dependencies": {
 		"@ai-sdk/openai": "catalog:",
 		"@ai-sdk/react": "catalog:",
-		"ai": "catalog:"
+		"@anthropic-ai/sdk": "catalog:",
+		"ai": "catalog:",
+		"zod": "catalog:"
 	},
 	"devDependencies": {
 		"@virn/tsconfig": "workspace:*",

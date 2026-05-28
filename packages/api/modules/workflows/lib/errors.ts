@@ -29,7 +29,10 @@ export type WorkflowEngineErrorCode =
 	// Phase 9.5g review-state transitions (PRD §6.6)
 	| "CONCIERGE_REVIEW_NOT_ENABLED"
 	| "WORKFLOW_HAS_NO_DRAFT"
-	| "REVIEW_STATE_INVALID";
+	| "REVIEW_STATE_INVALID"
+	// Phase 12.1 AI authoring (PRD §6.4, §8.4)
+	| "AI_AUTHORING_INVALID_OUTPUT"
+	| "AI_AUTHORING_MODEL_ERROR";
 
 export class WorkflowEngineError extends Error {
 	readonly code: WorkflowEngineErrorCode;

@@ -21,6 +21,7 @@ import {
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
+import { aiAuthoringPrompt } from "./ai_authoring";
 import { reviewState } from "./entitysets";
 import { id, orgId, softDelete, timestamps, user, workflowType } from "./_shared";
 // Circular import via lazy thunk — see `installedFromListingVersionId` below.
@@ -114,6 +115,14 @@ export const workflow = pgTable(
     // not at module-evaluation time).
     installedFromListingVersionId: text("installed_from_listing_version_id").references(
       (): AnyPgColumn => templateListingVersion.id,
+      { onDelete: "set null" },
+    ),
+    // Phase 12.1 -- AI authoring provenance. Set when the workflow was created via
+    // agents.authorWorkflow; null for hand-authored or pack-installed workflows.
+    // SET NULL on delete preserves the workflow if the provenance row is ever pruned
+    // (provenance is auditable but not load-bearing for run execution).
+    aiAuthoringPromptId: text("ai_authoring_prompt_id").references(
+      () => aiAuthoringPrompt.id,
       { onDelete: "set null" },
     ),
     createdBy: text("created_by").references(() => user.id, {

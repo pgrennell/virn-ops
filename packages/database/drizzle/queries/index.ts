@@ -1,5 +1,6 @@
 export * from "./agent-credentials";
 export * from "./agents";
+export * from "./ai-authoring";
 export * from "./config";
 export * from "./datasets";
 export * from "./entitysets";

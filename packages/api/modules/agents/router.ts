@@ -1,3 +1,4 @@
+import { authorWorkflowProc } from "./procedures/author-workflow";
 import { create } from "./procedures/create";
 import { get } from "./procedures/get";
 import { list } from "./procedures/list";
@@ -12,4 +13,5 @@ export const agentsRouter = {
 	update,
 	rotateCredential,
 	softDelete,
+	authorWorkflow: authorWorkflowProc,
 };

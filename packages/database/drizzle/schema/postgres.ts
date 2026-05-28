@@ -24,3 +24,4 @@ export * from "./audit";
 export * from "./activity";
 export * from "./collab";
 export * from "./datasets";
+export * from "./ai_authoring";

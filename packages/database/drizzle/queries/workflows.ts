@@ -546,7 +546,11 @@ export async function findStepReferencers(stepId: string): Promise<StepReference
 // ---------------------------------------------------------------------------
 
 /** Insert a workflow row + an initial draft `workflow_version` (number=1, status=draft).
- * Transactional -- a workflow is meaningless without a version to point at. */
+ * Transactional -- a workflow is meaningless without a version to point at.
+ *
+ * Phase 12.1: `aiAuthoringPromptId` (optional) attaches provenance for AI-authored
+ * workflows. Set when the workflow originated from `agents.authorWorkflow`; left null
+ * for hand-authored or pack-installed workflows. */
 export async function insertWorkflowWithDraft(
 	input: {
 		organizationId: string;
@@ -554,6 +558,7 @@ export async function insertWorkflowWithDraft(
 		description: string | null;
 		type: "procedure" | "document" | "policy" | "form";
 		createdBy: string;
+		aiAuthoringPromptId?: string | null;
 	},
 	executor: DbExecutor = db,
 ): Promise<{ workflowId: string; versionId: string }> {
@@ -566,6 +571,7 @@ export async function insertWorkflowWithDraft(
 				description: input.description,
 				type: input.type,
 				createdBy: input.createdBy,
+				aiAuthoringPromptId: input.aiAuthoringPromptId ?? null,
 			})
 			.returning({ id: workflow.id });
 
