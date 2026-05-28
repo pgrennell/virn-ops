@@ -17,6 +17,7 @@
 //   - automation rule firing -> Phase 6
 
 import {
+	batchUpdateRunStepDueAt,
 	type DbExecutor,
 	findDueRecomputeTargets,
 	getAgentForOrg,
@@ -679,7 +680,7 @@ export async function recomputeDueAtAfterStepCompletion(
 		anchorCompletedAt: args.completedAt,
 	};
 
-	const patchedRunStepIds: string[] = [];
+	const patches: Array<{ runStepId: string; dueAt: Date }> = [];
 	for (const t of targets) {
 		const due = computeStepDueAt(
 			args.completedAt,
@@ -692,10 +693,10 @@ export async function recomputeDueAtAfterStepCompletion(
 			ctx,
 		);
 		if (due === null) continue;
-		await updateRunStepDueAt({ runStepId: t.runStepId, dueAt: due }, executor);
-		patchedRunStepIds.push(t.runStepId);
+		patches.push({ runStepId: t.runStepId, dueAt: due });
 	}
-	return { patchedRunStepIds };
+	await batchUpdateRunStepDueAt(patches, executor);
+	return { patchedRunStepIds: patches.map((p) => p.runStepId) };
 }
 
 export interface RecomputeAfterFieldValueChangeArgs {
@@ -762,7 +763,7 @@ export async function recomputeDueAtAfterFieldValueChange(
 		anchorCompletedAt: null,
 	};
 
-	const patchedRunStepIds: string[] = [];
+	const patches: Array<{ runStepId: string; dueAt: Date }> = [];
 	for (const t of targets) {
 		const due = computeStepDueAt(
 			placeholderRunStart,
@@ -775,8 +776,8 @@ export async function recomputeDueAtAfterFieldValueChange(
 			ctx,
 		);
 		if (due === null) continue;
-		await updateRunStepDueAt({ runStepId: t.runStepId, dueAt: due }, executor);
-		patchedRunStepIds.push(t.runStepId);
+		patches.push({ runStepId: t.runStepId, dueAt: due });
 	}
-	return { patchedRunStepIds };
+	await batchUpdateRunStepDueAt(patches, executor);
+	return { patchedRunStepIds: patches.map((p) => p.runStepId) };
 }

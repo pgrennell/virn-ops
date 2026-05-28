@@ -170,18 +170,30 @@ async function assertDueRefs(args: {
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
 }): Promise<void> {
-	if (
-		args.dueAnchorStepId !== undefined &&
-		args.dueAnchorStepId !== null
-	) {
-		if (args.stepId !== null && args.dueAnchorStepId === args.stepId) {
-			throw new WorkflowEngineError(
-				"DUE_ANCHOR_SELF_REFERENCE",
-				"A step cannot anchor on itself -- pick another step or clear dueAnchorStepId.",
-				{ stepId: args.stepId },
-			);
-		}
-		const anchor = await getStepWithVersion(args.dueAnchorStepId);
+	const checkAnchor =
+		args.dueAnchorStepId !== undefined && args.dueAnchorStepId !== null;
+	const checkSource =
+		args.dueSourceFieldId !== undefined && args.dueSourceFieldId !== null;
+
+	// Cheap-path checks before any DB round-trip.
+	if (checkAnchor && args.stepId !== null && args.dueAnchorStepId === args.stepId) {
+		throw new WorkflowEngineError(
+			"DUE_ANCHOR_SELF_REFERENCE",
+			"A step cannot anchor on itself -- pick another step or clear dueAnchorStepId.",
+			{ stepId: args.stepId },
+		);
+	}
+
+	if (!checkAnchor && !checkSource) return;
+
+	// Run the two reads in parallel when both are needed. Independent lookups
+	// against unrelated rows -- no data dependency between them.
+	const [anchor, src] = await Promise.all([
+		checkAnchor ? getStepWithVersion(args.dueAnchorStepId as string) : null,
+		checkSource ? getFieldWithVersion(args.dueSourceFieldId as string) : null,
+	]);
+
+	if (checkAnchor) {
 		if (!anchor || anchor.version.id !== args.versionId) {
 			throw new WorkflowEngineError(
 				"DUE_ANCHOR_INVALID",
@@ -190,11 +202,7 @@ async function assertDueRefs(args: {
 			);
 		}
 	}
-	if (
-		args.dueSourceFieldId !== undefined &&
-		args.dueSourceFieldId !== null
-	) {
-		const src = await getFieldWithVersion(args.dueSourceFieldId);
+	if (checkSource) {
 		if (!src || src.version.id !== args.versionId) {
 			throw new WorkflowEngineError(
 				"DUE_SOURCE_FIELD_INVALID",

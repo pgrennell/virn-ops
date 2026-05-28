@@ -823,6 +823,40 @@ export async function updateRunStepDueAt(
 		.where(eq(runStep.id, args.runStepId));
 }
 
+/** Batch variant of updateRunStepDueAt -- patches N runSteps in a single
+ * statement via a CASE expression. Used by the recompute hook (both step-
+ * completion + field-value-change paths) to avoid N sequential round-trips
+ * inside the completion transaction. No-op when the list is empty. */
+export async function batchUpdateRunStepDueAt(
+	patches: ReadonlyArray<{ runStepId: string; dueAt: Date }>,
+	executor: DbExecutor = db,
+): Promise<void> {
+	if (patches.length === 0) return;
+	// Single-row case stays a plain UPDATE (avoids the CASE syntax overhead).
+	if (patches.length === 1) {
+		const [p] = patches;
+		await executor
+			.update(runStep)
+			.set({ dueAt: p.dueAt })
+			.where(eq(runStep.id, p.runStepId));
+		return;
+	}
+	// Build a CASE expression: `dueAt = CASE id WHEN '...' THEN ts WHEN ... END`.
+	// Drizzle's sql template handles parameterization for both ids and timestamps,
+	// so user-controlled values don't reach the wire as concatenated SQL.
+	const ids = patches.map((p) => p.runStepId);
+	const caseExpr = sql.join(
+		patches.map(
+			(p) => sql`WHEN ${runStep.id} = ${p.runStepId} THEN ${p.dueAt}::timestamp`,
+		),
+		sql` `,
+	);
+	await executor
+		.update(runStep)
+		.set({ dueAt: sql`CASE ${caseExpr} END` })
+		.where(inArray(runStep.id, ids));
+}
+
 /** Mark a runStep completed. `completedBy` is nullable -- a guest participant has no
  * Better Auth user id; the actor's identity for guests is captured in audit/activity
  * metadata (participantId) instead. No-op if already completed (caller should check

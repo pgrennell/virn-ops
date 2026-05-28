@@ -16,9 +16,11 @@ vi.mock("@virn/database", () => ({
 	findDueRecomputeTargets: vi.fn(async () => []),
 	getDateFieldValuesForStepInRun: vi.fn(async () => []),
 	updateRunStepDueAt: vi.fn(async () => undefined),
+	batchUpdateRunStepDueAt: vi.fn(async () => undefined),
 }));
 
 import {
+	batchUpdateRunStepDueAt,
 	findDueRecomputeTargets,
 	getAgentForOrg,
 	getDateFieldValuesForStepInRun,
@@ -28,7 +30,6 @@ import {
 	getWorkflowForOrg,
 	getWorkflowVersionById,
 	insertRunSnapshot,
-	updateRunStepDueAt,
 	writeAuditAndActivity,
 } from "@virn/database";
 
@@ -1050,13 +1051,14 @@ describe("recomputeDueAtAfterStepCompletion", () => {
 		vi.clearAllMocks();
 		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([]);
 		vi.mocked(findDueRecomputeTargets).mockResolvedValue([]);
-		vi.mocked(updateRunStepDueAt).mockResolvedValue(undefined);
+		vi.mocked(batchUpdateRunStepDueAt).mockResolvedValue(undefined);
 	});
 
 	it("no-op when no dependents found", async () => {
 		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
 		expect(result.patchedRunStepIds).toEqual([]);
-		expect(updateRunStepDueAt).not.toHaveBeenCalled();
+		// Helper short-circuits before any UPDATE when targets is empty.
+		expect(batchUpdateRunStepDueAt).not.toHaveBeenCalled();
 	});
 
 	it("patches offset_from_step dependents with completedAt + offset", async () => {
@@ -1074,10 +1076,10 @@ describe("recomputeDueAtAfterStepCompletion", () => {
 		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
 
 		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
-		expect(updateRunStepDueAt).toHaveBeenCalledTimes(1);
-		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
-		expect(arg.runStepId).toBe("rs_dep");
-		expect(arg.dueAt.getTime() - ARGS.completedAt.getTime()).toBe(
+		const [arg] = vi.mocked(batchUpdateRunStepDueAt).mock.calls[0];
+		expect(arg).toHaveLength(1);
+		expect(arg[0].runStepId).toBe("rs_dep");
+		expect(arg[0].dueAt.getTime() - ARGS.completedAt.getTime()).toBe(
 			2 * 24 * 60 * 60 * 1000,
 		);
 	});
@@ -1101,8 +1103,8 @@ describe("recomputeDueAtAfterStepCompletion", () => {
 		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
 
 		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
-		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
-		expect(arg.dueAt.toISOString().startsWith("2026-06-13")).toBe(true);
+		const [arg] = vi.mocked(batchUpdateRunStepDueAt).mock.calls[0];
+		expect(arg[0].dueAt.toISOString().startsWith("2026-06-13")).toBe(true);
 	});
 
 	it("forwards filled source field ids to findDueRecomputeTargets", async () => {
@@ -1140,10 +1142,12 @@ describe("recomputeDueAtAfterStepCompletion", () => {
 		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
 
 		expect(result.patchedRunStepIds).toEqual([]);
-		expect(updateRunStepDueAt).not.toHaveBeenCalled();
+		// Resolver returned null for the only target -> patches array stays empty.
+		// batchUpdateRunStepDueAt receives an empty array (cheap no-op inside).
+		expect(batchUpdateRunStepDueAt).toHaveBeenCalledWith([], STUB_TX);
 	});
 
-	it("handles a mixed batch (offset_from_step + from_date_field together)", async () => {
+	it("handles a mixed batch (offset_from_step + from_date_field together) in one UPDATE", async () => {
 		vi.mocked(getDateFieldValuesForStepInRun).mockResolvedValue([
 			{ fieldId: "fld_src", fieldType: "date", value: "2026-06-15" },
 		]);
@@ -1169,7 +1173,10 @@ describe("recomputeDueAtAfterStepCompletion", () => {
 		const result = await recomputeDueAtAfterStepCompletion(ARGS, STUB_TX);
 
 		expect(result.patchedRunStepIds).toEqual(["rs_offset", "rs_field"]);
-		expect(updateRunStepDueAt).toHaveBeenCalledTimes(2);
+		// One batched UPDATE, not two separate ones.
+		expect(batchUpdateRunStepDueAt).toHaveBeenCalledTimes(1);
+		const [arg] = vi.mocked(batchUpdateRunStepDueAt).mock.calls[0];
+		expect(arg).toHaveLength(2);
 	});
 });
 
@@ -1183,7 +1190,7 @@ describe("recomputeDueAtAfterFieldValueChange", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(findDueRecomputeTargets).mockResolvedValue([]);
-		vi.mocked(updateRunStepDueAt).mockResolvedValue(undefined);
+		vi.mocked(batchUpdateRunStepDueAt).mockResolvedValue(undefined);
 	});
 
 	it("no-op for non-date fields (short-circuit before any query)", async () => {
@@ -1193,7 +1200,7 @@ describe("recomputeDueAtAfterFieldValueChange", () => {
 		);
 		expect(result.patchedRunStepIds).toEqual([]);
 		expect(findDueRecomputeTargets).not.toHaveBeenCalled();
-		expect(updateRunStepDueAt).not.toHaveBeenCalled();
+		expect(batchUpdateRunStepDueAt).not.toHaveBeenCalled();
 	});
 
 	it("no-op when the date value is unparseable", async () => {
@@ -1244,10 +1251,10 @@ describe("recomputeDueAtAfterFieldValueChange", () => {
 		);
 
 		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
-		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
-		expect(arg.runStepId).toBe("rs_dep");
+		const [arg] = vi.mocked(batchUpdateRunStepDueAt).mock.calls[0];
+		expect(arg[0].runStepId).toBe("rs_dep");
 		// "2026-06-15" + 7d (UTC math) = 2026-06-22T00:00:00Z
-		expect(arg.dueAt.toISOString().startsWith("2026-06-22")).toBe(true);
+		expect(arg[0].dueAt.toISOString().startsWith("2026-06-22")).toBe(true);
 	});
 
 	it("supports negative offsets ('1 day before guest_arrival')", async () => {
@@ -1273,8 +1280,8 @@ describe("recomputeDueAtAfterFieldValueChange", () => {
 		);
 
 		expect(result.patchedRunStepIds).toEqual(["rs_dep"]);
-		const [arg] = vi.mocked(updateRunStepDueAt).mock.calls[0];
+		const [arg] = vi.mocked(batchUpdateRunStepDueAt).mock.calls[0];
 		// "2026-06-15" - 1d (UTC math) = 2026-06-14T00:00:00Z
-		expect(arg.dueAt.toISOString().startsWith("2026-06-14")).toBe(true);
+		expect(arg[0].dueAt.toISOString().startsWith("2026-06-14")).toBe(true);
 	});
 });

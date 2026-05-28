@@ -958,26 +958,38 @@ function AuthorBody({
 	// row chip never has to do its own lookups (and so a passing-by reader can see
 	// at a glance "this step is due 2d after Inspect kitchen" without opening the
 	// config panel). Anchor lookup misses (anchor was deleted, say) fall through
-	// to null + the chip renders "due rule incomplete."
-	const stepTitleById = new Map(bundle.steps.map((s) => [s.id, s.title] as const));
-	const fieldKeyById = new Map(bundle.fields.map((f) => [f.id, f.key] as const));
-	const definitionSteps: RunStepListDefinitionStep[] = bundle.steps.map((s) => ({
-		id: s.id,
-		sectionId: s.sectionId,
-		position: s.position,
-		isRequired: s.isRequired,
-		type: s.type as StepType,
-		dueRule: {
-			dueType: s.dueType,
-			dueOffsetDays: s.dueOffsetDays,
-			dueAnchorStepTitle: s.dueAnchorStepId
-				? stepTitleById.get(s.dueAnchorStepId) ?? null
-				: null,
-			dueSourceFieldKey: s.dueSourceFieldId
-				? fieldKeyById.get(s.dueSourceFieldId) ?? null
-				: null,
-		},
-	}));
+	// to null + the chip renders "due rule incomplete." Memoized against
+	// bundle.steps / bundle.fields so the Maps aren't rebuilt on every typing-
+	// driven re-render of the config panel.
+	const stepTitleById = useMemo(
+		() => new Map(bundle.steps.map((s) => [s.id, s.title] as const)),
+		[bundle.steps],
+	);
+	const fieldKeyById = useMemo(
+		() => new Map(bundle.fields.map((f) => [f.id, f.key] as const)),
+		[bundle.fields],
+	);
+	const definitionSteps: RunStepListDefinitionStep[] = useMemo(
+		() =>
+			bundle.steps.map((s) => ({
+				id: s.id,
+				sectionId: s.sectionId,
+				position: s.position,
+				isRequired: s.isRequired,
+				type: s.type as StepType,
+				dueRule: {
+					dueType: s.dueType,
+					dueOffsetDays: s.dueOffsetDays,
+					dueAnchorStepTitle: s.dueAnchorStepId
+						? stepTitleById.get(s.dueAnchorStepId) ?? null
+						: null,
+					dueSourceFieldKey: s.dueSourceFieldId
+						? fieldKeyById.get(s.dueSourceFieldId) ?? null
+						: null,
+				},
+			})),
+		[bundle.steps, stepTitleById, fieldKeyById],
+	);
 	const runStepListItems: RunStepListItem[] = bundle.steps.map((s) => ({
 		id: s.id,
 		stepId: s.id,
