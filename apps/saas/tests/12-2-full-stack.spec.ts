@@ -210,15 +210,16 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Open kickoff field config and set type to Date
 		await page.getByRole("button", { name: "Configure kickoff field arrival_date" }).click();
-		await page.locator("section:has-text('Type') button").click();
-		await page.getByRole("option", { name: "Date" }).first().click();
+		await page.waitForTimeout(1000);
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
+		await page.getByText("Date", { exact: true }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		// Configure Step B: offset_from_step, anchor=Step A, offset=2
 		await page.locator("aside button").filter({ hasText: "Step B" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
 
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "Days after another step completes" }).first().click();
 
 		// Capture screenshot 02-step-b-anchor-picker.png
@@ -226,6 +227,21 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		console.log("Saved: 02-step-b-anchor-picker.png");
 
 		await page.getByRole("button", { name: "Pick an anchor step…" }).first().click();
+
+		// Coverage gap follow-up: verify the picker filters to EARLIER steps only.
+		// Step B's anchor picker should show Step A (earlier) but NOT Step C (later)
+		// or Step B itself. A regression that broke the position filter would let
+		// the test still pass below (which only picks Step A) -- this assertion
+		// catches it.
+		const anchorOptions = await page
+			.getByRole("listbox")
+			.getByRole("option")
+			.allTextContents();
+		console.log("Anchor picker options:", anchorOptions);
+		expect(anchorOptions).toEqual(expect.arrayContaining(["Step A"]));
+		expect(anchorOptions).not.toEqual(expect.arrayContaining(["Step B"]));
+		expect(anchorOptions).not.toEqual(expect.arrayContaining(["Step C"]));
+
 		await page.getByRole("option", { name: "Step A" }).first().click();
 
 		await page.locator("input[type='number']").first().fill("2");
@@ -236,7 +252,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		await page.locator("aside button").filter({ hasText: "Step C" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
 
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "From a date field's value" }).first().click();
 
 		// Capture screenshot 03-step-c-source-picker.png
@@ -244,6 +260,20 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		console.log("Saved: 03-step-c-source-picker.png");
 
 		await page.getByRole("button", { name: "Pick a date field…" }).first().click();
+
+		// Coverage gap follow-up: verify the picker filters to allowable sources.
+		// Step C's source picker should show arrival_date (kickoff) but not any
+		// later-step or same-step date fields. Right now the only other potential
+		// source candidate is the (absent) Step C own field; this assertion
+		// becomes more meaningful once additional dates are added in later
+		// scenarios but is still a non-regression check today.
+		const sourceOptions = await page
+			.getByRole("listbox")
+			.getByRole("option")
+			.allTextContents();
+		console.log("Source picker options:", sourceOptions);
+		expect(sourceOptions.some((t) => /arrival_date/.test(t))).toBe(true);
+
 		await page.getByRole("option", { name: /arrival_date/ }).first().click();
 
 		await page.locator("input[type='number']").first().fill("-1");
@@ -266,12 +296,12 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
 
 		// 8. On Step B, switch dueType to "Days after the run starts"
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "Days after the run starts" }).first().click();
 		await expect(stepBChip).toHaveText("due 2d after launch");
 
 		// 9. Switch back to offset_from_step. Verify anchor selection is CLEARED (normalize-duePatch)
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "Days after another step completes" }).first().click();
 		await expect(stepBChip).toHaveText("due rule incomplete");
 
@@ -327,15 +357,16 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		await page.waitForTimeout(1500);
 
 		await page.getByRole("button", { name: "Configure field lease_start" }).first().click();
-		await page.locator("section:has-text('Type') button").click();
-		await page.getByRole("option", { name: "Date" }).first().click();
+		await page.waitForTimeout(1000);
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
+		await page.getByText("Date", { exact: true }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		// Configure Bar's due rule: dueType=from_date_field, source=lease_start
 		await page.locator("aside button").filter({ hasText: "Bar" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
 
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "From a date field's value" }).first().click();
 
 		await page.getByRole("button", { name: "Pick a date field…" }).first().click();
@@ -398,10 +429,11 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// Open arrival_date's config
 		await page.getByRole("button", { name: "Kickoff form" }).click();
 		await page.getByRole("button", { name: "Configure kickoff field arrival_date" }).click();
+		await page.waitForTimeout(1000);
 
 		// Try to change type to text
-		await page.locator("section:has-text('Type') button").click();
-		await page.getByRole("option", { name: "Text" }).first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
+		await page.getByText("Short text", { exact: true }).first().click();
 
 		// Verify Alert: "Type change refused -- clear these references first: step due-rule"
 		const alert = page.locator("div[role='alert']");
@@ -415,26 +447,28 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// Open Step C settings and set dueType to none
 		await page.locator("aside button").filter({ hasText: "Step C" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "No due rule" }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		// Re-open arrival_date config and successfully change to text
 		await page.getByRole("button", { name: "Kickoff form" }).click();
 		await page.getByRole("button", { name: "Configure kickoff field arrival_date" }).click();
-		await page.locator("section:has-text('Type') button").click();
-		await page.getByRole("option", { name: "Text" }).first().click();
+		await page.waitForTimeout(1000);
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
+		await page.getByText("Short text", { exact: true }).first().click();
 		await expect(alert).toBeHidden();
 		console.log("Field type successfully changed to Text after clearing reference!");
 
 		// Restore baseline: change type back to Date, re-configure Step C due rule to -1 arrival_date
-		await page.locator("section:has-text('Type') button").click();
-		await page.getByRole("option", { name: "Date" }).first().click();
+		await page.waitForTimeout(1000);
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
+		await page.getByText("Date", { exact: true }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		await page.locator("aside button").filter({ hasText: "Step C" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
-		await page.locator("section:has-text('Due rule') button").first().click();
+		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
 		await page.getByRole("option", { name: "From a date field's value" }).first().click();
 		await page.getByRole("button", { name: "Pick a date field…" }).first().click();
 		await page.getByRole("option", { name: /arrival_date/ }).first().click();
@@ -610,8 +644,53 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// P2 — I: Server-side error paths via direct API
 		// ==========================================
 		console.log("--- P2 — I: Server-side error paths via direct API ---");
-		
-		// 1. self-anchor
+
+		// Coverage gap follow-up: the previous version of this scenario used
+		// barStep.id and fooStep.id AFTER those rows were deleted at line ~392.
+		// For the API to reach the dueType-validation codepath, assertStepEditable
+		// must resolve the step row -- which it can't if the row is deleted.
+		// First, verify the cleanup actually ran (deleted rows really are gone).
+		const cleanupCheck = await db
+			.select()
+			.from(step)
+			.where(or(eq(step.id, fooStep.id), eq(step.id, barStep.id)));
+		console.log(
+			`Cleanup verification: ${cleanupCheck.length} of {Foo, Bar} rows still exist (expected 0).`,
+		);
+		expect(cleanupCheck.length).toBe(0);
+
+		// Fork a new draft via editPublished so we have a known-good draft to test
+		// against. This makes the error-path coverage independent of the cleanup
+		// drama in P0-C.
+		await page.goto(`/${orgSlug}/library/workflows/${handWorkflowId}/builder`);
+		await page.waitForLoadState("networkidle");
+		const editBtn = page.getByRole("button", { name: "Edit" }).first();
+		await expect(editBtn).toBeVisible({ timeout: 10000 });
+		await editBtn.click();
+		await page.waitForLoadState("networkidle");
+		await page.waitForTimeout(2000); // fork is one DB round-trip; let it land
+
+		const allVersions = await db
+			.select()
+			.from(workflowVersion)
+			.where(eq(workflowVersion.workflowId, handWorkflowId!));
+		const draftVersion = allVersions.find((v) => v.status === "draft");
+		expect(draftVersion).toBeDefined();
+		const draftSteps = await db
+			.select()
+			.from(step)
+			.where(eq(step.workflowVersionId, draftVersion!.id));
+		const draftStepA = draftSteps.find((s) => s.title === "Step A")!;
+		const draftStepB = draftSteps.find((s) => s.title === "Step B")!;
+		const draftStepC = draftSteps.find((s) => s.title === "Step C")!;
+		expect(draftStepA).toBeDefined();
+		expect(draftStepB).toBeDefined();
+		expect(draftStepC).toBeDefined();
+		console.log(
+			`Forked draft ${draftVersion!.id} with steps A=${draftStepA.id} (pos ${draftStepA.position}), B=${draftStepB.id} (pos ${draftStepB.position}), C=${draftStepC.id} (pos ${draftStepC.position}).`,
+		);
+
+		// 1. self-anchor: Step B's dueAnchor === itself
 		const err1 = await page.evaluate(async ({ stepId }) => {
 			const res = await fetch(`/api/rpc/workflows/steps/${stepId}`, {
 				method: "PATCH",
@@ -619,15 +698,15 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 				body: JSON.stringify({
 					stepId,
 					dueType: "offset_from_step",
-					dueAnchorStepId: stepId
-				})
+					dueAnchorStepId: stepId,
+				}),
 			});
 			return await res.json().catch(() => null);
-		}, { stepId: barStep.id });
+		}, { stepId: draftStepB.id });
 		console.log("Error 1 (Self Anchor):", err1);
 		expect(err1?.data?.code).toBe("DUE_ANCHOR_SELF_REFERENCE");
 
-		// 2. anchor later-step (Foo is later than Bar since we reordered Bar before Foo)
+		// 2. anchor at LATER position: patch Step A with anchor=Step C
 		const err2 = await page.evaluate(async ({ stepId, dueAnchorStepId }) => {
 			const res = await fetch(`/api/rpc/workflows/steps/${stepId}`, {
 				method: "PATCH",
@@ -635,35 +714,37 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 				body: JSON.stringify({
 					stepId,
 					dueType: "offset_from_step",
-					dueAnchorStepId
-				})
+					dueAnchorStepId,
+				}),
 			});
 			return await res.json().catch(() => null);
-		}, { stepId: barStep.id, dueAnchorStepId: fooStep.id });
+		}, { stepId: draftStepA.id, dueAnchorStepId: draftStepC.id });
 		console.log("Error 2 (Anchor Later):", err2);
 		expect(err2?.data?.code).toBe("DUE_ANCHOR_NOT_EARLIER");
 
-		// 3. non-date source field
-		// Create a text field on Bar
-		const createFieldRes = await page.evaluate(async ({ workflowVersionId, stepId }) => {
-			const res = await fetch("/api/rpc/workflows/fields", {
+		// 3. non-date source: create a text field on Step C, then try to use it as
+		// Step C's date source.
+		await page.evaluate(async ({ workflowVersionId, stepId }) => {
+			await fetch("/api/rpc/workflows/fields", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					workflowVersionId,
 					stepId,
 					label: "text_dummy",
-					fieldType: "text"
-				})
+					fieldType: "text",
+				}),
 			});
-			return await res.json().catch(() => null);
-		}, { workflowVersionId: handVerId, stepId: barStep.id });
+		}, { workflowVersionId: draftVersion!.id, stepId: draftStepC.id });
 
-		// Query the newly created text field
-		const dummyTextField = await db.query.field.findFirst({
-			where: (f, { eq, and }) => and(eq(f.workflowVersionId, handVerId), eq(f.key, "text_dummy"))
-		});
-		expect(dummyTextField).toBeDefined();
+		const draftFieldsAfter = await db
+			.select()
+			.from(field)
+			.where(eq(field.workflowVersionId, draftVersion!.id));
+		const textDummy = draftFieldsAfter.find(
+			(f) => f.fieldType === "text" && f.key.startsWith("text_dummy"),
+		);
+		expect(textDummy).toBeDefined();
 
 		const err3 = await page.evaluate(async ({ stepId, dueSourceFieldId }) => {
 			const res = await fetch(`/api/rpc/workflows/steps/${stepId}`, {
@@ -672,20 +753,18 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 				body: JSON.stringify({
 					stepId,
 					dueType: "from_date_field",
-					dueSourceFieldId
-				})
+					dueSourceFieldId,
+				}),
 			});
 			return await res.json().catch(() => null);
-		}, { stepId: barStep.id, dueSourceFieldId: dummyTextField!.id });
+		}, { stepId: draftStepB.id, dueSourceFieldId: textDummy!.id });
 		console.log("Error 3 (Non-Date Source):", err3);
 		expect(err3?.data?.code).toBe("DUE_SOURCE_FIELD_NOT_DATE");
 
-		// 4. referenced-date field type change text (using leaseStartField which was referenced by Bar)
-		// Wait, we deleted Foo and Bar from the step table, but leaseStartField is still in the field table since step deletion cascades fields?
-		// Yes, step deletion cascade deletes fields associated with it! So leaseStartField was cascade-deleted.
-		// Let's use `arrival_date` field (which is referenced by Step C's due rule in handVerId version)
-		const handFields = await db.select().from(field).where(eq(field.workflowVersionId, handVerId));
-		const arrivalDateField = handFields.find(f => f.key === "arrival_date")!;
+		// 4. Type change on a referenced date field. arrival_date in the draft is
+		// referenced by Step C's from_date_field rule (preserved across fork).
+		const draftArrivalDate = draftFieldsAfter.find((f) => f.key === "arrival_date");
+		expect(draftArrivalDate).toBeDefined();
 
 		const err4 = await page.evaluate(async ({ fieldId }) => {
 			const res = await fetch(`/api/rpc/workflows/fields/${fieldId}`, {
@@ -693,11 +772,11 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					fieldId,
-					fieldType: "text"
-				})
+					fieldType: "text",
+				}),
 			});
 			return await res.json().catch(() => null);
-		}, { fieldId: arrivalDateField.id });
+		}, { fieldId: draftArrivalDate!.id });
 		console.log("Error 4 (Field Type Locked):", err4);
 		expect(err4?.data?.code).toBe("FIELD_TYPE_CHANGE_LOCKED");
 	});
