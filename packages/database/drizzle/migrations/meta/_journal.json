@@ -78,6 +78,13 @@
       "when": 1779933285275,
       "tag": "0010_unique_mentor",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779973401940,
+      "tag": "0011_gray_tarot",
+      "breakpoints": true
     }
   ]
 }

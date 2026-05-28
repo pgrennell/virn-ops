@@ -43,6 +43,10 @@ async function buildLaunchBundle(workflowVersionId: string): Promise<{
 		position: number;
 		assignedRoleId: string | null;
 		dueAt: Date | null;
+		dueType: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+		dueOffsetDays: number | null;
+		dueAnchorStepId: string | null;
+		dueSourceFieldId: string | null;
 	}>;
 	customerNameFieldId: string;
 }> {
@@ -71,6 +75,11 @@ async function buildLaunchBundle(workflowVersionId: string): Promise<{
 				s.dueType === "offset_from_start" && typeof s.dueOffsetDays === "number"
 					? new Date(start.getTime() + s.dueOffsetDays * 24 * 60 * 60 * 1000)
 					: null,
+			// Phase 12.2 follow-up -- snapshot the source step's due-rule columns.
+			dueType: s.dueType,
+			dueOffsetDays: s.dueOffsetDays,
+			dueAnchorStepId: s.dueAnchorStepId,
+			dueSourceFieldId: s.dueSourceFieldId,
 		}));
 
 	const wf = await db.query.workflow.findFirst({

@@ -68,6 +68,14 @@ export interface SnapshotStepRow {
 	position: number;
 	assignedRoleId: string | null;
 	dueAt: Date | null;
+	/** Phase 12.2 follow-up -- snapshot of the source step's due-rule columns.
+	 * Recompute hooks read these from run_step (not via a join to the live
+	 * step) so the resolution is self-contained and immune to schema drift.
+	 * Caller copies from the step definition at launch time. */
+	dueType: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
+	dueOffsetDays: number | null;
+	dueAnchorStepId: string | null;
+	dueSourceFieldId: string | null;
 }
 
 export interface SnapshotKickoffValue {
@@ -156,6 +164,11 @@ export async function insertRunSnapshot(input: {
 						assignedRoleId: s.assignedRoleId,
 						dueAt: s.dueAt,
 						status: "pending" as const,
+						// Phase 12.2 follow-up -- snapshot due-rule columns at launch.
+						dueType: s.dueType,
+						dueOffsetDays: s.dueOffsetDays,
+						dueAnchorStepId: s.dueAnchorStepId,
+						dueSourceFieldId: s.dueSourceFieldId,
 					})),
 				)
 				.returning({ id: runStep.id, stepId: runStep.stepId });
@@ -715,12 +728,17 @@ export interface DueRecomputeTarget {
 	dueSourceFieldId: string | null;
 }
 
-/** Find unresolved runSteps in `runId` whose definition step depends on EITHER
- * `completedStepId` (via `dueType='offset_from_step'`) OR any field in
+/** Find unresolved runSteps in `runId` whose SNAPSHOTTED due-rule depends on
+ * EITHER `completedStepId` (via `dueType='offset_from_step'`) OR any field in
  * `sourceFieldIds` (via `dueType='from_date_field'`). "Unresolved" = `runStep.dueAt
  * IS NULL` AND `status != 'completed'` -- we only patch deadlines that were
  * deferred at launch, never overwrite a resolved one (preserves the invariant
- * that a non-null dueAt is sticky once set). */
+ * that a non-null dueAt is sticky once set).
+ *
+ * Phase 12.2 follow-up: reads the due-rule columns from `runStep` directly
+ * (snapshot) rather than joining to `step` (live definition). The join is gone
+ * and the recompute is self-contained -- a mid-run schema mutation on the
+ * definition table can't change in-flight runs' recompute behavior. */
 export async function findDueRecomputeTargets(
 	args: {
 		runId: string;
@@ -733,16 +751,16 @@ export async function findDueRecomputeTargets(
 	if (args.completedStepId) {
 		orParts.push(
 			and(
-				eq(step.dueType, "offset_from_step"),
-				eq(step.dueAnchorStepId, args.completedStepId),
+				eq(runStep.dueType, "offset_from_step"),
+				eq(runStep.dueAnchorStepId, args.completedStepId),
 			),
 		);
 	}
 	if (args.sourceFieldIds.length > 0) {
 		orParts.push(
 			and(
-				eq(step.dueType, "from_date_field"),
-				inArray(step.dueSourceFieldId, args.sourceFieldIds),
+				eq(runStep.dueType, "from_date_field"),
+				inArray(runStep.dueSourceFieldId, args.sourceFieldIds),
 			),
 		);
 	}
@@ -750,14 +768,13 @@ export async function findDueRecomputeTargets(
 	const rows = await executor
 		.select({
 			runStepId: runStep.id,
-			stepId: step.id,
-			dueType: step.dueType,
-			dueOffsetDays: step.dueOffsetDays,
-			dueAnchorStepId: step.dueAnchorStepId,
-			dueSourceFieldId: step.dueSourceFieldId,
+			stepId: runStep.stepId,
+			dueType: runStep.dueType,
+			dueOffsetDays: runStep.dueOffsetDays,
+			dueAnchorStepId: runStep.dueAnchorStepId,
+			dueSourceFieldId: runStep.dueSourceFieldId,
 		})
 		.from(runStep)
-		.innerJoin(step, eq(step.id, runStep.stepId))
 		.where(
 			and(
 				eq(runStep.runId, args.runId),
@@ -768,8 +785,9 @@ export async function findDueRecomputeTargets(
 		);
 	return rows
 		.filter(
-			(r): r is DueRecomputeTarget =>
-				r.dueType === "offset_from_step" || r.dueType === "from_date_field",
+			(r): r is DueRecomputeTarget & { stepId: string } =>
+				r.stepId !== null &&
+				(r.dueType === "offset_from_step" || r.dueType === "from_date_field"),
 		)
 		.map((r) => ({
 			runStepId: r.runStepId,

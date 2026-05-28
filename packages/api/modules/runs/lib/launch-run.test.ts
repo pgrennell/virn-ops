@@ -247,6 +247,21 @@ describe("launchRun", () => {
 		// First step's dueAt is roughly startedAt + 1 day; second is null.
 		expect(snapshotArg.steps[0].dueAt).toBeInstanceOf(Date);
 		expect(snapshotArg.steps[1].dueAt).toBeNull();
+		// Phase 12.2 follow-up: due-rule columns are SNAPSHOTTED onto runStep
+		// at launch so the recompute hook reads from the snapshot, not via a
+		// join to the live step definition.
+		expect(snapshotArg.steps[0]).toMatchObject({
+			dueType: "offset_from_start",
+			dueOffsetDays: 1,
+			dueAnchorStepId: null,
+			dueSourceFieldId: null,
+		});
+		expect(snapshotArg.steps[1]).toMatchObject({
+			dueType: "none",
+			dueOffsetDays: null,
+			dueAnchorStepId: null,
+			dueSourceFieldId: null,
+		});
 		// Kickoff value made it through.
 		expect(snapshotArg.kickoffValues).toEqual([{ fieldId: "field_1", value: "Acme Co" }]);
 		// One participant + one role assignment + one step-assignment (step_a's role matched).

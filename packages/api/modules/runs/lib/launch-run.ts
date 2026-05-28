@@ -286,6 +286,13 @@ export async function launchRun(
 			},
 			dueContext,
 		),
+		// Phase 12.2 follow-up -- snapshot due-rule columns onto runStep so the
+		// recompute hook reads from the snapshot (immune to mid-run schema drift
+		// in the definition table).
+		dueType: s.dueType,
+		dueOffsetDays: s.dueOffsetDays,
+		dueAnchorStepId: s.dueAnchorStepId,
+		dueSourceFieldId: s.dueSourceFieldId,
 	}));
 
 	// 6.5. Mode-aware agent validation (Phase 8 step 3).

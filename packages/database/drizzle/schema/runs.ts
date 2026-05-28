@@ -20,6 +20,7 @@ import { id, orgId, softDelete, timestamps, user } from "./_shared";
 import { agent } from "./agents";
 import { vendor, vendorContact } from "./vendors";
 import {
+  dueType,
   field,
   schedule,
   step,
@@ -156,6 +157,18 @@ export const runStep = pgTable(
       onDelete: "set null",
     }),
     dueAt: timestamp("due_at"),
+    // Phase 12.2 follow-up -- due-rule SNAPSHOTS. Pre-fix, findDueRecomputeTargets
+    // joined runStep + step and read the LIVE step.dueType/.dueAnchorStepId/
+    // .dueSourceFieldId. That relied on "published versions are immutable by
+    // convention" without enforcement -- any future schema migration or
+    // direct-SQL admin tool that mutated a published step's due-rule columns
+    // would silently change in-flight runs' recompute behavior. Snapshotting
+    // these columns onto runStep at launch makes the recompute self-contained
+    // and matches the snapshot pattern title/description already use.
+    dueType: dueType("due_type").notNull().default("none"),
+    dueOffsetDays: integer("due_offset_days"),
+    dueAnchorStepId: text("due_anchor_step_id"),
+    dueSourceFieldId: text("due_source_field_id"),
     completedBy: text("completed_by").references(() => user.id, {
       onDelete: "set null",
     }),
@@ -168,6 +181,15 @@ export const runStep = pgTable(
     // H1 (run-step variant): "my tasks by due date" filters by status='pending'
     // and orders by dueAt; this composite serves that path without two index hops.
     index("idx_run_step_status_due").on(t.status, t.dueAt),
+    // Phase 12.2 follow-up -- recompute hooks query by dueAnchorStepId and
+    // dueSourceFieldId. Partial indexes (only non-null) stay small and exactly
+    // match the WHERE branches in findDueRecomputeTargets.
+    index("idx_run_step_due_anchor")
+      .on(t.dueAnchorStepId)
+      .where(sql`${t.dueAnchorStepId} IS NOT NULL`),
+    index("idx_run_step_due_source_field")
+      .on(t.dueSourceFieldId)
+      .where(sql`${t.dueSourceFieldId} IS NOT NULL`),
   ],
 );
 
