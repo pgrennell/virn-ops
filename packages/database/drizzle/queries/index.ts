@@ -2,6 +2,7 @@ export * from "./agent-credentials";
 export * from "./agents";
 export * from "./ai-authoring";
 export * from "./config";
+export * from "./cross-product-events";
 export * from "./datasets";
 export * from "./entitysets";
 export * from "./listings";

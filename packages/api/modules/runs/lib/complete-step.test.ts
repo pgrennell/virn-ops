@@ -10,6 +10,10 @@ vi.mock("@virn/database", () => ({
 	areAllRequiredRunStepsComplete: vi.fn(),
 	markRunCompleted: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
+	// Phase 11a step 3c part 2 -- cross-product outbox enqueue. Default to "no
+	// callback set -> no-op" (the helper returns null in that case). Tests that
+	// exercise the cross-product path mock a non-null return per-case.
+	enqueueCrossProductEventForRun: vi.fn(async () => null),
 	// `withTransaction` is the helper from packages/database/drizzle/client.ts; in tests
 	// we run the callback directly with a stub `tx` so the mutation helpers (already
 	// mocked above) record their calls. Real transactional semantics are exercised by
@@ -37,6 +41,7 @@ vi.mock("@virn/database", () => ({
 
 import {
 	areAllRequiredRunStepsComplete,
+	enqueueCrossProductEventForRun,
 	findAgentParticipantForRun,
 	findIncompleteStopDependencies,
 	getFieldValuesForRun,
@@ -212,6 +217,58 @@ describe("completeRunStep", () => {
 			entityType: "run",
 			entityId: "run_1",
 		});
+	});
+
+	// Phase 11a step 3c part 2 -- cross-product outbox enqueue. The enqueue
+	// helper is mocked to a passive no-op by default; these tests assert the
+	// chokepoint wiring (the calls happen with the expected arguments). Whether
+	// a row actually lands is the helper's responsibility, covered in its own
+	// integration test against a real DB.
+	it("cascade enqueues run.state_changed AND run.completed cross-product events", async () => {
+		vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_ASSIGNEE as never);
+		vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(true);
+
+		await completeRunStep(CTX, "rs_1");
+
+		expect(enqueueCrossProductEventForRun).toHaveBeenCalledTimes(2);
+		const enqueueCalls = vi.mocked(enqueueCrossProductEventForRun).mock.calls;
+		// Call order: state_changed first, then completed -- matches the wire
+		// semantic PM expects (the umbrella event lands before the specific one).
+		expect(enqueueCalls[0][0]).toMatchObject({
+			runId: "run_1",
+			eventType: "run.state_changed",
+			previousStatus: "active",
+			currentStatus: "completed",
+		});
+		expect(enqueueCalls[1][0]).toMatchObject({
+			runId: "run_1",
+			eventType: "run.completed",
+			previousStatus: "active",
+			currentStatus: "completed",
+		});
+	});
+
+	it("no cross-product enqueue when the cascade doesn't fire (step-only completion)", async () => {
+		vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_ASSIGNEE as never);
+		vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(false);
+
+		await completeRunStep(CTX, "rs_1");
+
+		expect(enqueueCrossProductEventForRun).not.toHaveBeenCalled();
+	});
+
+	it("threads ctx.crossProductOrigin into the enqueued events (D-027 attribution)", async () => {
+		vi.mocked(getRunStepWithRun).mockResolvedValueOnce(RS_PENDING_AS_ASSIGNEE as never);
+		vi.mocked(areAllRequiredRunStepsComplete).mockResolvedValueOnce(true);
+
+		await completeRunStep(
+			{ ...CTX, crossProductOrigin: "virn-pm" },
+			"rs_1",
+		);
+
+		const enqueueCalls = vi.mocked(enqueueCrossProductEventForRun).mock.calls;
+		expect(enqueueCalls[0][0]).toMatchObject({ crossProductOrigin: "virn-pm" });
+		expect(enqueueCalls[1][0]).toMatchObject({ crossProductOrigin: "virn-pm" });
 	});
 
 	it("RUN_NOT_ACTIVE when the parent run is completed (defense vs. post-cascade edits)", async () => {

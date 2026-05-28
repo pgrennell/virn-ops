@@ -18,6 +18,7 @@
 
 import {
 	areAllRequiredRunStepsComplete,
+	enqueueCrossProductEventForRun,
 	findAgentParticipantForRun,
 	findIncompleteStopDependencies,
 	getFieldValuesForRun,
@@ -257,6 +258,36 @@ export async function completeRunStep(
 					...(ctx.agentId ? { actorAgentId: ctx.agentId } : {}),
 				},
 				activityData: { reason: "all required steps complete" },
+			},
+			tx,
+		);
+
+		// Phase 11a step 3c part 2 -- transactional outbox enqueue for the
+		// run-level state transition. Both events fire at the same moment
+		// (active -> completed); PM's webhookEvents filter narrows which it
+		// receives. Both calls are no-ops when the run carries no cross-product
+		// callback (uncostly query + early return), so non-cross-product runs
+		// don't pay a write penalty here.
+		const occurredAt = new Date();
+		await enqueueCrossProductEventForRun(
+			{
+				runId: rs.run.id,
+				eventType: "run.state_changed",
+				occurredAt,
+				previousStatus: "active",
+				currentStatus: "completed",
+				crossProductOrigin: ctx.crossProductOrigin ?? null,
+			},
+			tx,
+		);
+		await enqueueCrossProductEventForRun(
+			{
+				runId: rs.run.id,
+				eventType: "run.completed",
+				occurredAt,
+				previousStatus: "active",
+				currentStatus: "completed",
+				crossProductOrigin: ctx.crossProductOrigin ?? null,
 			},
 			tx,
 		);
