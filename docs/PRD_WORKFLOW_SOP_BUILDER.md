@@ -77,6 +77,9 @@ Three concrete blockers prevent operators from moving SOPs out of Notion / Slack
 - **G5.** A `draft → in_review → published` lifecycle gives orgs an optional gate before a workflow goes live.
 - **G6.** A starter pack of property-ops templates spans STR, LTR, commercial, multifamily, and cross-cutting flows. Curated as the first instance of the Vertical Pack primitive (D-034: STR-leaning for v1 dogfood).
 - **G7.** The schema seams (entity_set + entity_type discriminator + entity adapter interface) make Layer 1's full configurable entity model a content-and-UI build later, not a schema migration.
+- **G8.** The Read view of a published workflow includes a constrained-viewport flowchart render (read-only) and an Active Run right-rail card surfacing both Workflow and Playbook runs against the current entity. Render-only — no node-graph authoring in v1.5 (per D-039).
+- **G9.** A persistent right-rail Workflow Assistant chat panel reaches every author through every authoring surface, driving per-step regenerate via `agents.regenerateStep`. Mid-edit refinement is a first-class surface, not just a pre-generation review pane.
+- **G10.** Per-step regeneration never overwrites manually-edited sibling steps. Provenance is tracked at the step level (`step.provenance` enum, default `'manually_edited'`); the contract is enforced at the schema and validator levels per D-040.
 
 ## 5. Non-goals (v1.5)
 
@@ -90,6 +93,9 @@ Three concrete blockers prevent operators from moving SOPs out of Notion / Slack
 - Voice input for AI authoring.
 - In-house concierge review service (we ship the flag, not the team).
 - Multi-org template marketplace.
+- **Authoring-grade visual node-graph canvas** (drag-drop nodes + arrow connectors + click-create + Trigger/Condition/Action palette as authorable elements). Step-list remains the canonical authoring surface per D-039. The Read view in §6.4 includes a *render-only* constrained-viewport flowchart; authoring-grade canvas is a Phase 13+ build behind an explicit ADR override of D-039.
+- **Thread-adjacent inbox monitor** (real-time colored flowchart overlay docked to guest/tenant messaging threads, automated reply composer, per-thread Workflows/Tasks/Journeys rails, conversation task auto-detection from inbox messages). Reaffirmed non-goal per D-024 — Besty (PM-side cross-repo partner) owns the inbox surface; virn-ops does not build a symmetric inbox. The in-context monitoring intent is served by the Active Run right-rail card in §6.4 (per R6 lift / D-039).
+- **Live PMS/CRM field hydration in the Template Variables sidebar** (live grill_code / parking_spot / guest_name values from active listing integrations). Sidebar is a static token list in v1.5 per R4 lift; live hydration ships whenever vendor integration sync ships (Phase 17+).
 
 ## 6. Scope — six capabilities organized by layer
 
@@ -134,6 +140,21 @@ In v1.5 there's exactly one implementation: `ListingAdapter`. Adding `BuildingAd
 
 **Action vocabulary (documented, not new).** Layer 2 calls out the v1 action vocabulary that workflows compose from: task, approval, heading, one_off, [reserved: code, ai]. Documenting it explicitly in this PRD (rather than leaving it implicit in code) is the architectural commitment — the AI authoring layer treats this as the closed set it can emit. New action types are additive and gated through the same enum.
 
+**Builder shell — top bar (R2 lift).** The Author view (`/library/workflows/[id]?view=author`) gains a persistent top bar above the step list with three controls, sourced from the Besty reference screenshots:
+
+- **Enabled / Disabled toggle** — flips `workflow.is_active`. Disabled workflows do not appear in `runs.launch` pickers and do not fire from automation triggers (when those land in Phase 6 / 18). Load-bearing for safely staging a workflow without exposing it.
+- **Scope chip / dropdown** — "Apply to: All Listings" by default; clicking opens an entity-set multi-select picker (same data source as the Scope panel below). Updates `workflow.entity_set_ids` optimistically.
+- **Review-state banner** — when `workflow.review_state = 'in_review'`, the top bar displays a banner "This workflow must be reviewed before going live" with a **Request Review** / **Submit for Review** button (label per org config; see §6.6). When `review_state = 'draft'` and `organization.require_concierge_review = false`, the standard "Publish" affordance lives here.
+
+Top-bar surfaces a separator and the persistent **Workflow Assistant** chat panel toggle at the far right (per §6.3). Visual reference: [storylane-step-13.png](besty-ux-reference/storylane-step-13.png), [storylane-step-15.png](besty-ux-reference/storylane-step-15.png).
+
+**Template Variables sidebar (R4 lift).** A flat token list pinned to the bottom-left of the Author view shell with a search input under a "TEMPLATE VARIABLES" header. Tokens are derived from `EntityAdapter.schemaForAI()` output for every entity type registered with the registry (v1.5: listing fields only; future entity types add their tokens automatically when their adapter ships).
+
+- **Drag-drop into text inputs** — tokens drop into any Tiptap-backed text field (step descriptions, field labels, notification templates) as a merge-token chip rendered with the field-key-locked styling from D-017. Dropping a token that doesn't yet have a backing field key prompts the field-key allocation flow (existing Pass 3 lifecycle).
+- **Search** — fuzzy match on token name and label; recent / pinned tokens float to the top.
+- **Static list, not live values** — the sidebar shows token *definitions* (e.g. `{{ listing.name }}`, `{{ listing.external_listing_id }}`), not live data from a specific listing. Live hydration at run-time per entity is handled by the existing run engine. Live PMS field hydration in the *builder* sidebar is a non-goal in v1.5 per §5; the rename-safety story is already covered by D-017's field-key lifecycle lock.
+- **Per D-039**, the sidebar lives in the existing step-list builder shell, not in a separate canvas. Visual reference: [storylane-step-16.png](besty-ux-reference/storylane-step-16.png).
+
 ### 6.3 Layer 3 — AI SOP authoring grounded in tenant entity schema
 
 **The architectural commitment.** AI authoring must ground in the **tenant's actual entity schema**, not generic placeholders. This is what makes a horizontal builder feel like Besty even when the underlying nouns are configurable. In v1.5 the "tenant entity schema" is the property-ops fixed set (listing today; vendor, owner, work_order as Phase 8 schema is already in place); when Layer 1 ships, the same code path serves tenant-defined entities.
@@ -176,10 +197,29 @@ In v1.5 there's exactly one implementation: `ListingAdapter`. Adding `BuildingAd
 - Approval-typed steps are emitted as `approval`, ready for the Phase 5+ approval engine.
 - Field keys: AI proposes keys; field-key lifecycle lock (D-017) applies as soon as a generated merge variable references a key.
 - Entity references: AI may only reference entities the validator confirms exist in the tenant's schema. Unknown references rejected at validation.
+- **Provenance and partial-regeneration contract (D-040).** Every AI-emitted step row is written with `step.provenance = 'ai_generated'`. `agents.regenerateStep` is a strict partial-regeneration contract: it never reads or writes any sibling step where `provenance = 'manually_edited'`. Hand-editing a step through the manual builder UI (or the Edit Action modal below) flips that row to `provenance = 'manually_edited'` permanently for v1.5 (no "revert to AI version" affordance). The contract is enforced both server-side in the validator and surface-side via a "Regenerate will leave your manual edits to steps 2, 5 untouched" preview shown before the regen fires.
 
 **Provenance.**
 - `workflow.ai_authoring_prompt_id` set to the `ai_authoring_prompt` row that produced it (audit + retroactive regeneration support).
+- `step.provenance` enum (`'ai_generated' | 'manually_edited'`, default `'manually_edited'`) tracks the per-step lineage; see D-040 and §8.1 schema delta.
 - Visible in builder header: "Authored from prompt on 2026-05-27 — view source".
+- Visible per-step: an "AI" chip when `provenance = 'ai_generated'`; no chip otherwise. Hover tooltip explains the regeneration contract.
+
+**Persistent Workflow Assistant chat panel (R1 lift).** A tri-column shell during editing — left rail: workflows list; center: step-list builder (with the §6.2 top bar + Template Variables sidebar); right rail: persistent **Workflow Assistant** chat panel. The right-rail chat is the primary surface for mid-edit AI refinement after the initial generation lands:
+
+- **Distinct from the pre-generation side-by-side review pane.** The two-pane review (described above under "Review surface") lives once at first-generation time. The right-rail Assistant is always-on during subsequent editing — operators reach for it for "regenerate step 3 with SMS instead of email", "add a precondition note to step 7", "rephrase the cleaning checklist to be terser."
+- **Driven by the same `agents.regenerateStep` procedure.** The chat panel parses targeted refinement requests into structured `regenerateStep` calls (refinement prompt + target step id). Free-form questions ("what's the difference between approval and one_off step types?") route to a documentation-aware chat thread; structured edit requests route to the regen procedure with D-040 partial-regeneration semantics.
+- **Per-thread provenance row.** Each Assistant interaction writes an `ai_authoring_prompt` row (the same table used at first-generation time), so the audit trail and cost model treat mid-edit refinement identically to initial authoring.
+- **Visible reference:** every editor screenshot in the Besty reference deck — [storylane-step-06.png](besty-ux-reference/storylane-step-06.png), [storylane-step-08.png](besty-ux-reference/storylane-step-08.png), [storylane-step-11.png](besty-ux-reference/storylane-step-11.png), [storylane-step-13.png](besty-ux-reference/storylane-step-13.png), [storylane-step-16.png](besty-ux-reference/storylane-step-16.png), [storylane-step-17.png](besty-ux-reference/storylane-step-17.png) — shows this panel docked right.
+
+**Per-step Edit Action modal (C5 lift).** When the author clicks a step in the builder list, the existing Pass 3 slide-in side panel is enhanced with the following affordances (matches Besty reference [storylane-step-11.png](besty-ux-reference/storylane-step-11.png)):
+
+- **Title** input.
+- **Description** Tiptap editor with a **`{}`** Template insert button anchored at top-right of the editor toolbar. Clicking `{}` opens a quick-pick of the same tokens surfaced in the Template Variables sidebar (§6.2). This is the canonical merge-token insertion entry point — used in step descriptions, field labels, and notification templates.
+- **Regenerate** button (inline within the panel, not on the canvas) — fires `agents.regenerateStep` with an optional refinement prompt. Honors D-040 partial-regeneration semantics; flips this step's `provenance` back to `'ai_generated'` only on accept.
+- **Delete / Cancel / Save Changes** in the footer.
+
+The slide-in panel pattern (already shipped in Phase 5 Pass 3) is preserved; the modal-like enhancements above add the `{}` insert and inline Regenerate without introducing a separate modal surface. v2.0 PRD proposed a per-node "settings gear" icon on a canvas; that affordance is rejected per D-039 (no canvas authoring in v1.5) and per the screenshot-honest review.
 
 ### 6.4 Three-views unification (Author / Read / Execute)
 
@@ -208,6 +248,27 @@ In v1.5 there's exactly one implementation: `ListingAdapter`. Adding `BuildingAd
 - Editing in Author view updates Read view immediately on save (draft) or on publish (published). Snapshot-immutability per D-019 preserved — Read view of a published version always reflects that snapshot.
 
 **Strict no-execution constraint.** Read view never shows a "Start a run" button. Runs launch from entity contexts (listings index, run dispatcher, triggers) — keeps the mental model clean and matches the SCRATCHPAD note about Process Street's KB gap.
+
+**Constrained-viewport flowchart render (R5 lift, per D-039).** The Read view includes a read-only flowchart visualization of the workflow alongside the SOP/KB markdown rendering. Render is deterministic — derived from the step list with a vertical-stack layout and one branch column, no per-user layout state (per D-041, layout state isn't persisted because there's no authoring canvas in v1.5). Concrete shape:
+
+- **React Flow embed**, ~600px column, fixed viewport (no pan/zoom by default; expand-to-fullscreen affordance for large workflows).
+- **Node types** mirror step types: task / approval / heading / one_off. Visual styling per type but no TCA color palette — that framing was rejected per D-039 (it maps cleanly to Playbooks per the Playbooks-alignment review but is wrong for human-executed Workflows where every step is an action from the operator's POV).
+- **Edges** are simple sequential connectors (steps run in declared order). Branching shown via a `precondition_note` chip on conditionally-relevant steps — per the same Phase 6 deferral that constrains AI authoring.
+- **Read-only.** No drag, no node creation, no inline edit. Clicking a node scrolls the SOP/KB markdown column to the matching step. Authoring-grade canvas is Phase 13+ per D-039.
+- **No layout persistence.** Coordinates are computed at render time; if/when canvas authoring ever ships, layout state will live in `workflow_canvas_layout` per D-041 — not on `workflow_version`.
+
+The contextual node-palette flyout pattern (R3 lift — palette anchored to edge "+" insert, not a permanent rail) is *deferred* to whenever authoring-grade canvas ships (Phase 13+). The v1.5c render is read-only, so no palette is needed. The pattern is captured here so the Phase 13+ PRD inherits the constraint: palettes are contextual flyouts, not permanent rails.
+
+**Static execution timeline (R5 lift, continued).** When the Read view is opened with a specific run context (e.g. linked from an Active Run card; see below), the right column flips from generic SOP markdown to a per-run **execution timeline**: a chronological list of run events (Trigger fired / Step N started / Step N completed by X at T / Step N skipped / Current Status) sourced from `activity_event` filtered by `entity_type='run' AND entity_id=<runId>`. Static text, not animated coloring — the v2.0 PRD's "real-time colored flowchart execution overlay" was rejected per the screenshot-honest review (Besty's actual reference shows static diagram + text timeline, not animated coloring). The flowchart render in the left column dims completed steps to a muted styling and bolds the current step; that's the entire visual differentiation. Aligns with PRD_PLAYBOOKS §6.5's timeline-shape commitment for Playbook runs.
+
+**Active Run right-rail card (R6 lift).** Entity-context pages (listing detail, vendor detail, work-order detail, etc.) gain a compact right-rail card titled "Active Run" that surfaces in-flight runs for the current entity. Card content:
+
+- One row per active `run` row joined on entity participation: status chip (Active / Escalated / Blocked), workflow name, started-at timestamp, current-step summary.
+- One row per active `playbook_run` (per PRD_PLAYBOOKS §6.5) joined on the same entity: type chip distinguishes "Workflow" vs "Playbook" rows.
+- Clicking a Workflow row opens `/runs/[runId]` (Execute view). Clicking a Playbook row opens `/playbooks/[id]?view=read&runId=<playbookRunId>` (read view with execution timeline scoped to that run).
+- Empty state: "No active runs for this entity."
+
+The card is the screenshot-honest realization of v2.0's "in-context monitoring" intent without re-opening D-024 (the v2.0 thread-adjacent inbox monitor was rejected outright per D-039 / D-024 reaffirmation; the Active Run card replaces it).
 
 ### 6.5 Property-ops starter pack content (the first Vertical Pack)
 
@@ -245,6 +306,16 @@ In v1.5 there's exactly one implementation: `ListingAdapter`. Adding `BuildingAd
 **Concierge stays opt-in self-serve (per D-034 / proposal decision #3).**
 - We do not provide an in-house review service in v1.5. The flag exists so orgs can wire their own internal review gate.
 - Audit row on every transition (who, when, action).
+
+**In-canvas Request Review banner (R2 lift, continued).** The Author view top bar (§6.2) renders the review-state banner inline above the step list, color-coded to the current state:
+
+- `draft` (`require_concierge_review=false`) → no banner; "Publish" button on the top bar's right.
+- `draft` (`require_concierge_review=true`) → banner: "This workflow is in draft. Reviewers must approve before it goes live." Top bar button flips to "**Submit for Review**" / "**Request Review**" (org-configurable label, defaults to "Submit for Review").
+- `in_review` → banner: "**Awaiting review** — submitted by {author} on {date}." Buttons: "**Send back to draft**" (any admin) / "**Approve & publish**" (any admin). Original author cannot self-approve.
+- `published` → banner: "**Published**" + version number + "View read view" link.
+- `archived` → banner: "**Archived** — this workflow no longer accepts new runs."
+
+The banner is the same component across all four states with different copy and CTAs; one render path, four state machines. State transitions write audit rows per the existing helper signature; activity rows propagate to anyone watching the workflow detail page.
 
 ## 7. UX flows
 
@@ -365,9 +436,16 @@ ALTER TABLE workflow ADD COLUMN ai_authoring_prompt_id uuid REFERENCES ai_author
 
 -- Altered: org gains concierge-review flag
 ALTER TABLE organization ADD COLUMN require_concierge_review boolean NOT NULL DEFAULT false;
+
+-- New: per-step provenance for the AI-authoring partial-regeneration contract (D-040).
+-- Default 'manually_edited' is the safe choice for backfilling existing rows -- only
+-- newly AI-emitted steps opt in to 'ai_generated'. The `agents.regenerateStep` server
+-- procedure refuses to write any sibling step whose provenance is 'manually_edited'.
+CREATE TYPE step_provenance AS ENUM ('ai_generated', 'manually_edited');
+ALTER TABLE step ADD COLUMN provenance step_provenance NOT NULL DEFAULT 'manually_edited';
 ```
 
-Migration notes (per [feedback memory on Drizzle migrations](../docs/) — migrations are tracked, hand-edit before applying): backfill `entity_set_ids` to `'{}'`; backfill `review_state` to `'published'` for already-published workflows and `'draft'` otherwise; respect the Postgres enum-in-same-txn-CHECK constraint per memory by casting to `::text` in CHECKs if a new `entity_type` value is added in a single migration alongside the CHECK.
+Migration notes (per [feedback memory on Drizzle migrations](../docs/) — migrations are tracked, hand-edit before applying): backfill `entity_set_ids` to `'{}'`; backfill `review_state` to `'published'` for already-published workflows and `'draft'` otherwise; respect the Postgres enum-in-same-txn-CHECK constraint per memory by casting to `::text` in CHECKs if a new `entity_type` value is added in a single migration alongside the CHECK; `step.provenance` default `'manually_edited'` covers the backfill (all existing rows were manually authored).
 
 ### 8.2 Entity adapter registry (TS interface, not schema)
 
@@ -433,6 +511,10 @@ Per the proposal-stage decision #2: AI authoring lives behind the agents oRPC ro
 | Snapshot immutability on publish | [docs/ARCHITECTURE.md](ARCHITECTURE.md) §5 + D-019 | Review states are workflow-level, not version-level — no change to snapshot semantics. Read view of a published version always reflects that snapshot. |
 | No Docker | Memory feedback | All work in-process; no compose changes |
 | `ALTER TYPE ADD VALUE` + same-txn CHECK | Memory feedback | If new `entity_type` values land alongside CHECKs, cast columns to `::text` in CHECKs |
+| Step-list is canonical; visual flowchart is a render layer | D-039 | Read view ships a constrained-viewport flowchart **render** (read-only); Author view stays the Phase 5 step-list builder. Authoring-grade canvas requires ADR override of D-039 at Phase 13+. Trigger/Condition node types not authorable in v1.5. |
+| Per-step regenerate preserves manual edits | D-040 | New `step.provenance` enum, default `'manually_edited'`. `agents.regenerateStep` never reads or writes any sibling step with `provenance='manually_edited'`. Manual editing flips a row's provenance back to `'manually_edited'`. |
+| Canvas/layout state lives outside the snapshot | D-041 | No canvas in v1.5, but the constraint is documented: if Phase 13+ ever ships canvas authoring, layout lives in a separate `workflow_canvas_layout` table keyed by `workflow_id` — never on `workflow_version`. |
+| virn-ops does not build a thread-adjacent inbox monitor | D-024 (reaffirmed via D-039 block) | The Active Run right-rail card (§6.4) is the in-context monitoring primitive. Inbox-thread coupling is Besty's surface; future PRDs proposing it must override D-024. |
 
 ## 11. Phasing
 
@@ -440,15 +522,18 @@ Per the proposal-stage decision #2: AI authoring lives behind the agents oRPC ro
 
 ### v1.5a — Layer-1 seams + Layer-2 scoping + review states + pack refresh (2 weeks + ~1 day for listing-table prerequisite, no AI dependency)
 - **Week 1, days 1–2:** **Listing table prerequisite** (validated 2026-05-27 — the table did not exist; see §8.1 schema delta). New `listing` table with minimum shape; minimum CRUD oRPC procedures (`listings.list / get / create / update / softDelete`); minimum listings index UI under `/library/listings` or as a settings section so something can create listings in v1.5a. Sample listings seeded by the property-ops pack install (Phase 17a) so dogfood orgs land with non-empty data.
-- **Week 1, days 3–5:** Schema migrations (`entity_set`, `entity_set_member`, workflow column adds, review_state enum); `ListingAdapter` + `EntityAdapter` registry; entity-set CRUD + listing assignment UI; workflow Scope panel; `runs.launch` entity-set filter.
-- **Week 2:** Review state column + transitions, admin inbox, property-ops starter pack content refresh (curate templates from §6.5 as platform-published rows).
+- **Week 1, days 3–5:** Schema migrations (`entity_set`, `entity_set_member`, workflow column adds, review_state enum, **`step.provenance` enum and column per D-040**); `ListingAdapter` + `EntityAdapter` registry; entity-set CRUD + listing assignment UI; workflow Scope panel; `runs.launch` entity-set filter; **builder top bar (R2) — Enabled toggle + Scope chip + review-state banner**.
+- **Week 2:** Review state column + transitions, admin inbox, **in-canvas Request Review banner copy + button wiring per §6.6**, **Template Variables sidebar (R4) — static token list from `EntityAdapter.schemaForAI()`, drag-drop into Tiptap**, property-ops starter pack content refresh (curate templates from §6.5 as platform-published rows).
 
 ### v1.5b — Layer-3 AI authoring grounded in tenant entity schema (2 weeks)
-- Week 1: `agents.authorWorkflow` procedure, system prompt assembly (with entity schema block), Zod contract + entity-reference validation, Claude API integration with multi-block prompt caching, `ai_authoring_prompt` table.
-- Week 2: "Describe an SOP" modal, side-by-side review pane, per-step regenerate, accept-all flow, dogfood pass on the STR template intents (per D-034 dogfood profile) to validate output quality.
+- Week 1: `agents.authorWorkflow` procedure, system prompt assembly (with entity schema block), Zod contract + entity-reference validation, Claude API integration with multi-block prompt caching, `ai_authoring_prompt` table, **`step.provenance` writes (`'ai_generated'` on AI emission); `agents.regenerateStep` enforces D-040 partial-regeneration semantics**.
+- Week 2: "Describe an SOP" modal, side-by-side review pane, **per-step Edit Action modal pattern (C5) — `{}` Template insert + inline Regenerate + Delete / Cancel / Save**, **persistent right-rail Workflow Assistant chat panel (R1)** wired to `agents.regenerateStep`, accept-all flow, dogfood pass on the STR template intents (per D-034 dogfood profile) to validate output quality.
 
 ### v1.5c — Three-views unification + reader surface (1 week)
 - `/sop` readers' index, `/library/workflows/[id]?view=read` Read view + Mark-as-read + receipt model, view-mode toggle on detail page, `forbiddenOrganizationSlugs` update for `sop`, permission-aware default-view resolution.
+- **Constrained-viewport flowchart render in Read view (R5 / D-039)** — React Flow embed, ~600px column, vertical stack with one branch, read-only, deterministic layout (no `workflow_canvas_layout` table per D-041).
+- **Static execution timeline (R5 cont.)** — when Read view is opened with a `runId` query param, the right column flips to a per-run timeline sourced from `activity_event`. Static text, no animated coloring.
+- **Active Run right-rail card (R6)** — on entity-context pages (listing detail, etc.), surfaces in-flight `run` + `playbook_run` rows with type chip. Replaces v2.0's rejected thread-adjacent inbox monitor.
 
 ### Post-launch (1.5d, not scoped here)
 - Voice input for AI authoring.

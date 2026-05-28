@@ -1,0 +1,56 @@
+[
+  {
+    "step": 1,
+    "filename": "storylane-step-01.png",
+    "tooltip": "This next example is triggered based off of the guest sending a message relating to their departure.",
+    "description": "Step 1 of the Case 2 chapter walkthrough. Tooltip describes: \"This next example is triggered based off of the guest sending a message relating to their departure.\"."
+  },
+  {
+    "step": 2,
+    "filename": "storylane-step-02.png",
+    "tooltip": "For example, if a guest mentions that they have departed and mentions a specific departure time, we will send a confirmation message.",
+    "description": "Step 2 of the Case 2 chapter walkthrough. Tooltip describes: \"For example, if a guest mentions that they have departed and mentions a specific departure time, we will send a confirmation message.\"."
+  },
+  {
+    "step": 3,
+    "filename": "storylane-step-03.png",
+    "tooltip": "We then send a confirmation message and notify the cleaning team of that timing. If the departure is earlier than expected, the team can access the property sooner, complete the cleaning, and prepare for the next arrival.",
+    "description": "Step 3 of the Case 2 chapter walkthrough. Tooltip describes: \"We then send a confirmation message and notify the cleaning team of that timing. If the departure is earlier than expected, the team can access the property sooner, complete the cleaning, and prepare for the next arrival.\"."
+  },
+  {
+    "step": 4,
+    "filename": "storylane-step-04.png",
+    "tooltip": "Notice how Besty remembers guest details across stays, creating personalized experiences automatically.",
+    "description": "Step 4 of the Case 2 chapter walkthrough. Tooltip describes: \"Notice how Besty remembers guest details across stays, creating personalized experiences automatically.\"."
+  },
+  {
+    "step": 5,
+    "filename": "storylane-step-05.png",
+    "tooltip": "The AI acknowledges it, as you can see here.",
+    "description": "Step 5 of the Case 2 chapter walkthrough. Tooltip describes: \"The AI acknowledges it, as you can see here.\"."
+  },
+  {
+    "step": 6,
+    "filename": "storylane-step-06.png",
+    "tooltip": "Tasks that are detected from the conversation are detected on the sidebar.",
+    "description": "Step 6 of the Case 2 chapter walkthrough. Tooltip describes: \"Tasks that are detected from the conversation are detected on the sidebar.\"."
+  },
+  {
+    "step": 7,
+    "filename": "storylane-step-07.png",
+    "tooltip": "A summary of the task lives on the sidebar.",
+    "description": "Step 7 of the Case 2 chapter walkthrough. Tooltip describes: \"A summary of the task lives on the sidebar.\"."
+  },
+  {
+    "step": 8,
+    "filename": "storylane-step-08.png",
+    "tooltip": "The task is then generated, and the team is now aware.",
+    "description": "Step 8 of the Case 2 chapter walkthrough. Tooltip describes: \"The task is then generated, and the team is now aware.\"."
+  },
+  {
+    "step": 9,
+    "filename": "storylane-step-09.png",
+    "tooltip": "",
+    "description": "Chapter complete. Final screen shows CTA button: \"Book a Demo\"."
+  }
+]

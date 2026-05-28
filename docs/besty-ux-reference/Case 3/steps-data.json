@@ -1,0 +1,74 @@
+[
+  {
+    "step": 1,
+    "filename": "storylane-step-01.png",
+    "tooltip": "Lastly, let's take a look at how this company transformed the way that they screen Airbnb inquiries.\n\nAny time a potential guest inquires on Airbnb, we send initial inquiry questions gauging whether their stay will be risky or not.",
+    "description": "Step 1 of the Case 3 chapter walkthrough. Tooltip describes: \"Lastly, let's take a look at how this company transformed the way that they screen Airbnb inquiries.  Any time a potential guest inquires on Airbnb, we send initial inquiry questions gauging whether their stay will be risky or not.\"."
+  },
+  {
+    "step": 2,
+    "filename": "storylane-step-02.png",
+    "tooltip": "Besty reviews the guest’s response, and if any potential red flags are detected, it initiates a follow up series of questions to confirm whether the guest is suitable to stay at our properties.",
+    "description": "Step 2 of the Case 3 chapter walkthrough. Tooltip describes: \"Besty reviews the guest’s response, and if any potential red flags are detected, it initiates a follow up series of questions to confirm whether the guest is suitable to stay at our properties.\"."
+  },
+  {
+    "step": 3,
+    "filename": "storylane-step-03.png",
+    "tooltip": "As mentioned, the AI generates this description, but you can and should add as much context as you would like. For example, you might flag a guest as high risk if:\n\nA majority of the group is under 25\n\nThey use language that may be associated with higher risk behavior\n\nTheir responses are unclear or inconsistent\n\nThe stated purpose of the trip is too vague\n\nAdding clear criteria like this helps the system make more accurate decisions.",
+    "description": "Step 3 of the Case 3 chapter walkthrough. Tooltip describes: \"As mentioned, the AI generates this description, but you can and should add as much context as you would like. For example, you might flag a guest as high risk if:  A majority of the group is under 25  They use language that may be associated with higher risk behavior  Their responses are unclear or inconsistent  The stated purpose of the trip is too vague  Adding clear criteria like this helps the system make more accurate decisions.\"."
+  },
+  {
+    "step": 4,
+    "filename": "storylane-step-04.png",
+    "tooltip": "Based on any red flags, we provide the AI with a bunch of example follow-up questions that it can ask to dig deeper into the inquiry.",
+    "description": "Step 4 of the Case 3 chapter walkthrough. Tooltip describes: \"Based on any red flags, we provide the AI with a bunch of example follow-up questions that it can ask to dig deeper into the inquiry.\"."
+  },
+  {
+    "step": 5,
+    "filename": "storylane-step-05.png",
+    "tooltip": "In this live example, you can see that the guest shares the ages of the guests staying and reason why they're coming.",
+    "description": "Step 5 of the Case 3 chapter walkthrough. Tooltip describes: \"In this live example, you can see that the guest shares the ages of the guests staying and reason why they're coming.\"."
+  },
+  {
+    "step": 6,
+    "filename": "storylane-step-06.png",
+    "tooltip": "Next, the AI continues the workflow by asking where the guest is traveling from, as this user has identified that visitors from certain locations may pose a higher risk of disruptive behavior. It also confirms whether someone over the age of 26 will be present at the property at all times, as both factors can be considered potential red flags.",
+    "description": "Step 6 of the Case 3 chapter walkthrough. Tooltip describes: \"Next, the AI continues the workflow by asking where the guest is traveling from, as this user has identified that visitors from certain locations may pose a higher risk of disruptive behavior. It also confirms whether someone over the age of 26 will be present at the property at all times, as both factors can be considered potential red flags.\"."
+  },
+  {
+    "step": 7,
+    "filename": "storylane-step-07.png",
+    "tooltip": "The guest then confirms where they are traveling from and their age.",
+    "description": "Step 7 of the Case 3 chapter walkthrough. Tooltip describes: \"The guest then confirms where they are traveling from and their age.\"."
+  },
+  {
+    "step": 8,
+    "filename": "storylane-step-08.png",
+    "tooltip": "Since the guest’s stay falls within a high demand period, a photo ID is required at the time of booking, and check in must be completed in person at the office. We also outline additional important guidelines for the guest, such as:\n\nLoud or unruly gatherings are not permitted\n\nOccupancy limits and party restrictions must be respected\n\n.",
+    "description": "Step 8 of the Case 3 chapter walkthrough. Tooltip describes: \"Since the guest’s stay falls within a high demand period, a photo ID is required at the time of booking, and check in must be completed in person at the office. We also outline additional important guidelines for the guest, such as:  Loud or unruly gatherings are not permitted  Occupancy limits and party restrictions must be respected  .\"."
+  },
+  {
+    "step": 9,
+    "filename": "storylane-step-09.png",
+    "tooltip": "Besty successfully created an internal review task for the manager and sent a high level “ID and in person check” request based on the stay dates of their inquiry.",
+    "description": "Step 9 of the Case 3 chapter walkthrough. Tooltip describes: \"Besty successfully created an internal review task for the manager and sent a high level “ID and in person check” request based on the stay dates of their inquiry.\"."
+  },
+  {
+    "step": 10,
+    "filename": "storylane-step-10.png",
+    "tooltip": "Let's check out the task that was created over this workflow.",
+    "description": "Step 10 of the Case 3 chapter walkthrough. Tooltip describes: \"Let's check out the task that was created over this workflow.\"."
+  },
+  {
+    "step": 11,
+    "filename": "storylane-step-11.png",
+    "tooltip": "",
+    "description": "Step 11 of the Case 3 chapter walkthrough. Tooltip describes: \"\"."
+  },
+  {
+    "step": 12,
+    "filename": "storylane-step-12.png",
+    "tooltip": "See how workflows can take back your time and put your entire operation on autopilot.\nTalk to Sales",
+    "description": "Chapter complete. Final screen shows CTA button: \"Book a Demo\"."
+  }
+]

@@ -93,10 +93,30 @@ A Playbook can declare **multiple** triggers; firing dedupes per `(playbookId, t
 
 **Authoring UX.**
 
-- Builder is a vertical step list (not a canvas). Each step is a card showing type + config summary; click to edit in side panel.
+- Builder is a vertical step list (not a canvas). Each step is a card showing type + config summary; click to edit in side panel (Edit Action modal pattern below). Visual canvas explicitly out of scope per D-039 — Playbooks were already step-list-only per §5; D-039 ratified the same posture for Workflows so the two primitives ship a consistent authoring surface.
 - A `branch_on_data_set` step expands inline into N sub-lanes (mirrors how `if/else` reads in code; no separate canvas needed).
-- Trigger panel at the top of the builder; entity-set scope multi-select below it (same UI primitive as v1.5a Workflow Scope panel).
 - Dry-render preview: shows the step sequence rendered against a fake trigger payload, including resolved wait timings ("would fire on 2026-06-03 at 14:00 UTC").
+
+**Tri-column shell (R1 + R3 + R4 lifts, mirrored from canonical PRD_WORKFLOW_SOP_BUILDER §6.2–6.3).** The Playbook builder uses the same tri-column editor shell as Workflows so the author experience is consistent across the two primitives:
+
+- **Left rail** — Playbooks list (filtered by review state).
+- **Center** — the vertical step list described above.
+- **Right rail** — persistent **Playbook Assistant** chat panel (R1), wired to `agents.regeneratePlaybookStep`. Always-on during editing; the primary surface for post-generation refinement ("regenerate step 3 to use SMS instead of email", "rephrase the welcome message to be terser"). Each interaction writes an `ai_authoring_prompt` row so the audit trail is uniform with first-generation authoring.
+- **Bottom-left** — **Template Variables sidebar** (R4) with a "TEMPLATE VARIABLES" header + search input. Token list sourced from the same `EntityAdapter.schemaForAI()` registry as Workflows. Drag-drop into `send_notification` body text fields, `kickoffMapping` text inputs, `branch_on_data_set` source expressions. Static token definitions only — live PMS hydration is a non-goal (same rationale as canonical PRD §5).
+- The contextual node-palette flyout pattern (R3, palette anchored to an edge "+" insertion control) is *not needed* in v1 because the Playbook step list uses card-based step insertion rather than a graph. The R3 pattern is preserved as a constraint for any future Playbook canvas (Phase 13+ per D-039).
+
+**Top bar (R2 lift, mirrored).** Persistent top bar above the step list with three controls:
+
+- **Enabled / Disabled toggle** — flips a `playbook.is_active` column. Disabled Playbooks do not fire on lifecycle triggers; the Inngest dispatcher (§6.4) skips them. Critical for safely staging Playbooks without exposing them to live event traffic.
+- **Scope chip / dropdown** — "Apply to: All Entities" by default; click opens an entity-set multi-select picker. Updates `playbook.entity_set_ids` optimistically.
+- **Review-state banner** — same component as the canonical PRD §6.6 banner, four states (`draft` / `in_review` / `published` / `archived`) with state-appropriate copy and CTAs. The `requireConciergeReview` org gate flips the "Publish" CTA to "Submit for Review" identically to Workflows.
+
+**Per-step Edit Action modal (C5 lift, mirrored).** Clicking a step card opens a slide-in side panel (the existing Phase 5 Pass 3 pattern) with the modal-style affordances from canonical PRD §6.3:
+
+- **Title** + **Description** inputs. Description editor includes a **`{}`** Template insert button anchored top-right; clicking opens a quick-pick of the same tokens surfaced in the Template Variables sidebar.
+- **Step-type-specific config** form below the description (e.g. `launch_workflow` shows a workflow picker + `kickoffMapping` fields).
+- **Regenerate** button — fires `agents.regeneratePlaybookStep` with an optional refinement prompt. Honors D-040 partial-regeneration semantics (see §6.2).
+- **Delete / Cancel / Save Changes** in the footer.
 
 ### 6.2 AI authoring ("Describe a Playbook")
 
@@ -117,7 +137,17 @@ Same Layer-3 pattern as Workflow AI authoring ([PRD_WORKFLOW_SOP_BUILDER.md](PRD
 - Same `ai_authoring_prompt` table from v1.5b (no new provenance table).
 - Same prompt-caching strategy (large stable system prompt — including the tenant entity-schema slot — cached per org; per-request user input uncached).
 - Same model default (`claude-sonnet-4-6`, escalate to `claude-opus-4-7` if structured-output reliability is insufficient).
-- Same two-pane review UX (NL/source left, generated Playbook right).
+- Same two-pane review UX (NL/source left, generated Playbook right). **Right pane renders as the read-view timeline (per §6.5), not as a flowchart** — Playbooks render as a chronological timeline, never as a node-graph (per D-039 + the Playbooks-alignment review).
+
+**Provenance and partial-regeneration contract (D-040).** `agents.regeneratePlaybookStep` is the Playbook-side mirror of `agents.regenerateWorkflowStep` (canonical PRD §6.3) and inherits the same contract:
+
+- Every AI-emitted Playbook step row is written with `playbook_step.provenance = 'ai_generated'` (new column added in Phase 9.6 — see §8.1).
+- Any manual edit through the Edit Action modal (§6.1) flips that step's row to `provenance = 'manually_edited'` permanently for v1.
+- `agents.regeneratePlaybookStep` is a strict partial-regeneration contract: it never reads or writes any sibling step where `provenance = 'manually_edited'`. Regeneration scope is strictly the target step.
+- Enforced both server-side in the validator and surface-side via a "Regenerate will leave your manual edits to steps 2, 5 untouched" preview shown before the regen fires.
+- Builder UI surfaces an "AI" chip on `'ai_generated'` step cards; no chip on `'manually_edited'`. Hover tooltip explains the contract.
+
+**Post-generation mid-edit surface — persistent Playbook Assistant chat (R1).** After the initial generation lands and the operator accepts into the builder, the persistent right-rail Playbook Assistant chat panel (§6.1 tri-column shell) is the primary surface for targeted refinement. Free-form questions ("what does `wait_for_event` do if the event never fires?") route to a documentation-aware thread; structured edit requests ("regenerate step 3 to use the satisfaction-survey template instead") route to `agents.regeneratePlaybookStep` with the D-040 partial-regeneration semantics above.
 
 **Example prompts the AI should handle horizontally:**
 
@@ -139,7 +169,7 @@ When a Playbook trigger fires, the entity-set filter is intersected with the tri
 **Runtime shape.**
 
 - A Playbook run is materialized as one row in `playbook_run` plus one row per executed step in `playbook_run_step`.
-- An Inngest function `playbook.run.<eventName>` subscribes to each lifecycle event. On fire, it filters by trigger config + entity-set membership + idempotency, then creates a `playbook_run` and dispatches the first step.
+- An Inngest function `playbook.run.<eventName>` subscribes to each lifecycle event. On fire, it filters by **`playbook.is_active = true`** (the top-bar Enabled/Disabled toggle from §6.1), trigger config, entity-set membership, and idempotency, then creates a `playbook_run` and dispatches the first step. Disabled Playbooks are skipped at dispatch time — load-bearing for the operator workflow of authoring a Playbook, dry-rendering it, and only enabling it once ready.
 - Each step is executed via an Inngest step function. `wait_for_duration` uses `step.sleep`; `wait_for_event` uses `step.waitForEvent` with timeout; `launch_workflow` calls the existing `runs.launch` oRPC procedure, then optionally `step.waitForEvent('run.completed', { match: 'runId' })`.
 - Failures: each step retries per Inngest's default policy; final failure marks the `playbook_run` as `failed` with the error captured in `result_payload`.
 - Cancellation: an operator can cancel an in-flight Playbook run from the run detail page. Inngest function checks a `playbook_run.status='cancelled'` flag before each step boundary; cancelled mid-run means subsequent steps don't fire.

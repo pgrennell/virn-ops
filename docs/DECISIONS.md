@@ -1734,3 +1734,183 @@ Verified 2026-05-27 against Ops code at HEAD.
   tables** (per D-022 + D-027). The `crossProductOrigin` column is wired through
   `launchRun` today; the rest of the catalog-emitting procedures pick up the
   same threading when they ship.
+
+---
+
+## 2026-05-28 — Workflow & SOP Builder v2.0 review: step-list canonical, regeneration provenance, layout-out-of-snapshot
+
+Mirrors the structured review of [PRD_WORKFLOW_SOP_BUILDER_v2.md](PRD_WORKFLOW_SOP_BUILDER_v2.md) (a
+Gemini-authored alternative to canonical [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md)
+Draft v2). Six dimension-specific reviewers (schema, build-plan, decisions, playbooks alignment,
+architecture, UX screenshots) independently flagged three v2.0 overshoots (visual node-graph
+canvas as mandatory authoring surface; thread-adjacent inbox monitor; real-time PMS field
+hydration) and converged on five UX primitives worth lifting (persistent right-rail Workflow
+Assistant chat panel; top-bar scope selector + Request Review banner + Enabled/Disabled toggle;
+contextual node-palette flyout; Template Variables sidebar as static token list; static
+diagram + chronological execution timeline; "Active Run" right-rail card; Edit Action modal +
+`{}` Template insert + inline Regenerate). v2.0 PRD will be archived as superseded and rewritten
+as a Phase 13+ roadmap-candidates doc. The three decisions below lock the architectural
+commitments that emerged from the review.
+
+### D-039 — Step-list is the canonical workflow structure; visual flowchart is a render layer
+
+**Context:** [PRD_WORKFLOW_SOP_BUILDER_v2.md](PRD_WORKFLOW_SOP_BUILDER_v2.md) §6.2 proposed a
+visual node-graph canvas with colored TCA palette (Green Trigger / Orange Condition / Blue
+Action), drag-drop authoring, click-drag arrow connectors, and `canvas_nodes` + `canvas_edges`
+JSONB columns persisted on `workflow_version` — claimed as a 2-week v2.0a deliverable. The
+canvas was framed as a *replacement* for the Phase 5 step-list builder (already shipped per
+D-017–D-019), not a complement. The PRD_PLAYBOOKS.md §5 + §6.1 already commits Playbooks to a
+*vertical step list* explicitly without a canvas; v2.0 would have created an inconsistent
+authoring surface across the two related primitives.
+
+**Decision:** Step-list (sections → steps → fields, per
+[packages/database/drizzle/schema/workflows.ts](../packages/database/drizzle/schema/workflows.ts))
+remains the canonical data structure and authoring surface for **both Workflows and Playbooks**.
+A constrained-viewport read-only flowchart **render** (React Flow embed, ~600px column,
+vertical-stack with one branch) ships in v1.5c three-views as a visualization layer over the
+existing step-list — not as a new data model, not as an authoring surface. Authoring-grade
+node-graph canvas is deferred to **Phase 13+ behind an explicit ADR override** of this
+decision. Trigger and Condition node types remain non-goals in v1.5 per the canonical PRD
+([PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §5) — entity-event triggers belong
+to Phase 6+18, conditional visibility belongs to Phase 6, inbound-comms belongs to S-09
+(v1.1+). If the render-only flowchart ships, Trigger/Condition palette chips appear disabled
+with "Coming in Phase 6" tooltips; they are never enabled in v1.5.
+
+**Rationale:**
+
+1. **Phase 5 step-list builder is already shipped and validated.** Replacing it would discard
+   working code that operators are using today. Adding a parallel graph representation creates
+   two sources of truth.
+2. **Snapshot-immutability invariant** (ARCHITECTURE §3 #4) forbids `workflow_version` carrying
+   editor-state JSONB; coordinates and arrow configs are editor state, not authored content.
+   See D-041 for the alternative path if layout ever needs persisting.
+3. **Realistic canvas build is 5–6 weeks**, not 2. Drag-drop + connectors + auto-layout +
+   serialization + AI-generation-into-canvas + per-step modal integration + Inngest-rule
+   wiring is substantial UI engineering. The 2-week claim is unsupported.
+4. **Re-litigates D-034** by hard-coding TCA topology into the canonical data model. D-034's
+   horizontal positioning commits the engine to vertical-agnostic step composition; TCA-as-
+   schema undoes that.
+5. **Playbooks alignment:** PRD_PLAYBOOKS §5 + §6.1 already excludes a canvas. This decision
+   brings Workflows back to the same posture, eliminating the canvas-vs-list asymmetry
+   v2.0 would have introduced.
+6. **AI-generation friction:** the v1.5b validator already restricts AI output to
+   `task | approval | heading | one_off` and `due_type ∈ {none, offset_from_start}` (canonical
+   PRD §6.3, Appendix A). Forcing AI to emit nodes-and-edges JSON for a canvas adds a
+   structured-output failure mode without changing what the AI actually authors.
+
+**Consequences:**
+
+- v2.0 PRD is archived as superseded; header pointer added to canonical v1.5 PRD; lifts folded
+  into [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6 directly.
+- v1.5c three-views (canonical PRD §6.4) gains the constrained-viewport flowchart **render**
+  (read-only, ~600px React Flow embed). Author view stays the Phase 5 step-list builder
+  unchanged.
+- A new **Phase 13** is added to [BUILD_PLAN.md](BUILD_PLAN.md) as the gated landing for any
+  authoring-grade canvas. Phase 13 is explicitly post-v1 and requires an ADR override of this
+  decision; entry is not automatic.
+- **D-024 reaffirmed.** v2.0's §6.3.2 attempted to introduce a thread-adjacent inbox monitor
+  with real-time colored flowchart overlay, automated reply composer, and per-thread Workflows/
+  Tasks/Journeys/Autopilot/Upsells/Locks/Check-in/Calendar rails. UX-screenshot reviewer
+  confirmed this is Besty's entire core product, not a sidebar. virn-ops does NOT build a
+  symmetric PM-side inbox surface — Besty (PM-side cross-repo partner per D-024..D-033) owns
+  that surface. Future PRDs proposing inbox-thread coupling re-open D-024 and must override
+  it with an ADR.
+- **TCA framing accidentally maps to Playbooks.** Reviewer 6 noted that
+  `playbook_lifecycle_event` ≈ Trigger, `branch_on_data_set` ≈ Condition,
+  `launch_workflow`/`send_notification`/`write_to_data_set` ≈ Action — i.e. Playbooks
+  structurally fit TCA because they are *orchestrator-executed*, while Workflows are *human-
+  executed procedures* where every step is an Action from the operator's POV. This decision's
+  rejection of TCA applies to Workflows specifically, not to Playbooks; PRD_PLAYBOOKS keeps
+  its existing trigger / step-type model unchanged.
+
+### D-040 — Per-step regenerate must preserve sibling manual edits; provenance tag at step level
+
+**Context:** v2.0 PRD §6.3.1 introduced per-step regenerate via an inline canvas affordance
+without specifying preservation semantics. Operators typically dictate a prompt, AI generates
+N steps, operator hand-edits steps 2 and 5, then later refines step 3 via regeneration. If
+regeneration of step 3 silently overwrites the manual edits to steps 2 and 5, the trust loss
+is permanent — operators stop using AI authoring after the first such incident. The canonical
+PRD ([PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.3) already specifies
+per-step regenerate via `agents.regenerateStep`, but the partial-regeneration contract is not
+yet enforced at the schema level. The same gap exists in
+[PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) §6.2 (`agents.regeneratePlaybookStep`).
+
+**Decision:** Both `agents.regenerateWorkflowStep` (canonical name; v1.5b) and
+`agents.regeneratePlaybookStep` (PRD_PLAYBOOKS §6.2; v18c) are first-class **partial-
+regeneration contracts** with the following guarantees:
+
+- New schema columns: `step.provenance` and `playbook_step.provenance`, both
+  `pg_enum('ai_generated', 'manually_edited')` NOT NULL DEFAULT `'manually_edited'`.
+- AI-emitted steps (via `agents.authorWorkflow` / `agents.authorPlaybook` /
+  `agents.regenerate*Step`) write `provenance='ai_generated'`.
+- Any step edit through the manual builder UI flips the row to `provenance='manually_edited'`,
+  even if the original was AI-generated. The flip is irreversible without explicit user action
+  ("revert to AI version" affordance is out of scope for v1.5).
+- A `regenerate*Step` call on step N never reads or writes any sibling step with
+  `provenance='manually_edited'`. Regeneration scope is strictly the target step.
+- If the regenerated step's output references a field key that lives on a `manually_edited`
+  sibling, that reference is preserved verbatim; AI cannot rename it (consistent with D-017
+  field-key lifecycle lock).
+
+**Rationale:** silent overwrite of manual edits is the highest-trust-loss failure mode for
+AI authoring. The provenance tag makes the contract explicit, enforceable at the schema level,
+and queryable for analytics ("what % of v1.5 workflows are AI-authored end-to-end vs hybrid?").
+The `manually_edited` default keeps existing rows safe — only new AI-emitted content opts in
+to the `ai_generated` tag.
+
+**Consequences:**
+
+- [BUILD_PLAN.md](BUILD_PLAN.md) **Phase 9.6** (Playbooks schema seam) gains the
+  `playbook_step.provenance` column.
+- [BUILD_PLAN.md](BUILD_PLAN.md) **v1.5a Phase 9.5** (Workflows schema additions for review
+  state etc.) gains the `step.provenance` column. Backfill: `'manually_edited'` for all
+  existing rows (safe default).
+- [BUILD_PLAN.md](BUILD_PLAN.md) **Phase 12** (v1.5b AI authoring) and the corresponding
+  Phase 18c (Playbook AI authoring) enforce the regeneration scope rule in the
+  `agents.regenerate*Step` procedure. Validator rejects attempts to write into a
+  `manually_edited` sibling.
+- Builder UI surfaces provenance as a subtle chip on each step ("AI" badge for
+  `ai_generated`, no badge for `manually_edited`). Hover tooltip explains the contract.
+
+### D-041 — Canvas/layout state, if ever persisted, lives in a separate non-snapshot table
+
+**Context:** v2.0 PRD §8 proposed `canvas_nodes` + `canvas_edges` JSONB columns on
+`workflow_version`. D-039 rejects v2.0's canvas-as-authoring-surface framing, so the immediate
+proposal is moot — but the question of *where* canvas layout state would live if Phase 13+ ever
+ships authoring-grade canvas needs to be settled now so future PRDs don't re-introduce the
+same anti-pattern.
+
+**Decision:** Any future visual canvas — for **Workflows OR Playbooks** — stores layout state
+(node coordinates, anchor ports, arrow routing, viewport zoom, scroll position) in a separate
+non-snapshot table keyed by the parent id (`workflow_id` or `playbook_id`), **NEVER** by
+`*_version`. Working schema names: `workflow_canvas_layout` and `playbook_canvas_layout`, each
+with `(parent_id, user_id NULLABLE, layout_json, updated_at)`. Shared layout (canonical
+coordinates everyone sees) is per-parent with `user_id=NULL`; per-user editor state (zoom,
+scroll, last-selected-node) is per-(parent, user). The snapshot mechanism (`workflow_version`,
+`playbook_version`) carries only authored content — never editor state.
+
+**Rationale:**
+
+1. **Honors ARCHITECTURE §3 #4 snapshot-immutability** — `*_version` rows represent published,
+   audit-stable, run-time-pinned content. Layout JSON would either bloat the snapshot or
+   force a new version row on every cosmetic node drag.
+2. **Editor state is per-user**, not per-version. Two operators editing the same workflow
+   want different viewport positions; sharing one viewport coordinate via the version snapshot
+   forces a singleton editor.
+3. **Decouples layout migrations from content migrations** — if React Flow upgrades or we
+   swap canvas libraries, schema-migrating coordinates across thousands of snapshot rows is
+   nightmarish. A separate table contains the blast radius.
+4. **Layout has no audit/governance value** — no one needs to know "who moved node 3 two
+   pixels left on 2026-06-15." Keeping layout out of the audit-tracked snapshot keeps the
+   audit log focused on authored changes.
+
+**Consequences:**
+
+- No schema impact in v1.5 (no canvas authoring ships).
+- Phase 13+ canvas authoring PRD (the ADR override entry per D-039) must adopt this shape;
+  any deviation requires an ADR override of this decision.
+- The constrained-viewport read-only flowchart **render** in v1.5c (per D-039) does not
+  need layout state — it's a deterministic render derived from the step list (vertical stack,
+  one branch). No layout table needed for v1.5c.
+- PRD_PLAYBOOKS §15 ("any such canvas must follow D-041") cross-references this decision so
+  the constraint is visible to future Playbook canvas proposals.
