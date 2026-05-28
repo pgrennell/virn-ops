@@ -286,6 +286,13 @@ export interface WorkflowWithVersionsRow {
 	currentDraft: typeof workflowVersion.$inferSelect | null;
 	latestPublished: typeof workflowVersion.$inferSelect | null;
 	allVersions: Array<typeof workflowVersion.$inferSelect>;
+	/** Phase 12.1 -- AI authoring provenance summary. Populated only when
+	 * `workflow.aiAuthoringPromptId` is non-null AND the prompt row still exists
+	 * (the FK is `on delete set null`, so a pruned provenance row leaves the column
+	 * null and this stays null). Surfaces the model id + when the prompt was
+	 * captured for the Builder's "authored with AI" indicator -- the rest of the
+	 * prompt body lives on `ai_authoring_prompt` and isn't loaded here. */
+	aiAuthoring: { promptId: string; model: string; createdAt: Date } | null;
 }
 
 /** Hydrated workflow record + every version in newest-first order, plus shortcuts to the
@@ -316,7 +323,21 @@ export async function getWorkflowWithVersions(
 	const currentDraft = drafts[0] ?? null;
 	const latestPublished = allVersions.find((v) => v.status === "published") ?? null;
 
-	return { workflow: wf, currentDraft, latestPublished, allVersions };
+	// Phase 12.1 -- enrich with AI authoring provenance when present. Single small
+	// findFirst on the indexed PK; skip entirely when the FK is null (the common
+	// case: hand-authored or pack-installed workflows).
+	let aiAuthoring: WorkflowWithVersionsRow["aiAuthoring"] = null;
+	if (wf.aiAuthoringPromptId !== null) {
+		const ap = await db.query.aiAuthoringPrompt.findFirst({
+			where: (a, { eq: e }) => e(a.id, wf.aiAuthoringPromptId as string),
+			columns: { id: true, model: true, createdAt: true },
+		});
+		if (ap) {
+			aiAuthoring = { promptId: ap.id, model: ap.model, createdAt: ap.createdAt };
+		}
+	}
+
+	return { workflow: wf, currentDraft, latestPublished, allVersions, aiAuthoring };
 }
 
 // ---------------------------------------------------------------------------

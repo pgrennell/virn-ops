@@ -19,6 +19,7 @@ import {
 	RotateCcw,
 	Send,
 	Settings,
+	Sparkles,
 	Trash2,
 	UploadCloud,
 } from "lucide-react";
@@ -65,6 +66,11 @@ interface BuilderTopBarProps {
 	onApproveReview?: () => void;
 	sendBackToDraftPending?: boolean;
 	onSendBackToDraft?: () => void;
+	/** Phase 12.1 -- AI authoring provenance. When present, renders a small chip
+	 * next to the version status indicating this workflow originated from
+	 * `agents.authorWorkflow`. The chip's title carries the model + date so a
+	 * hover reveals "claude-sonnet-4-6 · 2026-05-27" without crowding the header. */
+	aiAuthoring?: { model: string; createdAt: string | Date } | null;
 }
 
 export function BuilderTopBar({
@@ -93,6 +99,7 @@ export function BuilderTopBar({
 	onApproveReview,
 	sendBackToDraftPending,
 	onSendBackToDraft,
+	aiAuthoring,
 }: BuilderTopBarProps) {
 	// Phase 9.5g -- choose which publish-area button(s) to render based on the
 	// concierge-review state machine. Flag off OR review_state is draft (flag off
@@ -121,6 +128,7 @@ export function BuilderTopBar({
 							<Send className="size-3" /> In review
 						</span>
 					)}
+					{aiAuthoring && <AiAuthoringChip aiAuthoring={aiAuthoring} />}
 				</div>
 			</div>
 
@@ -210,6 +218,39 @@ export function BuilderTopBar({
 				)}
 			</div>
 		</header>
+	);
+}
+
+function AiAuthoringChip({
+	aiAuthoring,
+}: {
+	aiAuthoring: { model: string; createdAt: string | Date };
+}) {
+	const date =
+		aiAuthoring.createdAt instanceof Date
+			? aiAuthoring.createdAt
+			: new Date(aiAuthoring.createdAt);
+	const formattedDate = Number.isNaN(date.getTime())
+		? null
+		: date.toLocaleDateString(undefined, {
+				year: "numeric",
+				month: "short",
+				day: "numeric",
+			});
+	// Tooltip carries the model id + full date; chip body stays compact so the
+	// header doesn't grow on long titles. Background is a soft violet -- distinct
+	// from the version-status palette (amber/emerald/muted) and the review-state
+	// indigo -- so the indicator is unambiguous at a glance.
+	const tooltip = formattedDate
+		? `Authored with AI -- ${aiAuthoring.model} on ${formattedDate}`
+		: `Authored with AI -- ${aiAuthoring.model}`;
+	return (
+		<span
+			className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300"
+			title={tooltip}
+		>
+			<Sparkles className="size-3" /> AI-authored
+		</span>
 	);
 }
 

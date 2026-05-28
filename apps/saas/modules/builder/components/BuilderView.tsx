@@ -274,6 +274,7 @@ export function BuilderView({
 			workflowTitle={workflowQuery.data.workflow.title}
 			workflowEntitySetIds={workflowQuery.data.workflow.entitySetIds ?? []}
 			workflowReviewState={workflowReviewState}
+			aiAuthoring={workflowQuery.data.aiAuthoring ?? null}
 			requireConciergeReview={requireConciergeReview}
 			organizationSlug={organizationSlug}
 			forkedFromVersionNumber={forkedFromVersionNumber}
@@ -314,6 +315,9 @@ interface BuilderInnerProps {
 	 * Submit-for-review vs Approve+SendBack buttons. */
 	workflowReviewState: "draft" | "in_review" | "published" | "archived";
 	requireConciergeReview: boolean;
+	/** Phase 12.1 -- AI authoring provenance surfaced from getWorkflowWithVersions.
+	 * null for hand-authored or pack-installed workflows. */
+	aiAuthoring: { promptId: string; model: string; createdAt: string | Date } | null;
 	organizationSlug: string;
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
@@ -344,6 +348,7 @@ function BuilderInner({
 	workflowEntitySetIds,
 	workflowReviewState,
 	requireConciergeReview,
+	aiAuthoring,
 	organizationSlug,
 	forkedFromVersionNumber,
 	isDraft,
@@ -451,6 +456,7 @@ function BuilderInner({
 				canDiscard={isAdminOrOwner && isDraft}
 				discardPending={discardPending}
 				onDiscard={onDiscard}
+				aiAuthoring={aiAuthoring}
 				topLevelError={topLevelError}
 			>
 				<PreviewBody
@@ -493,6 +499,7 @@ function BuilderInner({
 				canDiscard={false}
 				discardPending={discardPending}
 				onDiscard={onDiscard}
+				aiAuthoring={aiAuthoring}
 				topLevelError={topLevelError}
 			>
 				<ViewBody
@@ -543,6 +550,7 @@ function BuilderInner({
 			onApproveReview={onApproveReview}
 			sendBackToDraftPending={sendBackToDraftPending}
 			onSendBackToDraft={onSendBackToDraft}
+			aiAuthoring={aiAuthoring}
 			topLevelError={topLevelError}
 		>
 			<div className="flex flex-1 min-h-0">
@@ -756,6 +764,8 @@ interface BuilderShellProps {
 	onApproveReview?: () => void;
 	sendBackToDraftPending?: boolean;
 	onSendBackToDraft?: () => void;
+	/** Phase 12.1 -- AI authoring provenance; pass-through to BuilderTopBar. */
+	aiAuthoring?: { model: string; createdAt: string | Date } | null;
 	topLevelError: string | null;
 	children: React.ReactNode;
 }
@@ -787,6 +797,7 @@ function BuilderShell({
 	onApproveReview,
 	sendBackToDraftPending,
 	onSendBackToDraft,
+	aiAuthoring,
 	topLevelError,
 	children,
 }: BuilderShellProps) {
@@ -818,6 +829,7 @@ function BuilderShell({
 				onApproveReview={onApproveReview}
 				sendBackToDraftPending={sendBackToDraftPending}
 				onSendBackToDraft={onSendBackToDraft}
+				aiAuthoring={aiAuthoring}
 			/>
 			{topLevelError && (
 				<div className="px-4 py-2">
