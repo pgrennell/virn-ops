@@ -27,6 +27,7 @@ import {
 	updateSection,
 	updateStep,
 } from "@virn/database";
+import type { DbExecutor } from "@virn/database";
 
 import { WorkflowEngineError } from "./errors";
 import {
@@ -148,8 +149,8 @@ export async function assertStepDueRefs(args: {
 	dependentPosition?: number;
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
-}): Promise<void> {
-	return assertDueRefs(args);
+}, executor?: DbExecutor): Promise<void> {
+	return assertDueRefs(args, executor);
 }
 
 async function assertDueRefs(args: {
@@ -160,7 +161,7 @@ async function assertDueRefs(args: {
 	dependentPosition?: number;
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
-}): Promise<void> {
+}, executor?: DbExecutor): Promise<void> {
 	const checkAnchor =
 		args.dueAnchorStepId !== undefined && args.dueAnchorStepId !== null;
 	const checkSource =
@@ -180,8 +181,8 @@ async function assertDueRefs(args: {
 	// Run the two reads in parallel when both are needed. Independent lookups
 	// against unrelated rows -- no data dependency between them.
 	const [anchor, src] = await Promise.all([
-		checkAnchor ? getStepWithVersion(args.dueAnchorStepId as string) : null,
-		checkSource ? getFieldWithVersion(args.dueSourceFieldId as string) : null,
+		checkAnchor ? getStepWithVersion(args.dueAnchorStepId as string, executor) : null,
+		checkSource ? getFieldWithVersion(args.dueSourceFieldId as string, executor) : null,
 	]);
 
 	if (checkAnchor) {
@@ -241,7 +242,7 @@ async function assertDueRefs(args: {
 			src.field.stepId !== null &&
 			args.dependentPosition !== undefined
 		) {
-			const sourceStep = await getStepWithVersion(src.field.stepId);
+			const sourceStep = await getStepWithVersion(src.field.stepId, executor);
 			if (
 				sourceStep &&
 				sourceStep.step.position >= args.dependentPosition

@@ -393,7 +393,7 @@ export async function authorWorkflow(
 						stepId,
 						dependentPosition: si,
 						dueAnchorStepId,
-					});
+					}, tx);
 					await updateStep({ stepId, dueAnchorStepId }, tx);
 				}
 			} else if (dueType === "from_date_field") {
@@ -406,7 +406,7 @@ export async function authorWorkflow(
 							stepId,
 							dependentPosition: si,
 							dueSourceFieldId,
-						});
+						}, tx);
 						await updateStep({ stepId, dueSourceFieldId }, tx);
 					}
 				}

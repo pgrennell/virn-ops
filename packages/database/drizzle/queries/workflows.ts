@@ -1106,11 +1106,14 @@ export async function deleteField(
 
 /** Fetch a field plus its version's status -- the rename/delete guards need the version
  * status to refuse on non-draft. One query, one round-trip. */
-export async function getFieldWithVersion(fieldId: string): Promise<{
+export async function getFieldWithVersion(
+	fieldId: string,
+	executor: DbExecutor = db,
+): Promise<{
 	field: typeof field.$inferSelect;
 	version: typeof workflowVersion.$inferSelect;
 } | null> {
-	const rows = await db
+	const rows = await executor
 		.select()
 		.from(field)
 		.innerJoin(workflowVersion, eq(workflowVersion.id, field.workflowVersionId))
@@ -1122,11 +1125,14 @@ export async function getFieldWithVersion(fieldId: string): Promise<{
 }
 
 /** Same shape for steps. */
-export async function getStepWithVersion(stepId: string): Promise<{
+export async function getStepWithVersion(
+	stepId: string,
+	executor: DbExecutor = db,
+): Promise<{
 	step: typeof step.$inferSelect;
 	version: typeof workflowVersion.$inferSelect;
 } | null> {
-	const rows = await db
+	const rows = await executor
 		.select()
 		.from(step)
 		.innerJoin(workflowVersion, eq(workflowVersion.id, step.workflowVersionId))
@@ -1138,11 +1144,14 @@ export async function getStepWithVersion(stepId: string): Promise<{
 }
 
 /** And sections. */
-export async function getSectionWithVersion(sectionId: string): Promise<{
+export async function getSectionWithVersion(
+	sectionId: string,
+	executor: DbExecutor = db,
+): Promise<{
 	section: typeof section.$inferSelect;
 	version: typeof workflowVersion.$inferSelect;
 } | null> {
-	const rows = await db
+	const rows = await executor
 		.select()
 		.from(section)
 		.innerJoin(workflowVersion, eq(workflowVersion.id, section.workflowVersionId))
@@ -1154,11 +1163,14 @@ export async function getSectionWithVersion(sectionId: string): Promise<{
 }
 
 /** Fetch a workflow_version + its parent workflow (for org scoping checks). One join. */
-export async function getVersionWithWorkflow(versionId: string): Promise<{
+export async function getVersionWithWorkflow(
+	versionId: string,
+	executor: DbExecutor = db,
+): Promise<{
 	version: typeof workflowVersion.$inferSelect;
 	workflow: typeof workflow.$inferSelect;
 } | null> {
-	const rows = await db
+	const rows = await executor
 		.select()
 		.from(workflowVersion)
 		.innerJoin(workflow, eq(workflow.id, workflowVersion.workflowId))
