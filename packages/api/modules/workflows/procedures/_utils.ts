@@ -45,6 +45,7 @@ const CODE_MAP: Record<
 	DUE_ANCHOR_SELF_REFERENCE: "BAD_REQUEST",
 	DUE_SOURCE_FIELD_INVALID: "BAD_REQUEST",
 	DUE_SOURCE_FIELD_NOT_DATE: "BAD_REQUEST",
+	FIELD_TYPE_CHANGE_LOCKED: "BAD_REQUEST",
 };
 
 /** Wraps a lib helper call so any WorkflowEngineError becomes an ORPCError with a

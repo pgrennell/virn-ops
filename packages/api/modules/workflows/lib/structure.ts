@@ -14,6 +14,7 @@ import {
 	deleteSection,
 	deleteStep,
 	deleteStepDependency,
+	findFieldReferencers,
 	findStepReferencers,
 	getFieldWithVersion,
 	getStepWithVersion,
@@ -354,6 +355,28 @@ export async function updateFieldOp(
 			candidate: input.key,
 			excludeFieldId: input.fieldId,
 		});
+	}
+
+	// Phase 12.2 -- fieldType change guard. A `from_date_field` due rule sources
+	// from this field's `date` value; flipping the type to something non-date (or
+	// to something a `condition` rule can't compare) would silently break the
+	// downstream consumer at launch. Same posture as assertKeyRenameAllowed:
+	// refuse with a structured error listing the referencers so the UI can
+	// surface "clear these references first."
+	if (input.fieldType !== undefined && input.fieldType !== field.fieldType) {
+		const refs = await findFieldReferencers(input.fieldId);
+		if (refs.length > 0) {
+			throw new WorkflowEngineError(
+				"FIELD_TYPE_CHANGE_LOCKED",
+				`This field's type is referenced by ${refs.length} item(s) and cannot be changed. Clear the references first.`,
+				{
+					fieldId: input.fieldId,
+					fromType: field.fieldType,
+					toType: input.fieldType,
+					referencers: refs,
+				},
+			);
+		}
 	}
 
 	await updateField({

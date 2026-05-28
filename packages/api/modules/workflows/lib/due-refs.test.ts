@@ -16,6 +16,7 @@ vi.mock("@virn/database", () => ({
 	deleteSection: vi.fn(),
 	deleteStep: vi.fn(),
 	deleteStepDependency: vi.fn(),
+	findFieldReferencers: vi.fn(),
 	findStepReferencers: vi.fn(),
 	getFieldWithVersion: vi.fn(),
 	getStepWithVersion: vi.fn(),
@@ -40,18 +41,34 @@ vi.mock("./guards", () => ({
 		workflow: { id: "wf_1", organizationId: "org_1" },
 	})),
 	assertSectionEditable: vi.fn(),
-	assertFieldEditable: vi.fn(),
+	assertFieldEditable: vi.fn(async () => ({
+		field: { id: "fld_1", workflowVersionId: "ver_1", key: "k", fieldType: "date" },
+		version: { id: "ver_1", status: "draft" },
+		workflow: { id: "wf_1", organizationId: "org_1" },
+	})),
+}));
+
+// The field-key lib does network-ish lookups inside updateFieldOp. Stub it so
+// tests focused on the fieldType guard don't have to set up key rename mocks.
+vi.mock("./field-key", () => ({
+	autoSlugFromLabel: (s: string) => s.toLowerCase().replace(/\s+/g, "_"),
+	resolveUniqueKey: vi.fn(async (input: { candidate: string }) => input.candidate),
+	validateKeyShape: vi.fn(),
+	assertKeyRenameAllowed: vi.fn(async () => undefined),
+	assertFieldDeleteAllowed: vi.fn(async () => undefined),
 }));
 
 import {
+	findFieldReferencers,
 	getFieldWithVersion,
 	getStepWithVersion,
 	insertStep,
+	updateField,
 	updateStep,
 } from "@virn/database";
 
 import { WorkflowEngineError } from "./errors";
-import { createStep, updateStepOp } from "./structure";
+import { createStep, updateFieldOp, updateStepOp } from "./structure";
 
 const CTX = { organizationId: "org_1", userId: "user_1" };
 
@@ -271,5 +288,57 @@ describe("createStep -- dueType ref validation at insert time", () => {
 				dueAnchorStepId: "st_anchor",
 			}),
 		).resolves.toMatchObject({ id: "st_new" });
+	});
+});
+
+describe("updateFieldOp -- fieldType change guard (FIELD_TYPE_CHANGE_LOCKED)", () => {
+	it("allows fieldType change when nothing references the field", async () => {
+		vi.mocked(findFieldReferencers).mockResolvedValue([]);
+		await expect(
+			updateFieldOp(CTX, { fieldId: "fld_1", fieldType: "text" }),
+		).resolves.toBeUndefined();
+		expect(updateField).toHaveBeenCalledTimes(1);
+	});
+
+	it("refuses fieldType change when a from_date_field due rule references the field", async () => {
+		vi.mocked(findFieldReferencers).mockResolvedValue([
+			{ type: "due_source", stepId: "st_dependent" },
+		]);
+		const err = await updateFieldOp(CTX, {
+			fieldId: "fld_1",
+			fieldType: "text",
+		}).catch((e) => e);
+		expect(err).toBeInstanceOf(WorkflowEngineError);
+		expect(err.code).toBe("FIELD_TYPE_CHANGE_LOCKED");
+		expect(err.details?.fromType).toBe("date");
+		expect(err.details?.toType).toBe("text");
+		expect(err.details?.referencers).toEqual([
+			{ type: "due_source", stepId: "st_dependent" },
+		]);
+		expect(updateField).not.toHaveBeenCalled();
+	});
+
+	it("refuses fieldType change when an automation condition references the field", async () => {
+		vi.mocked(findFieldReferencers).mockResolvedValue([
+			{ type: "condition", stepId: null },
+		]);
+		const err = await updateFieldOp(CTX, {
+			fieldId: "fld_1",
+			fieldType: "number",
+		}).catch((e) => e);
+		expect(err.code).toBe("FIELD_TYPE_CHANGE_LOCKED");
+	});
+
+	it("skips the referencer lookup when fieldType is not in the patch (cheap path)", async () => {
+		await updateFieldOp(CTX, { fieldId: "fld_1", label: "Renamed" });
+		expect(findFieldReferencers).not.toHaveBeenCalled();
+		expect(updateField).toHaveBeenCalledTimes(1);
+	});
+
+	it("skips the referencer lookup when fieldType matches current (no-op change)", async () => {
+		// assertFieldEditable returns fieldType: 'date'; sending 'date' again is a no-op.
+		await updateFieldOp(CTX, { fieldId: "fld_1", fieldType: "date" });
+		expect(findFieldReferencers).not.toHaveBeenCalled();
+		expect(updateField).toHaveBeenCalledTimes(1);
 	});
 });

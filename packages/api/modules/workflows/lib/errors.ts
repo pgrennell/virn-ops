@@ -37,7 +37,8 @@ export type WorkflowEngineErrorCode =
 	| "DUE_ANCHOR_INVALID"
 	| "DUE_ANCHOR_SELF_REFERENCE"
 	| "DUE_SOURCE_FIELD_INVALID"
-	| "DUE_SOURCE_FIELD_NOT_DATE";
+	| "DUE_SOURCE_FIELD_NOT_DATE"
+	| "FIELD_TYPE_CHANGE_LOCKED";
 
 export class WorkflowEngineError extends Error {
 	readonly code: WorkflowEngineErrorCode;
