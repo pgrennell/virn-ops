@@ -21,6 +21,8 @@
 
 import { z } from "zod";
 
+import { DUE_TYPE_INVARIANTS, type DueCompanion } from "../due-types";
+
 // ---------------------------------------------------------------------------
 // Allowed enums (kept as tuples so we get the literal union for Zod + TS types)
 // ---------------------------------------------------------------------------
@@ -194,156 +196,122 @@ export function assertAuthoredWorkflowReferences(
 		}
 	}
 
-	// 3. Per-dueType invariants. Each dueType has a required-companions set; mismatches
-	// produce a structured error so the model converges on the intended shape rather
-	// than silently emitting a partially-resolved deadline.
-	//
-	// Pre-compute the field-key -> field map for from_date_field source lookups (a
-	// kickoff or step field can serve as the source; the validator just needs the
-	// keys + their declared fieldType).
-	const fieldsByKey = new Map<string, { fieldType: string }>();
-	for (const f of wf.kickoffFields ?? []) fieldsByKey.set(f.key, { fieldType: f.fieldType });
-	for (const s of wf.steps) {
+	// 3. Per-dueType invariants. The required/forbidden companion table lives in
+	// due-types.ts so structure.ts's assertDueRefs (the API-layer guard) reads
+	// from the same source. Special checks that don't generalize across
+	// dueTypes (out-of-range index, self-anchor, source-must-be-date, position
+	// ordering) live below as inline blocks gated by dueType.
+	const fieldsByKey = new Map<string, { fieldType: string; stepIndex: number | null }>();
+	for (const f of wf.kickoffFields ?? []) {
+		fieldsByKey.set(f.key, { fieldType: f.fieldType, stepIndex: null });
+	}
+	for (const [si, s] of wf.steps.entries()) {
 		for (const f of s.fields ?? []) {
-			// Steps can share keys via collision (caught above as duplicate); the
-			// first occurrence wins for type-lookup purposes -- subsequent ones are
-			// already flagged. Map.set with a missing key is safe; we don't overwrite
-			// existing entries because the first occurrence is what the run engine
-			// would resolve.
+			// First-occurrence wins for type-lookup purposes; duplicate-key
+			// collisions are flagged in section 1 above.
 			if (!fieldsByKey.has(f.key)) {
-				fieldsByKey.set(f.key, { fieldType: f.fieldType });
+				fieldsByKey.set(f.key, { fieldType: f.fieldType, stepIndex: si });
 			}
 		}
 	}
 
+	// Companion-name labels for the error path text (the AI-layer fields are
+	// dueOffsetDays / dueAnchorStepIndex / dueSourceFieldKey, distinct from the
+	// API-layer fields the structure validator uses).
+	const COMPANION_PATH: Record<DueCompanion, string> = {
+		offset: "dueOffsetDays",
+		anchor: "dueAnchorStepIndex",
+		source: "dueSourceFieldKey",
+	};
+
 	for (const [si, s] of wf.steps.entries()) {
 		const dueType = s.dueType ?? "none";
-		const hasOffset = s.dueOffsetDays !== undefined && s.dueOffsetDays !== null;
-		const hasAnchor =
-			s.dueAnchorStepIndex !== undefined && s.dueAnchorStepIndex !== null;
-		const hasSourceKey =
-			s.dueSourceFieldKey !== undefined &&
-			s.dueSourceFieldKey !== null &&
-			s.dueSourceFieldKey.length > 0;
+		const presence: Record<DueCompanion, boolean> = {
+			offset: s.dueOffsetDays !== undefined && s.dueOffsetDays !== null,
+			anchor:
+				s.dueAnchorStepIndex !== undefined && s.dueAnchorStepIndex !== null,
+			source:
+				s.dueSourceFieldKey !== undefined &&
+				s.dueSourceFieldKey !== null &&
+				s.dueSourceFieldKey.length > 0,
+		};
+		const inv = DUE_TYPE_INVARIANTS[dueType];
 
-		switch (dueType) {
-			case "none": {
-				if (hasOffset) {
-					issues.push({
-						path: `steps[${si}].dueOffsetDays`,
-						message: "dueOffsetDays must be omitted when dueType is 'none' (or absent).",
-					});
-				}
-				if (hasAnchor) {
-					issues.push({
-						path: `steps[${si}].dueAnchorStepIndex`,
-						message: "dueAnchorStepIndex must be omitted when dueType is 'none'.",
-					});
-				}
-				if (hasSourceKey) {
-					issues.push({
-						path: `steps[${si}].dueSourceFieldKey`,
-						message: "dueSourceFieldKey must be omitted when dueType is 'none'.",
-					});
-				}
-				break;
+		// Required-but-missing.
+		for (const c of inv.requires) {
+			if (presence[c]) continue;
+			issues.push({
+				path: `steps[${si}].${COMPANION_PATH[c]}`,
+				message: `dueType '${dueType}' requires ${COMPANION_PATH[c]}.`,
+			});
+		}
+		// Forbidden-but-present.
+		for (const c of inv.forbids) {
+			if (!presence[c]) continue;
+			issues.push({
+				path: `steps[${si}].${COMPANION_PATH[c]}`,
+				message: `${COMPANION_PATH[c]} must be omitted when dueType is '${dueType}'.`,
+			});
+		}
+
+		// Type-specific extra checks (out-of-range, self-anchor, position
+		// ordering, source-must-be-date).
+		if (dueType === "offset_from_step" && presence.anchor) {
+			const idx = s.dueAnchorStepIndex as number;
+			if (idx >= wf.steps.length) {
+				issues.push({
+					path: `steps[${si}].dueAnchorStepIndex`,
+					message: `dueAnchorStepIndex ${idx} is out of range (workflow has ${wf.steps.length} step(s)).`,
+				});
+			} else if (idx === si) {
+				issues.push({
+					path: `steps[${si}].dueAnchorStepIndex`,
+					message:
+						"A step cannot anchor on itself -- pick another step or change the dueType.",
+				});
+			} else if (idx > si) {
+				// Position ordering: the anchor must complete BEFORE the dependent
+				// runs so the recompute hook can patch dueAt. If the anchor is
+				// later in step order, the dependent will most likely already
+				// have completed by the time the anchor fires -- the recompute
+				// query filters status='completed' rows out, so the dueAt stays
+				// null forever and any overdue check on the dependent reports
+				// nothing.
+				issues.push({
+					path: `steps[${si}].dueAnchorStepIndex`,
+					message: `dueAnchorStepIndex ${idx} refers to a step later than this one. The anchor must complete before this step runs; pick an earlier step.`,
+				});
 			}
-			case "offset_from_start": {
-				if (!hasOffset) {
+		}
+		if (dueType === "from_date_field" && presence.source) {
+			const srcKey = s.dueSourceFieldKey as string;
+			const src = fieldsByKey.get(srcKey);
+			if (!src) {
+				issues.push({
+					path: `steps[${si}].dueSourceFieldKey`,
+					message: `dueSourceFieldKey "${srcKey}" doesn't match any field in this workflow.`,
+				});
+			} else {
+				if (src.fieldType !== "date") {
 					issues.push({
-						path: `steps[${si}].dueOffsetDays`,
-						message: "dueType 'offset_from_start' requires dueOffsetDays.",
+						path: `steps[${si}].dueSourceFieldKey`,
+						message: `dueSourceFieldKey "${srcKey}" must reference a 'date' field, not '${src.fieldType}'.`,
 					});
 				}
-				if (hasAnchor) {
-					issues.push({
-						path: `steps[${si}].dueAnchorStepIndex`,
-						message:
-							"dueAnchorStepIndex must be omitted when dueType is 'offset_from_start'.",
-					});
-				}
-				if (hasSourceKey) {
+				// Position ordering for step-scoped sources. Kickoff fields
+				// (stepIndex === null) are always available at launch, so any
+				// dependent can source them. Step fields must live on an EARLIER
+				// step -- otherwise the same status='completed' filter on the
+				// recompute hook would leave the dependent's dueAt null forever.
+				if (src.stepIndex !== null && src.stepIndex >= si) {
 					issues.push({
 						path: `steps[${si}].dueSourceFieldKey`,
 						message:
-							"dueSourceFieldKey must be omitted when dueType is 'offset_from_start'.",
+							src.stepIndex === si
+								? `dueSourceFieldKey "${srcKey}" lives on the same step -- pick a date field from an earlier step or a kickoff field.`
+								: `dueSourceFieldKey "${srcKey}" lives on step ${src.stepIndex}, which runs AFTER this step. The source must come from an earlier step or a kickoff field.`,
 					});
 				}
-				break;
-			}
-			case "offset_from_step": {
-				if (!hasOffset) {
-					issues.push({
-						path: `steps[${si}].dueOffsetDays`,
-						message: "dueType 'offset_from_step' requires dueOffsetDays.",
-					});
-				}
-				if (!hasAnchor) {
-					issues.push({
-						path: `steps[${si}].dueAnchorStepIndex`,
-						message:
-							"dueType 'offset_from_step' requires dueAnchorStepIndex (index of the anchor step).",
-					});
-				} else {
-					const idx = s.dueAnchorStepIndex as number;
-					if (idx >= wf.steps.length) {
-						issues.push({
-							path: `steps[${si}].dueAnchorStepIndex`,
-							message: `dueAnchorStepIndex ${idx} is out of range (workflow has ${wf.steps.length} step(s)).`,
-						});
-					} else if (idx === si) {
-						issues.push({
-							path: `steps[${si}].dueAnchorStepIndex`,
-							message:
-								"A step cannot anchor on itself -- pick another step or change the dueType.",
-						});
-					}
-				}
-				if (hasSourceKey) {
-					issues.push({
-						path: `steps[${si}].dueSourceFieldKey`,
-						message:
-							"dueSourceFieldKey must be omitted when dueType is 'offset_from_step'.",
-					});
-				}
-				break;
-			}
-			case "from_date_field": {
-				if (!hasOffset) {
-					issues.push({
-						path: `steps[${si}].dueOffsetDays`,
-						message: "dueType 'from_date_field' requires dueOffsetDays.",
-					});
-				}
-				if (!hasSourceKey) {
-					issues.push({
-						path: `steps[${si}].dueSourceFieldKey`,
-						message:
-							"dueType 'from_date_field' requires dueSourceFieldKey (the key of a date field).",
-					});
-				} else {
-					const srcKey = s.dueSourceFieldKey as string;
-					const src = fieldsByKey.get(srcKey);
-					if (!src) {
-						issues.push({
-							path: `steps[${si}].dueSourceFieldKey`,
-							message: `dueSourceFieldKey "${srcKey}" doesn't match any field in this workflow.`,
-						});
-					} else if (src.fieldType !== "date") {
-						issues.push({
-							path: `steps[${si}].dueSourceFieldKey`,
-							message: `dueSourceFieldKey "${srcKey}" must reference a 'date' field, not '${src.fieldType}'.`,
-						});
-					}
-				}
-				if (hasAnchor) {
-					issues.push({
-						path: `steps[${si}].dueAnchorStepIndex`,
-						message:
-							"dueAnchorStepIndex must be omitted when dueType is 'from_date_field'.",
-					});
-				}
-				break;
 			}
 		}
 	}

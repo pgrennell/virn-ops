@@ -36,8 +36,10 @@ export type WorkflowEngineErrorCode =
 	// Phase 12.2 dueType ref validation
 	| "DUE_ANCHOR_INVALID"
 	| "DUE_ANCHOR_SELF_REFERENCE"
+	| "DUE_ANCHOR_NOT_EARLIER"
 	| "DUE_SOURCE_FIELD_INVALID"
 	| "DUE_SOURCE_FIELD_NOT_DATE"
+	| "DUE_SOURCE_STEP_NOT_EARLIER"
 	| "FIELD_TYPE_CHANGE_LOCKED";
 
 export class WorkflowEngineError extends Error {

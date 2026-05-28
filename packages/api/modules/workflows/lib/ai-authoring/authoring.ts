@@ -391,6 +391,7 @@ export async function authorWorkflow(
 					await assertStepDueRefs({
 						versionId,
 						stepId,
+						dependentPosition: si,
 						dueAnchorStepId,
 					});
 					await updateStep({ stepId, dueAnchorStepId }, tx);
@@ -403,6 +404,7 @@ export async function authorWorkflow(
 						await assertStepDueRefs({
 							versionId,
 							stepId,
+							dependentPosition: si,
 							dueSourceFieldId,
 						});
 						await updateStep({ stepId, dueSourceFieldId }, tx);

@@ -104,27 +104,11 @@ export async function deleteSectionOp(
  * legitimately set dueType BEFORE the companion ref. The launch path returns
  * null for an incomplete config (deferred), which the recompute hook patches
  * once the missing piece arrives. */
-/** Companion field key used by the auto-clear helper below. */
-type DueCompanion = "dueOffsetDays" | "dueAnchorStepId" | "dueSourceFieldId";
-
-/** Which companion fields a given dueType USES. Anything not in this set must be
- * null/cleared on the row -- the auto-clear helper enforces that on every write
- * that includes dueType in the patch. Source of truth shared by createStep +
- * updateStepOp; mirrors the per-dueType invariants in the AI authoring schema
- * validator (ai-authoring/schema.ts:assertAuthoredWorkflowReferences). */
-const DUE_COMPANIONS_USED: Record<
-	"none" | "offset_from_start" | "offset_from_step" | "from_date_field",
-	ReadonlySet<DueCompanion>
-> = {
-	none: new Set<DueCompanion>(),
-	offset_from_start: new Set<DueCompanion>(["dueOffsetDays"]),
-	offset_from_step: new Set<DueCompanion>(["dueOffsetDays", "dueAnchorStepId"]),
-	from_date_field: new Set<DueCompanion>(["dueOffsetDays", "dueSourceFieldId"]),
-};
+import { dueTypeUsesCompanion } from "./due-types";
 
 /** Patch shape that may carry dueType + companions. Used by both createStep and
- * updateStepOp; the helper returns a normalized patch where companions not used
- * by the (incoming or implicit) dueType are explicitly cleared to null. */
+ * updateStepOp; normalizeDuePatch returns a normalized patch where companions
+ * not used by the (incoming) dueType are explicitly cleared to null. */
 type PatchWithDueRule = {
 	dueType?: "none" | "offset_from_start" | "offset_from_step" | "from_date_field";
 	dueOffsetDays?: number | null;
@@ -137,14 +121,14 @@ type PatchWithDueRule = {
  * without explicitly nulling old refs" footgun: a direct API call posting
  * `{ stepId, dueType: 'none' }` on a step with a previously-set dueAnchorStepId
  * would otherwise leave the stale FK alive, blocking deletion of the previously-
- * anchored step. */
+ * anchored step. Reads from the shared DUE_TYPE_INVARIANTS table so adding a
+ * new dueType only requires editing due-types.ts. */
 function normalizeDuePatch<T extends PatchWithDueRule>(patch: T): T {
 	if (patch.dueType === undefined) return patch;
-	const used = DUE_COMPANIONS_USED[patch.dueType];
 	const out = { ...patch };
-	if (!used.has("dueOffsetDays")) out.dueOffsetDays = null;
-	if (!used.has("dueAnchorStepId")) out.dueAnchorStepId = null;
-	if (!used.has("dueSourceFieldId")) out.dueSourceFieldId = null;
+	if (!dueTypeUsesCompanion(patch.dueType, "offset")) out.dueOffsetDays = null;
+	if (!dueTypeUsesCompanion(patch.dueType, "anchor")) out.dueAnchorStepId = null;
+	if (!dueTypeUsesCompanion(patch.dueType, "source")) out.dueSourceFieldId = null;
 	return out;
 }
 
@@ -156,6 +140,12 @@ function normalizeDuePatch<T extends PatchWithDueRule>(patch: T): T {
 export async function assertStepDueRefs(args: {
 	versionId: string;
 	stepId: string | null;
+	/** Position of the step being patched. Required for the offset_from_step +
+	 * from_date_field position-ordering checks (anchor / source-step must run
+	 * before the dependent). Omit only when the dependent's position isn't
+	 * available -- the ordering checks are then skipped, defaulting to the
+	 * weaker "anchor in same version" guard. */
+	dependentPosition?: number;
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
 }): Promise<void> {
@@ -167,6 +157,7 @@ async function assertDueRefs(args: {
 	/** The step being patched. Used to reject self-anchor. For createStep this
 	 * is null (the step doesn't exist yet, so self-anchor isn't possible). */
 	stepId: string | null;
+	dependentPosition?: number;
 	dueAnchorStepId?: string | null;
 	dueSourceFieldId?: string | null;
 }): Promise<void> {
@@ -201,6 +192,26 @@ async function assertDueRefs(args: {
 				{ dueAnchorStepId: args.dueAnchorStepId, versionId: args.versionId },
 			);
 		}
+		// Position ordering: the anchor must complete BEFORE the dependent runs.
+		// Otherwise the recompute hook would patch the dependent's dueAt only
+		// after the dependent had already completed -- the status='completed'
+		// filter on findDueRecomputeTargets prevents the patch, leaving the
+		// dueAt null forever (silent breakage). Skip when the caller didn't
+		// provide a dependentPosition (createStep before auto-assignment).
+		if (
+			args.dependentPosition !== undefined &&
+			anchor.step.position >= args.dependentPosition
+		) {
+			throw new WorkflowEngineError(
+				"DUE_ANCHOR_NOT_EARLIER",
+				`The anchor step must come before this step in position order. Anchor is at position ${anchor.step.position}; this step is at position ${args.dependentPosition}.`,
+				{
+					dueAnchorStepId: args.dueAnchorStepId,
+					anchorPosition: anchor.step.position,
+					dependentPosition: args.dependentPosition,
+				},
+			);
+		}
 	}
 	if (checkSource) {
 		if (!src || src.version.id !== args.versionId) {
@@ -219,6 +230,32 @@ async function assertDueRefs(args: {
 					actualFieldType: src.field.fieldType,
 				},
 			);
+		}
+		// Position ordering for step-scoped sources. Kickoff fields (stepId
+		// null) are available at launch -- no ordering constraint. A step
+		// field's parent step must run before the dependent, same reason as
+		// the anchor case above (recompute fires when the source step
+		// completes; if the dependent has already completed by then, the
+		// dueAt stays null forever).
+		if (
+			src.field.stepId !== null &&
+			args.dependentPosition !== undefined
+		) {
+			const sourceStep = await getStepWithVersion(src.field.stepId);
+			if (
+				sourceStep &&
+				sourceStep.step.position >= args.dependentPosition
+			) {
+				throw new WorkflowEngineError(
+					"DUE_SOURCE_STEP_NOT_EARLIER",
+					`The source field's step must come before this step in position order. Source step is at position ${sourceStep.step.position}; this step is at position ${args.dependentPosition}.`,
+					{
+						dueSourceFieldId: args.dueSourceFieldId,
+						sourceStepPosition: sourceStep.step.position,
+						dependentPosition: args.dependentPosition,
+					},
+				);
+			}
 		}
 	}
 }
@@ -256,10 +293,14 @@ export async function createStep(
 	// Phase 12.2 -- validate dueAnchorStepId / dueSourceFieldId refs if present.
 	// stepId is null here: the step doesn't exist yet, so self-anchor isn't
 	// possible. (The new step's ID hasn't been minted; anchoring on yourself
-	// would require knowing the id ahead of time.)
+	// would require knowing the id ahead of time.) dependentPosition is the
+	// explicit input.position when supplied; for the common auto-append case
+	// (no position passed) we skip the position-ordering check -- the new
+	// step lands at the end, so any existing anchor is by construction earlier.
 	await assertDueRefs({
 		versionId: input.workflowVersionId,
 		stepId: null,
+		dependentPosition: input.position,
 		dueAnchorStepId: normalized.dueAnchorStepId,
 		dueSourceFieldId: normalized.dueSourceFieldId,
 	});
@@ -286,7 +327,7 @@ export async function updateStepOp(
 	ctx: StructureContext,
 	input: UpdateStepInput,
 ): Promise<void> {
-	const { version } = await assertStepEditable(ctx, input.stepId);
+	const { version, step } = await assertStepEditable(ctx, input.stepId);
 	// Auto-clear stale FK companions when dueType narrows. Direct API call
 	// posting { stepId, dueType: 'none' } on a row with a previously-set
 	// dueAnchorStepId would otherwise leave the stale FK alive, blocking
@@ -295,10 +336,15 @@ export async function updateStepOp(
 	const normalized = normalizeDuePatch(input);
 	// Phase 12.2 -- validate dueAnchorStepId / dueSourceFieldId refs if present
 	// in the patch. Skips when neither is being changed (the common case for
-	// title/description/required patches).
+	// title/description/required patches). dependentPosition uses the row's
+	// current position; a same-call position change is still evaluated against
+	// the OLD position (the position update lands on the row at the same time
+	// as the dueAnchor update -- re-validating against a future position is a
+	// chicken-and-egg problem).
 	await assertDueRefs({
 		versionId: version.id,
 		stepId: input.stepId,
+		dependentPosition: step.position,
 		dueAnchorStepId: normalized.dueAnchorStepId,
 		dueSourceFieldId: normalized.dueSourceFieldId,
 	});

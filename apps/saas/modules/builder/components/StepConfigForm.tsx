@@ -92,14 +92,32 @@ export function StepConfigForm(props: StepConfigFormProps) {
 	const stepTypeOptions = getStepTypeOptions(gates);
 	const dueOptions = getDueTypeOptions();
 	const stepDeps = dependencies.filter((d) => d.stepId === step.id);
+	// All steps EXCEPT this one. Used by the stop-task dependency picker where
+	// position-ordering doesn't apply (a dependency just says "wait until X
+	// completes before this can start"; any other step is fair game).
 	const otherSteps = allSteps.filter((s) => s.id !== step.id);
-	// Date fields eligible to source a from_date_field due rule. Both kickoff
-	// (stepId === null) and step-scoped fields qualify. A field whose step IS
-	// this step is excluded -- self-reference would be circular (the step's
-	// deadline depending on a field collected during itself).
-	const dateFieldOptions = allFields.filter(
-		(f) => f.fieldType === "date" && f.stepId !== step.id,
+	// Step picker for offset_from_step: only steps EARLIER in position qualify.
+	// The recompute hook fires when the anchor completes -- if the anchor is
+	// later in step order, this step would most likely have completed first,
+	// and the recompute filter on status='completed' would leave dueAt null
+	// forever. Hide unsupported options at the source rather than rely on the
+	// server to refuse with DUE_ANCHOR_NOT_EARLIER.
+	const earlierSteps = allSteps.filter(
+		(s) => s.id !== step.id && s.position < step.position,
 	);
+	// Date fields eligible to source a from_date_field due rule. Kickoff fields
+	// (stepId === null) always qualify since they're available at launch. Step
+	// fields qualify only when their parent step is EARLIER than this step
+	// (same position-ordering reason as the anchor picker above). Self-step
+	// fields are inherently excluded by both rules.
+	const stepPositionById = new Map(allSteps.map((s) => [s.id, s.position] as const));
+	const dateFieldOptions = allFields.filter((f) => {
+		if (f.fieldType !== "date") return false;
+		if (f.stepId === null) return true; // kickoff: always available
+		const parentPos = stepPositionById.get(f.stepId);
+		if (parentPos === undefined) return false;
+		return parentPos < step.position;
+	});
 
 	return (
 		<div className="flex flex-col gap-5 px-5 py-4">
@@ -247,17 +265,19 @@ export function StepConfigForm(props: StepConfigFormProps) {
 					</div>
 				)}
 
-				{/* Anchor step picker for offset_from_step. Pulls from all OTHER steps in
-				 * the version (self-anchor is rejected by the run engine + validator). An
-				 * empty otherSteps list disables the picker with an inline hint. */}
+				{/* Anchor step picker for offset_from_step. Only EARLIER steps qualify
+				 * -- a later-step anchor would fire its recompute after this step had
+				 * already completed, leaving dueAt null forever (server-side
+				 * DUE_ANCHOR_NOT_EARLIER catches it too; this just keeps the affordance
+				 * honest). */}
 				{step.dueType === "offset_from_step" && (
 					<div className="mt-2">
 						<label className="text-[11px] text-foreground/60 mb-1 block">
 							Anchor on which step's completion?
 						</label>
-						{otherSteps.length === 0 ? (
+						{earlierSteps.length === 0 ? (
 							<p className="text-xs text-foreground/50 italic">
-								Add another step to use it as an anchor.
+								Add a step before this one to use it as an anchor.
 							</p>
 						) : (
 							<Select
@@ -275,7 +295,7 @@ export function StepConfigForm(props: StepConfigFormProps) {
 									<SelectValue placeholder="Pick an anchor step…" />
 								</SelectTrigger>
 								<SelectContent>
-									{otherSteps.map((s) => (
+									{earlierSteps.map((s) => (
 										<SelectItem key={s.id} value={s.id}>
 											{s.title}
 										</SelectItem>

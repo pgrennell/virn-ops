@@ -317,6 +317,57 @@ describe("assertAuthoredWorkflowReferences -- cross-field invariants", () => {
 		expect(assertAuthoredWorkflowReferences(wf as never)).toEqual([]);
 	});
 
+	// ---- Phase 12.2 follow-up: position ordering (#5 from code review) ----
+
+	it("offset_from_step rejects anchoring on a LATER step (recompute would never fire)", () => {
+		const wf = twoStepWorkflow();
+		wf.steps[0].dueType = "offset_from_step";
+		wf.steps[0].dueOffsetDays = 2;
+		wf.steps[0].dueAnchorStepIndex = 1; // step 0 anchoring on step 1 (later)
+		const issues = assertAuthoredWorkflowReferences(wf as never);
+		expect(issues.length).toBe(1);
+		expect(issues[0].path).toBe("steps[0].dueAnchorStepIndex");
+		expect(issues[0].message).toMatch(/later than this one/);
+	});
+
+	it("from_date_field rejects sourcing from a LATER step's field", () => {
+		const wf = twoStepWorkflow();
+		wf.steps[1].fields = [
+			{ key: "lease_start", label: "Lease start", fieldType: "date" },
+		];
+		wf.steps[0].dueType = "from_date_field";
+		wf.steps[0].dueOffsetDays = 3;
+		wf.steps[0].dueSourceFieldKey = "lease_start";
+		const issues = assertAuthoredWorkflowReferences(wf as never);
+		expect(issues.length).toBe(1);
+		expect(issues[0].path).toBe("steps[0].dueSourceFieldKey");
+		expect(issues[0].message).toMatch(/runs AFTER this step/);
+	});
+
+	it("from_date_field rejects sourcing from a field on the SAME step", () => {
+		const wf = twoStepWorkflow();
+		wf.steps[0].fields = [
+			{ key: "lease_start", label: "Lease start", fieldType: "date" },
+		];
+		wf.steps[0].dueType = "from_date_field";
+		wf.steps[0].dueOffsetDays = 3;
+		wf.steps[0].dueSourceFieldKey = "lease_start";
+		const issues = assertAuthoredWorkflowReferences(wf as never);
+		expect(issues.length).toBe(1);
+		expect(issues[0].message).toMatch(/lives on the same step/);
+	});
+
+	it("from_date_field allows kickoff date sources regardless of dependent step position", () => {
+		const wf = twoStepWorkflow();
+		wf.kickoffFields = [
+			{ key: "guest_arrival", label: "Guest arrival", fieldType: "date" },
+		];
+		wf.steps[0].dueType = "from_date_field";
+		wf.steps[0].dueOffsetDays = -1;
+		wf.steps[0].dueSourceFieldKey = "guest_arrival";
+		expect(assertAuthoredWorkflowReferences(wf as never)).toEqual([]);
+	});
+
 	it("none + spurious dueAnchorStepIndex / dueSourceFieldKey are flagged", () => {
 		const wf = twoStepWorkflow();
 		wf.steps[0].dueType = "none";

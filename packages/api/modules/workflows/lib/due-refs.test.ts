@@ -291,6 +291,126 @@ describe("createStep -- dueType ref validation at insert time", () => {
 	});
 });
 
+describe("updateStepOp -- position ordering (anchor + source-step must be earlier)", () => {
+	it("rejects anchor at the SAME position as the dependent (DUE_ANCHOR_NOT_EARLIER)", async () => {
+		vi.mocked(getStepWithVersion).mockResolvedValue({
+			step: { id: "st_anchor", position: 3 },
+			version: { id: "ver_1" },
+		} as never);
+		// assertStepEditable's mock returns step with no position; override the mock
+		// once for this test so dependentPosition flows in as 3.
+		const guards = await import("./guards");
+		vi.mocked(guards.assertStepEditable).mockResolvedValueOnce({
+			step: { id: "st_1", workflowVersionId: "ver_1", position: 3 },
+			version: { id: "ver_1", status: "draft" },
+			workflow: { id: "wf_1", organizationId: "org_1" },
+		} as never);
+
+		const err = await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "offset_from_step",
+			dueAnchorStepId: "st_anchor",
+			dueOffsetDays: 2,
+		}).catch((e) => e);
+		expect(err.code).toBe("DUE_ANCHOR_NOT_EARLIER");
+		expect(updateStep).not.toHaveBeenCalled();
+	});
+
+	it("rejects anchor at a LATER position", async () => {
+		vi.mocked(getStepWithVersion).mockResolvedValue({
+			step: { id: "st_anchor", position: 5 },
+			version: { id: "ver_1" },
+		} as never);
+		const guards = await import("./guards");
+		vi.mocked(guards.assertStepEditable).mockResolvedValueOnce({
+			step: { id: "st_1", workflowVersionId: "ver_1", position: 2 },
+			version: { id: "ver_1", status: "draft" },
+			workflow: { id: "wf_1", organizationId: "org_1" },
+		} as never);
+
+		const err = await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "offset_from_step",
+			dueAnchorStepId: "st_anchor",
+			dueOffsetDays: 2,
+		}).catch((e) => e);
+		expect(err.code).toBe("DUE_ANCHOR_NOT_EARLIER");
+	});
+
+	it("accepts anchor at an EARLIER position", async () => {
+		vi.mocked(getStepWithVersion).mockResolvedValue({
+			step: { id: "st_anchor", position: 1 },
+			version: { id: "ver_1" },
+		} as never);
+		const guards = await import("./guards");
+		vi.mocked(guards.assertStepEditable).mockResolvedValueOnce({
+			step: { id: "st_1", workflowVersionId: "ver_1", position: 5 },
+			version: { id: "ver_1", status: "draft" },
+			workflow: { id: "wf_1", organizationId: "org_1" },
+		} as never);
+
+		await expect(
+			updateStepOp(CTX, {
+				stepId: "st_1",
+				dueType: "offset_from_step",
+				dueAnchorStepId: "st_anchor",
+				dueOffsetDays: 2,
+			}),
+		).resolves.toBeUndefined();
+	});
+
+	it("rejects source field whose step is at a LATER position (DUE_SOURCE_STEP_NOT_EARLIER)", async () => {
+		// Source field is on a step at position 8; dependent step is at position 3.
+		vi.mocked(getFieldWithVersion).mockResolvedValue({
+			field: { id: "fld_src", fieldType: "date", stepId: "st_later" },
+			version: { id: "ver_1" },
+		} as never);
+		// getStepWithVersion is called BOTH for source field's parent step and (if
+		// anchor were also in the patch) for the anchor. Use mockImplementation so
+		// the same mock returns the appropriate row for st_later.
+		vi.mocked(getStepWithVersion).mockResolvedValue({
+			step: { id: "st_later", position: 8 },
+			version: { id: "ver_1" },
+		} as never);
+		const guards = await import("./guards");
+		vi.mocked(guards.assertStepEditable).mockResolvedValueOnce({
+			step: { id: "st_1", workflowVersionId: "ver_1", position: 3 },
+			version: { id: "ver_1", status: "draft" },
+			workflow: { id: "wf_1", organizationId: "org_1" },
+		} as never);
+
+		const err = await updateStepOp(CTX, {
+			stepId: "st_1",
+			dueType: "from_date_field",
+			dueSourceFieldId: "fld_src",
+			dueOffsetDays: 1,
+		}).catch((e) => e);
+		expect(err.code).toBe("DUE_SOURCE_STEP_NOT_EARLIER");
+	});
+
+	it("accepts source field that's a KICKOFF field (no parent step)", async () => {
+		vi.mocked(getFieldWithVersion).mockResolvedValue({
+			field: { id: "fld_kickoff", fieldType: "date", stepId: null },
+			version: { id: "ver_1" },
+		} as never);
+		const guards = await import("./guards");
+		vi.mocked(guards.assertStepEditable).mockResolvedValueOnce({
+			step: { id: "st_1", workflowVersionId: "ver_1", position: 0 },
+			version: { id: "ver_1", status: "draft" },
+			workflow: { id: "wf_1", organizationId: "org_1" },
+		} as never);
+
+		await expect(
+			updateStepOp(CTX, {
+				stepId: "st_1",
+				dueType: "from_date_field",
+				dueSourceFieldId: "fld_kickoff",
+				dueOffsetDays: -1,
+			}),
+		).resolves.toBeUndefined();
+	});
+});
+
 describe("updateStepOp + createStep -- normalize stale companions on dueType narrow", () => {
 	it("dueType='none' patch nulls dueAnchorStepId + dueSourceFieldId + dueOffsetDays in the write", async () => {
 		await updateStepOp(CTX, {
