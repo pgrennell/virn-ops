@@ -585,7 +585,9 @@ function addDays(base: Date, days: number): Date {
  * normalized via `new Date(v)`), Date instances (in-memory), or null/undefined
  * (skipped). Invalid date strings are skipped (NOT thrown) -- the run is
  * already mid-flight at recompute time and we'd rather leave the deadline
- * deferred than blow up the completion call. */
+ * deferred than blow up the completion call. Skipped values are surfaced via
+ * console.warn so the upstream data issue is discoverable in logs (otherwise
+ * an unresolvable deadline silently never fires). */
 export function collectDateFieldValues(
 	pairs: ReadonlyArray<{ fieldId: string; fieldType: string; value: unknown }>,
 ): Map<string, Date> {
@@ -594,7 +596,13 @@ export function collectDateFieldValues(
 		if (p.fieldType !== "date") continue;
 		if (p.value === null || p.value === undefined) continue;
 		const d = p.value instanceof Date ? p.value : new Date(String(p.value));
-		if (Number.isNaN(d.getTime())) continue;
+		if (Number.isNaN(d.getTime())) {
+			// eslint-disable-next-line no-console
+			console.warn(
+				`[runs/launch-run] collectDateFieldValues: dropped unparseable date value for field ${p.fieldId} -- downstream from_date_field dependents will not resolve until the value is corrected. Raw value: ${JSON.stringify(p.value)}`,
+			);
+			continue;
+		}
 		out.set(p.fieldId, d);
 	}
 	return out;
