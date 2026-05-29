@@ -61,6 +61,7 @@ import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
 import { KickoffPanel } from "./KickoffPanel";
 import { KickoffRailEntry } from "./KickoffRailEntry";
 import { StepConfigForm } from "./StepConfigForm";
+import { TemplateVariablesSidebar } from "./TemplateVariablesSidebar";
 import { WorkflowConfigForm } from "./WorkflowConfigForm";
 
 interface BuilderViewProps {
@@ -1013,41 +1014,54 @@ function AuthorBody({
 
 	return (
 		<div className="flex flex-1 min-h-0">
-			<aside className="w-64 shrink-0 border-r border-border bg-muted/30 overflow-y-auto p-2">
-				{/* Kickoff entry above sections + steps per UX_SPEC §4.3.
-				    Composed at AuthorBody level (not inside RunStepList) so the
-				    rail-list primitive stays focused on sections + steps. */}
-				<KickoffRailEntry
-					active={kickoffActive}
-					kickoffFieldCount={kickoffFields.length}
-					onSelect={onSelectKickoff}
-				/>
-				<RunStepList
-					sections={sections}
-					definitionSteps={definitionSteps}
-					runSteps={runStepListItems}
-					activeRunStepId={activeStepId}
-					onSelectStep={onSelectStep}
-					mode="author"
-					authorCallbacks={{
-						onAddSection: () =>
-							createSection.mutate({
-								workflowVersionId: bundle.version.id,
-								title: "Untitled section",
-							}),
-						onAddStepInSection: (sectionId) =>
-							createStep.mutate({
-								workflowVersionId: bundle.version.id,
-								sectionId,
-								title: "Untitled step",
-							}),
-						onReorderSteps: (ordering) =>
-							reorderSteps.mutate({
-								workflowVersionId: bundle.version.id,
-								ordering,
-							}),
-					}}
-				/>
+			{/* Author shell left rail. Phase 9.5 R4 lift splits the rail into a
+			    scrollable top region (step list) and a pinned bottom region
+			    (Template Variables sidebar) per PRD_WORKFLOW_SOP_BUILDER §6.2.
+			    `flex flex-col` lets the top region take the remaining height while
+			    the sidebar caps at 40vh so the step list always has room. */}
+			<aside className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col">
+				<div className="flex-1 overflow-y-auto p-2 min-h-0">
+					{/* Kickoff entry above sections + steps per UX_SPEC §4.3.
+					    Composed at AuthorBody level (not inside RunStepList) so the
+					    rail-list primitive stays focused on sections + steps. */}
+					<KickoffRailEntry
+						active={kickoffActive}
+						kickoffFieldCount={kickoffFields.length}
+						onSelect={onSelectKickoff}
+					/>
+					<RunStepList
+						sections={sections}
+						definitionSteps={definitionSteps}
+						runSteps={runStepListItems}
+						activeRunStepId={activeStepId}
+						onSelectStep={onSelectStep}
+						mode="author"
+						authorCallbacks={{
+							onAddSection: () =>
+								createSection.mutate({
+									workflowVersionId: bundle.version.id,
+									title: "Untitled section",
+								}),
+							onAddStepInSection: (sectionId) =>
+								createStep.mutate({
+									workflowVersionId: bundle.version.id,
+									sectionId,
+									title: "Untitled step",
+								}),
+							onReorderSteps: (ordering) =>
+								reorderSteps.mutate({
+									workflowVersionId: bundle.version.id,
+									ordering,
+								}),
+						}}
+					/>
+				</div>
+				{/* Phase 9.5 R4 -- Template Variables sidebar. Click-to-copy in v1;
+				    drag-drop into Tiptap editors is a follow-on that wires the
+				    sidebar into specific editor instances. */}
+				<div className="border-t border-border p-2 max-h-[40vh] flex flex-col min-h-0">
+					<TemplateVariablesSidebar className="flex-1 min-h-0" />
+				</div>
 			</aside>
 			<div className="flex-1 min-w-0 overflow-y-auto">
 				{kickoffActive ? (
