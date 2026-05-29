@@ -279,3 +279,154 @@ export function composeUserMessage(input: {
 		input.sourceText,
 	].join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 12 regenerateStep (D-040, PRD §6.3 G10) -- per-step regeneration prompt
+// ---------------------------------------------------------------------------
+
+/** Compose the system blocks for a regenerate-step call. Reuses the cacheable
+ * builder contract + entity schema blocks from the workflow-level path so the
+ * cache prefix stays warm across both authoring AND regeneration calls for the
+ * same org -- they share the same closed vocabulary + the same entity schema. */
+export function composeRegenerateStepSystemPrompt(
+	input: ComposeSystemPromptInput,
+): SystemBlock[] {
+	const blocks = composeSystemPrompt(input);
+	// Add a small uncached final block scoping the model to a single-step output
+	// shape. Kept short + uncached because it's regenerate-specific (the
+	// authoring path doesn't need it) and we don't want it to invalidate the
+	// authoring path's cache prefix.
+	return [
+		...blocks,
+		{
+			type: "text",
+			text: regenerateStepContractAddendum(),
+		},
+	];
+}
+
+function regenerateStepContractAddendum(): string {
+	return [
+		"# Per-step regeneration mode",
+		"",
+		"In this call you are regenerating ONE specific step in an existing workflow, NOT",
+		"authoring a whole workflow. Return ONE JSON object matching the STEP SHAPE below",
+		"(a subset of the workflow's OUTPUT SHAPE -- just the step fields).",
+		"",
+		"## Step shape",
+		"",
+		"{",
+		'  "title": "<step title, required>",',
+		'  "description": "<step description, optional, can be null>",',
+		'  "type": "<task | approval | heading | one_off, required>",',
+		'  "isRequired": <true | false, optional, defaults true>,',
+		'  "isStopTask": <true | false, optional, defaults false>,',
+		'  "dueType": "<none | offset_from_start, optional>",',
+		'  "dueOffsetDays": <integer, required when dueType="offset_from_start">,',
+		'  "fields": [<AuthoredField, ...>] (optional; step-scoped fields)',
+		"}",
+		"",
+		"## Hard constraints for regenerate",
+		"",
+		"1. Emit ONLY the step shape above. Do NOT wrap it in a workflow shape.",
+		"2. dueType is restricted to 'none' or 'offset_from_start' in regenerate. Cross-step",
+		"   references ('offset_from_step', 'from_date_field') are NOT supported here -- if",
+		"   the original step had a cross-step due rule, the operator will re-establish it",
+		"   in the manual builder after regeneration.",
+		"3. NEVER reference fields that live on other steps. The fields you emit MUST live on",
+		"   THIS step only. Kickoff field references in description text are allowed and",
+		"   preserved verbatim (mustache `{{ field_key }}`); you cannot rename them.",
+		"4. Other steps in the workflow are listed below for context. AI-generated siblings",
+		"   are shown with title + position so you can phrase this step coherently. Manually-",
+		"   edited siblings are shown as opaque '[manually-edited step at position N]' --",
+		"   you cannot read their content, reference their fields, or modify them in any way.",
+		"5. Per the regenerate contract: this call writes ONLY the target step. The validator",
+		"   will reject any output that attempts to imply edits to siblings, sections, or",
+		"   the workflow header.",
+	].join("\n");
+}
+
+/** Compose the user-message body for a regenerate-step call. The body carries
+ * the target step's current content, the AI-generated sibling context (read-only
+ * for the model), the opaque placeholders for manually_edited siblings, and the
+ * operator's optional refinement instruction. */
+export function composeRegenerateStepUserMessage(input: {
+	currentStep: {
+		title: string;
+		description: string | null;
+		type: string;
+		isRequired: boolean;
+		isStopTask: boolean;
+		dueType: string;
+		dueOffsetDays: number | null;
+		position: number;
+		fields: ReadonlyArray<{ key: string; label: string; fieldType: string; isRequired: boolean }>;
+	};
+	aiGeneratedSiblings: ReadonlyArray<{ position: number; title: string; type: string }>;
+	manuallyEditedSiblingPositions: ReadonlyArray<number>;
+	kickoffFieldKeys: ReadonlyArray<string>;
+	refinementPrompt: string | null;
+}): string {
+	const lines: string[] = [];
+	lines.push(
+		"Regenerate the following step. Return ONE JSON object matching the STEP SHAPE in",
+		"the system contract addendum; no prose, no code fence.",
+		"",
+		"## Current step content",
+		"",
+		JSON.stringify(
+			{
+				title: input.currentStep.title,
+				description: input.currentStep.description,
+				type: input.currentStep.type,
+				isRequired: input.currentStep.isRequired,
+				isStopTask: input.currentStep.isStopTask,
+				dueType: input.currentStep.dueType,
+				dueOffsetDays: input.currentStep.dueOffsetDays,
+				positionInWorkflow: input.currentStep.position,
+				fields: input.currentStep.fields,
+			},
+			null,
+			2,
+		),
+		"",
+	);
+	if (input.aiGeneratedSiblings.length > 0) {
+		lines.push("## Other AI-generated steps (read-only context)", "");
+		for (const s of input.aiGeneratedSiblings) {
+			lines.push(`- position ${s.position}: ${s.title} (type=${s.type})`);
+		}
+		lines.push("");
+	}
+	if (input.manuallyEditedSiblingPositions.length > 0) {
+		lines.push("## Manually-edited steps (opaque -- do not reference)", "");
+		for (const p of input.manuallyEditedSiblingPositions) {
+			lines.push(`- [manually-edited step at position ${p}]`);
+		}
+		lines.push("");
+	}
+	if (input.kickoffFieldKeys.length > 0) {
+		lines.push(
+			"## Kickoff field keys (you may reference these in description merge variables)",
+			"",
+			input.kickoffFieldKeys.map((k) => `- ${k}`).join("\n"),
+			"",
+		);
+	}
+	if (input.refinementPrompt) {
+		lines.push(
+			"## Operator refinement instruction (steer your regeneration accordingly)",
+			"",
+			input.refinementPrompt,
+			"",
+		);
+	} else {
+		lines.push(
+			"## Operator refinement instruction",
+			"",
+			"(none -- regenerate the step in line with the current content's intent)",
+			"",
+		);
+	}
+	return lines.join("\n");
+}

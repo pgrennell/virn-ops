@@ -33,6 +33,9 @@ export type WorkflowEngineErrorCode =
 	// Phase 12.1 AI authoring (PRD §6.4, §8.4)
 	| "AI_AUTHORING_INVALID_OUTPUT"
 	| "AI_AUTHORING_MODEL_ERROR"
+	// Phase 12 regenerateStep (D-040, PRD §6.3 G10)
+	| "AI_REGENERATE_TARGET_NOT_FOUND"
+	| "AI_REGENERATE_VERSION_NOT_DRAFT"
 	// Phase 12.2 dueType ref validation
 	| "DUE_ANCHOR_INVALID"
 	| "DUE_ANCHOR_SELF_REFERENCE"

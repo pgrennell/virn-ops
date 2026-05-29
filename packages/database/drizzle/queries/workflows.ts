@@ -1118,6 +1118,22 @@ export async function deleteField(
 	await executor.delete(field).where(eq(field.id, input.fieldId));
 }
 
+/** Delete every field row scoped to a given step. Used by the regenerateStep
+ * lib (Phase 12, D-040) which deletes the target step's existing fields
+ * before re-inserting the regenerated set. Idempotent: returns silently if
+ * the step has no fields. Does NOT cascade into anything else -- callers
+ * inside the same transaction should also handle field references (e.g. a
+ * regenerated step's old fields can't be a `due_source_field_id` for a
+ * sibling because regenerate's contract emits only `none` or
+ * `offset_from_start`; sibling cross-field due rules pointing at THIS step's
+ * fields are rare but the caller is responsible). */
+export async function deleteFieldsForStep(
+	input: { stepId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor.delete(field).where(eq(field.stepId, input.stepId));
+}
+
 /** Fetch a field plus its version's status -- the rename/delete guards need the version
  * status to refuse on non-draft. One query, one round-trip. */
 export async function getFieldWithVersion(
