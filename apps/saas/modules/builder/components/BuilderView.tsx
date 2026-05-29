@@ -63,6 +63,7 @@ import { KickoffPanel } from "./KickoffPanel";
 import { KickoffRailEntry } from "./KickoffRailEntry";
 import { StepConfigForm } from "./StepConfigForm";
 import { TemplateVariablesSidebar } from "./TemplateVariablesSidebar";
+import { WorkflowAssistantPanel } from "./WorkflowAssistantPanel";
 import { WorkflowConfigForm } from "./WorkflowConfigForm";
 
 interface BuilderViewProps {
@@ -638,6 +639,21 @@ function BuilderInner({
 							setTypeChangeRefs(null);
 							setPanelFocus({ kind: "field", fieldId });
 						}}
+						onAssistantRegenerate={async (stepId, refinementPrompt) => {
+							// Reuses the same regenerateStep mutation the per-step
+							// Regenerate button uses (D-040 contract is enforced server-
+							// side regardless of invoke surface). mutateAsync resolves
+							// with the lib's RegenerateStepResult shape; we narrow to
+							// what the chat panel needs for its confirmation message.
+							const result = await regenerateStep.mutateAsync({
+								stepId,
+								refinementPrompt,
+							});
+							return {
+								previousTitle: result.previousTitle,
+								newTitle: result.newTitle,
+							};
+						}}
 					/>
 				</div>
 
@@ -997,6 +1013,7 @@ function AuthorBody({
 	reorderSteps,
 	onConfigureStep,
 	onConfigureField,
+	onAssistantRegenerate,
 }: {
 	bundle: VersionEditBundleResponse;
 	activeStepId: string | null;
@@ -1027,6 +1044,14 @@ function AuthorBody({
 	/** Opens the slide-in panel for per-field config (label, key with lock state,
 	 * type, options, required, help). */
 	onConfigureField: (fieldId: string) => void;
+	/** Phase 12 / PRD §6.3 R1 -- Workflow Assistant chat panel invoke. Awaits a
+	 * regenerateStep call and returns before/after titles so the panel can
+	 * render a confirmation. Errors bubble; the panel surfaces .message
+	 * verbatim. */
+	onAssistantRegenerate: (
+		stepId: string,
+		refinementPrompt: string | null,
+	) => Promise<{ previousTitle: string; newTitle: string }>;
 }) {
 	const sections: RunStepListSection[] = bundle.sections;
 	// Phase 12.2 -- pre-resolve anchor/source titles + keys so the RunStepList's
@@ -1214,6 +1239,21 @@ function AuthorBody({
 					<EmptyStepHint />
 				)}
 			</div>
+			{/* Phase 12 / PRD §6.3 R1 -- persistent Workflow Assistant right rail.
+			    Always-on during authoring; routes natural-language step references
+			    ("step 3", "the first step", "Inspect kitchen") to the same
+			    agents.regenerateStep procedure the per-step Regenerate button uses.
+			    The chat panel maintains its own in-memory message history; switching
+			    workflows remounts and resets. */}
+			<WorkflowAssistantPanel
+				steps={bundle.steps.map((s) => ({
+					id: s.id,
+					title: s.title,
+					position: s.position,
+				}))}
+				activeStepId={activeStepId}
+				onInvokeRegenerate={onAssistantRegenerate}
+			/>
 		</div>
 	);
 }
