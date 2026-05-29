@@ -116,6 +116,27 @@ Turborepo + pnpm monorepo. Workspace scope: `@virn/*`.
 - **Save UI Walkthrough screenshots inside the repo:** When performing E2E walks or UI reviews, copy all screenshots from temporary/brain directories into a dedicated subfolder under `docs/reviews/` (e.g., `docs/reviews/feature-name/`) so they are easily accessible by Claude Code or other workspace agents.
 - Ask before assuming on anything ambiguous.
 
+## Runtime efficiency
+
+Token cost on this repo adds up — agents.md alone is ~800 lines loaded every turn. Defaults
+that keep per-turn cost down without hurting correctness:
+
+- **Searches >2 queries → spawn an Explore/search subagent**, don't grep inline. Isolated
+  context keeps the main turn lean.
+- **Don't reread a file immediately after editing it.** Edit/Write errors on failure; the
+  harness tracks state. Re-reads are pure waste.
+- **Don't run `pnpm safety-check:auth` unless the diff touches auth-adjacent paths** (see
+  list under "Read before touching auth-adjacent code" above). It's a 5–10min Playwright
+  suite — skipping it on unrelated changes is the rule, not a shortcut.
+- **Don't re-run the full vitest workspace after a one-character fix.** Run the affected
+  file's tests first (`pnpm --filter <pkg> test <pattern>`), then escalate to
+  `pnpm safety-check` only if you need cross-package coverage.
+- **Cap broad searches with `head_limit` / `-l`** — dumping 500-line grep results into
+  context is rarely useful and always expensive.
+- **Don't restate plans the user can already see** in the conversation history.
+- **Batch mid-task edits to `agents.md` / `MEMORY.md` / `CLAUDE.md`** — these are loaded
+  every turn, so editing them mid-task invalidates the prompt cache. Land them at task end.
+
 ---
 
 # Part 2 — Framework conventions
