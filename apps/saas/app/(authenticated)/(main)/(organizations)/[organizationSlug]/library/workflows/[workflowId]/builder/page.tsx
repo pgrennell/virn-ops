@@ -15,6 +15,7 @@
 //     versions. The API's adminOrgProcedure refuses non-admin writes anyway, but
 //     the UI must not show controls that silently 403.
 
+import { AiReviewView } from "@builder/components/AiReviewView";
 import { BuilderView } from "@builder/components/BuilderView";
 import { assertCanSee } from "@shared/lib/gating-server";
 import { NAV_AREAS } from "@shared/lib/nav";
@@ -25,14 +26,34 @@ export const metadata = { title: "Workflow Builder" };
 
 export default async function WorkflowBuilderPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ organizationSlug: string; workflowId: string }>;
+	searchParams: Promise<{ aiAuthored?: string | string[] }>;
 }) {
 	const { organizationSlug, workflowId } = await params;
+	const { aiAuthored: aiAuthoredRaw } = await searchParams;
 	const { organization, snapshot } = await assertCanSee(
 		organizationSlug,
 		NAV_AREAS.library,
 	);
+
+	// Phase 12 follow-up (two-pane review) -- when the URL carries
+	// `?aiAuthored=1`, render the review surface instead of the normal
+	// Builder. Treat any non-empty value as truthy so future variants
+	// ("1" / "true" / "review") don't accidentally fall through.
+	const aiAuthoredValue = Array.isArray(aiAuthoredRaw) ? aiAuthoredRaw[0] : aiAuthoredRaw;
+	const isAiReview = typeof aiAuthoredValue === "string" && aiAuthoredValue.length > 0;
+	if (isAiReview) {
+		return (
+			<div className="h-full min-h-0">
+				<AiReviewView
+					workflowId={workflowId}
+					organizationSlug={organizationSlug}
+				/>
+			</div>
+		);
+	}
 
 	// Serialize the snapshot to the client: Sets don't cross the server/client
 	// boundary cleanly, so we hand over the enabled-capability array; BuilderView

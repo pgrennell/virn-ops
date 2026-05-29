@@ -110,7 +110,16 @@ export function CreateWorkflowMenu({ organizationSlug, onError }: CreateWorkflow
 				onOpenChange={setAiDialogOpen}
 				onAuthored={({ workflowId }) => {
 					setAiDialogOpen(false);
-					navigateToBuilder(workflowId);
+					// Phase 12 follow-up (two-pane review) -- newly authored
+					// drafts route into the review surface, not straight to
+					// /builder. The builder page reads ?aiAuthored=1 and renders
+					// AiReviewView (prompt on the left, read-only structure on
+					// the right with per-step Edit + Regenerate). Clicking
+					// "Finish review" drops the flag and lands in the normal
+					// Builder.
+					router.push(
+						`/${organizationSlug}/library/workflows/${workflowId}/builder?aiAuthored=1`,
+					);
 				}}
 			/>
 		</>
