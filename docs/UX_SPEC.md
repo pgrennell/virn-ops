@@ -176,6 +176,17 @@ Each spec: purpose · layout · key elements · states · gating · MVP cut · d
 - **MVP cut.** Sections + task/heading steps, fields with keys (core types), role assignment,
   due offset-from-start, draft/publish, kickoff form. Approval steps, conditions, stop-tasks,
   other due types, advanced field types, and preview-run come later.
+- **v1.5 shell evolution (D-039 + 2026-05-28 PRD review).** Per canonical
+  [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.2–6.3, v1.5 grows the
+  builder shell into a **tri-column layout** (left rail: workflows list, center:
+  outline + step editor as today, right rail: persistent Workflow Assistant chat
+  panel) with a **persistent top bar** above the canvas (Enabled toggle + Scope chip
+  + Review-state banner) and a **Template Variables sidebar** docked bottom-left.
+  The slide-in configuration panel is preserved (§4.5 spec below extends it with
+  the Edit Action modal pattern). The step-list outline remains canonical per
+  D-039 — no node-graph authoring canvas in v1.5; the Read view of a published
+  workflow gets a render-only constrained-viewport flowchart visualization (see
+  §4.6 below).
 
 ### 4.4 Members & Roles (admin)
 
@@ -197,6 +208,97 @@ Each spec: purpose · layout · key elements · states · gating · MVP cut · d
   org hasn't enabled don't appear for any role. The screen links back to Configuration.
 - **MVP cut.** Members table + invite + role assignment + the preset custom roles with the
   area-level editor. Groups, resource-level ACLs, and ABAC are reserved (ADR-004).
+
+### 4.5 Workflow Builder shell — v1.5 enhancements `[v1.5a + v1.5b]`
+
+Per the 2026-05-28 PRD review (D-039 / D-040 / D-041), the existing §4.3 builder
+gains the following component specs. Cross-references the canonical
+[PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.2–6.3; this section
+is the UX-side detail.
+
+**Tri-column shell.** Three regions on the Author view:
+
+- **Left rail (~240px).** Workflows list filtered by review state. Reuses the
+  existing Library list component; not a new render. Collapsible.
+- **Center (flexible).** Outline + step editor as today (§4.3) — sections / steps /
+  fields. The canvas region is unchanged in structure; the additions surround it.
+- **Right rail (~360px, collapsible).** Persistent **Workflow Assistant** chat panel.
+  Always-on during editing (distinct from the pre-generation two-pane review pane
+  that lives only at first AI-author time). Driven by `agents.regenerateStep` for
+  targeted refinement ("regenerate step 3 to use SMS instead of email") and a
+  documentation-aware thread for free-form questions. Each interaction writes an
+  `ai_authoring_prompt` row.
+
+**Top bar (above the outline).** Three controls, persistent across edit sessions:
+
+- **Enabled / Disabled toggle** — flips `workflow.is_active`. Disabled workflows
+  don't appear in `runs.launch` pickers and don't fire from automation triggers.
+- **Scope chip** ("Apply to: All Listings" by default) — click opens an entity-set
+  multi-select picker. Updates `workflow.entity_set_ids` optimistically.
+- **Review-state banner** — one component, four states (`draft` / `in_review` /
+  `published` / `archived`) with state-appropriate copy and CTAs. When
+  `organization.require_concierge_review = true`, the draft-state "Publish" CTA
+  flips to "Submit for Review."
+
+**Template Variables sidebar (bottom-left, ~240px tall).** Header "TEMPLATE
+VARIABLES" + search input + scrollable token list. Tokens derived from
+`EntityAdapter.schemaForAI()` for every registered entity type (v1.5: listing
+only). Drag-drop into any Tiptap-backed text field — drops as a merge-token chip
+rendered with the field-key-locked styling (D-017). **Static token definitions
+only**, never live PMS field values (per canonical PRD §5 non-goals + R4 lift).
+
+**Per-step Edit Action modal pattern.** Clicking a step row in the outline opens
+the existing Phase 5 Pass 3 slide-in panel, enhanced with:
+
+- **Title** input (existing).
+- **Description** Tiptap editor with a **`{}` Template** button anchored top-right
+  of the editor toolbar. Click opens a quick-pick of the same tokens surfaced in
+  the Template Variables sidebar. This is the canonical merge-token insertion
+  entry point.
+- **Step-type-specific config** form below the description (existing).
+- **Regenerate** button (inline within the panel) — fires `agents.regenerateStep`
+  with an optional refinement prompt. Honors D-040 partial-regeneration semantics:
+  refuses to write any sibling step where `provenance = 'manually_edited'`; surface
+  shows a preview before regen fires listing protected siblings.
+- **Delete / Cancel / Save Changes** in the footer.
+
+The slide-in pattern itself is preserved (already shipped); the additions are the
+`{}` button + inline Regenerate. v2.0's invented "settings gear on the canvas"
+affordance is rejected per the 2026-05-28 screenshot-honest review.
+
+**Per-step provenance chip.** Each step row in the outline shows a small "AI"
+chip when `step.provenance = 'ai_generated'`; no chip when `'manually_edited'`.
+Hover tooltip explains the partial-regeneration contract (D-040). Clicking a step
+to edit it does *not* flip the chip; *saving* the edit does.
+
+### 4.6 Read view — constrained-viewport flowchart render `[v1.5c]`
+
+Per canonical [PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.4
+(R5 lift + D-039), the Read view of a published workflow renders a read-only
+flowchart visualization alongside the SOP/KB markdown.
+
+- **Layout.** Two columns. Left: markdown rendering of sections / steps / field
+  labels / role hints / expected outputs. Right: React Flow embed, ~600px column,
+  vertical-stack layout with one branch column.
+- **Determinism.** Coordinates computed at render time from the step list. No
+  per-user layout state, no `workflow_canvas_layout` table — none exists in v1.5
+  (per D-041, layout state stays out of `workflow_version` regardless).
+- **Node visuals.** Mirror step types (task / approval / heading / one_off);
+  styled per type but **no TCA color palette** — that framing was rejected for
+  Workflows per D-039.
+- **Edges.** Simple sequential connectors. Branching shown via a
+  `precondition_note` chip on conditionally-relevant steps (Phase 6 deferral; no
+  branching execution model in v1.5).
+- **Interaction.** Read-only. Click a node → scroll the markdown column to the
+  matching step. Expand-to-fullscreen affordance for large workflows. No drag,
+  no creation, no inline edit.
+- **Execution timeline mode.** When the URL has a `runId` query param (linked
+  from an Active Run card per §5.6), the right column flips from the
+  generic flowchart to a per-run **execution timeline**: chronological list of
+  events (Trigger fired / Step N started / Step N completed by X at T / current
+  status) sourced from `activity_event`. Static text, no animated coloring; the
+  flowchart in the left column dims completed steps and bolds the current step
+  (the only visual differentiation v1.5 ships).
 
 ---
 
@@ -276,6 +378,39 @@ Phase 8 (S-07 wedge) lands; the screens below specify the human-mode baseline.
   writes on submit.
 - **MVP cut.** Single run, assigned steps, submit. Deferred until the guests capability + run engine.
 
+### 5.6 Active Run right-rail card `[v1.5c · per R6 lift + D-039]`
+
+**Purpose.** A compact right-rail card surfaced on entity-context pages (listing
+detail, vendor detail, work-order detail, etc.) showing in-flight runs against
+that entity — both Workflow runs and Playbook runs. The screenshot-honest answer
+to "what's happening with this listing right now" without coupling to an inbox
+thread (D-024 reaffirmed — virn-ops does not build a symmetric PM-side inbox
+surface).
+
+**Layout.** Right-rail card titled "Active Run" with one row per active run:
+
+- Status chip (Active / Escalated / Blocked).
+- Workflow or Playbook name + a small **type chip** distinguishing the two ("Workflow" / "Playbook").
+- Started-at timestamp (relative; "started 2h ago").
+- Current step or, for Playbooks, the current waiting state ("waiting 4 more days").
+
+**Interaction.**
+
+- Click a Workflow row → opens `/runs/[runId]` (Execute view, §5.3).
+- Click a Playbook row → opens `/playbooks/[id]?view=read&runId=<playbookRunId>`
+  (Read view with execute-view timeline overlay per §4.6).
+- Empty state: "No active runs for this entity."
+
+**Label-override aware.** If the org has overridden `playbooks → lifecycles`
+(per the configurable-label mechanism in PRD_PLAYBOOKS §6.6), the type chip on
+Playbook rows uses the overridden label. Card title stays "Active Run" (covers
+both).
+
+**Surface placement.** Lives in the right rail of: `/library/listings/[id]`,
+`/library/vendors/[id]`, future work-order detail pages. Card data backed by
+existing run / playbook_run queries scoped by entity participation; no new oRPC
+procedures.
+
 ### 5.5 Onboarding — mode picker
 
 **Wireframe:** [wireframes/10-onboarding-mode-picker.html](wireframes/10-onboarding-mode-picker.html)
@@ -325,6 +460,24 @@ Phase 8 (S-07 wedge) lands; the screens below specify the human-mode baseline.
   in-screen affordances; never reimplement per feature.
 - **Empty states.** Every list screen needs a first-run empty state that points at + Create or
   Import from template.
+- **Edit Action modal pattern (v1.5).** Slide-in side panel for per-step / per-field config
+  (existing Pass 3 pattern) enhanced with: `{}` Template insert button anchored top-right
+  of the Description editor toolbar; inline Regenerate button (when AI authoring is
+  enabled for the org) that honors D-040 partial-regeneration semantics; Title /
+  Description / type-specific config / Delete / Cancel / Save in the footer. Used in
+  both the Workflow Builder (§4.5) and Playbook Builder (per PRD_PLAYBOOKS §6.1).
+- **Contextual node-palette flyout (reserved for Phase 13+).** When/if authoring-grade
+  canvas ships behind a D-039 ADR override, the node palette is a contextual flyout
+  anchored to an edge "+" insertion control — never a permanent left rail. Pattern
+  captured here (per R3 lift) so the Phase 13+ implementation inherits the constraint.
+- **Provenance chip.** Small "AI" chip on AI-generated step cards (per D-040). No chip
+  on manually-edited steps. Hover tooltip explains the partial-regeneration contract.
+  Used in both Workflow and Playbook builders.
+- **Persistent Assistant chat panel.** Right-rail (~360px, collapsible) chat surface
+  on the Author view of both Workflows and Playbooks. Distinct from the pre-generation
+  two-pane review pane (which lives only at first AI-author time). Always-on during
+  editing; the primary surface for mid-edit refinement. Writes `ai_authoring_prompt`
+  rows uniformly with first-generation authoring.
 
 ---
 
@@ -354,6 +507,14 @@ Reader-KB (Phase 10), agent-step affordances in Run view (Phase 8 + 11), mode se
 launch (Phase 8), and prompt/doc/import paths on Create (Phases 12–13) are the
 UX-relevant additions this spec needs to absorb as those phases are built. Add screen
 specs incrementally rather than predicting them.
+
+**v1.5 lifts mapped to phases** (per the 2026-05-28 PRD review + D-039/040/041):
+
+- Phase 9.5 (v1.5a) — §4.5 top bar (Enabled toggle / Scope chip / Review-state banner) + Template Variables sidebar + provenance schema column; backend lights up the `step.provenance` enum and column.
+- Phase 12 (v1.5b) — §4.5 Edit Action modal pattern's `{}` Template button + inline Regenerate + provenance chip surface + right-rail Workflow Assistant chat panel; backend enforces D-040 partial-regeneration contract on `agents.regenerateStep`.
+- Phase 10 (v1.5c) — §4.6 constrained-viewport flowchart render in Read view + execution-timeline mode + §5.6 Active Run right-rail card on entity-context pages.
+- Phase 18a/b/c — Playbook builder mirrors §4.5 (per PRD_PLAYBOOKS §6.1) — same tri-column shell, top bar, Template Variables sidebar, Edit Action modal pattern, persistent chat panel. Read view renders as a timeline (per PRD_PLAYBOOKS §6.5 — asymmetry vs §4.6's Workflow flowchart render is intentional per D-039). Active Run card (§5.6) widens to surface both `run` and `playbook_run` rows.
+- Phase 13+ (v1.1+, gated by D-039 ADR override) — contextual node-palette flyout (§7 reserved pattern); only triggered by real customer demand for authoring-grade canvas.
 
 ---
 

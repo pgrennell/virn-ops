@@ -355,6 +355,72 @@ Four layers, top configures down, each rests on the one below.
   pointing at the per-run participant row that carries the (vendorId, vendorContactId)
   pair.
 
+### ADR-008 — Authoring data model is the step list; visual canvas is a render layer
+
+- **Context.** A 2026-05-28 review of an alternative PRD (Gemini-authored
+  `PRD_WORKFLOW_SOP_BUILDER_v2.md`) proposed a visual node-graph canvas with
+  Trigger/Condition/Action (TCA) node types, drag-drop authoring, and
+  `canvas_nodes` + `canvas_edges` JSONB columns persisted on `workflow_version`.
+  Five independent reviewers (schema / build-plan / decisions / architecture /
+  UX screenshots) flagged the proposal as a violation of multiple invariants
+  and a re-litigation of D-034's horizontal positioning. The Playbooks-alignment
+  reviewer noted that PRD_PLAYBOOKS already committed to step-list-only authoring
+  per §5 + §6.1, so accepting v2.0 would have created an inconsistent authoring
+  surface across the two related primitives.
+- **Decision.** Three commitments, recorded in DECISIONS.md as D-039 / D-040 / D-041:
+  - **D-039 — Step-list canonical (Workflows + Playbooks).** The authoring data
+    model is `workflow → workflow_version → section → step → field` (and the
+    Playbook equivalent `playbook → playbook_version → playbook_step`). Any
+    visual flowchart is a *render* layer derived from the step list — not a new
+    data shape. The v1.5c three-views Read view ships a **constrained-viewport
+    React Flow embed** (~600px column, vertical-stack, one branch, no per-user
+    layout state) as the render. Authoring-grade node-graph canvas is deferred
+    to a Phase 13+ build behind an explicit ADR override of this one.
+  - **D-040 — Per-step regenerate preserves manual edits via provenance tag.**
+    Schema adds `step_provenance pg_enum('ai_generated','manually_edited')` and
+    `step.provenance` + `playbook_step.provenance` columns, both NOT NULL DEFAULT
+    `'manually_edited'`. `agents.regenerateWorkflowStep` and
+    `agents.regeneratePlaybookStep` are strict partial-regeneration contracts:
+    they never read or write any sibling step where `provenance='manually_edited'`.
+    Manual edits through the builder UI flip a row's provenance back to
+    `'manually_edited'` irreversibly for v1.
+  - **D-041 — Canvas/layout state lives outside the snapshot.** Any future visual
+    canvas (Workflows OR Playbooks) stores layout state (coordinates, anchor
+    ports, viewport zoom) in a separate non-snapshot table keyed by the parent id
+    (`workflow_id` or `playbook_id`), **never** by `*_version`. Working schema:
+    `workflow_canvas_layout` / `playbook_canvas_layout` with `(parent_id, user_id
+    NULLABLE, layout_json, updated_at)`.
+- **Rationale.** Each commitment defends a different invariant:
+  - D-039 honors Invariant #3 (definition vs execution split) — adding a parallel
+    graph representation alongside the step list would mean two sources of truth.
+    It also honors the closed-action-vocabulary commitment from PRD §6.2 Layer 2;
+    forcing the AI authoring layer (Layer 3) to emit nodes-and-edges JSON adds
+    structured-output failure modes without changing what the AI actually authors.
+    The TCA framing maps cleanly onto Playbooks (orchestrator-executed) but is
+    wrong for Workflows (human-executed procedures where every step is an Action
+    from the operator's POV).
+  - D-040 prevents the highest-trust-loss failure mode for AI authoring (silent
+    overwrite of manual edits during regeneration). The provenance tag makes the
+    contract explicit, enforceable at the schema level, and queryable for
+    analytics.
+  - D-041 honors Invariant #4 (snapshot self-containment). Layout JSON on
+    `workflow_version` would either bloat the snapshot or force a new version row
+    on every cosmetic node drag. Layout is editor state, not authored content;
+    keeping it out of the snapshot keeps the audit log focused on authored
+    changes and decouples layout migrations from content migrations.
+- **Consequences.** Phase 9.5 (v1.5a) adds the `step_provenance` enum + `step.provenance`
+  column for Workflows. Phase 9.6 adds `playbook_step.provenance` (reuses the same
+  enum). Phase 10 (v1.5c) ships the constrained-viewport flowchart render in the
+  three-views Read view. Phase 12 (v1.5b) enforces D-040 in `agents.regenerateStep`.
+  Phase 18a/c mirrors the same patterns for Playbooks. The Phase 13+ canvas-authoring
+  build remains on the v1.1+ list and is not on the path unless a real customer
+  surfaces concrete demand. D-024 (virn-ops does not build a symmetric PM-side inbox
+  surface) is reaffirmed via D-039's block — v2.0 also proposed a thread-adjacent
+  inbox monitor, which was rejected outright (Besty owns the PM-side inbox per
+  D-024..D-033 cross-repo agreements). The Active Run right-rail card (§5.6 in
+  UX_SPEC.md) is the screenshot-honest in-context monitoring primitive that replaces
+  the rejected inbox monitor.
+
 ---
 
 ## 5. Domain-core decisions (carried forward)

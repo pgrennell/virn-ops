@@ -22,6 +22,91 @@
 
 ---
 
+## 0. Phase 13+ roadmap candidates (NOT on the build plan — preserved for future consideration)
+
+Three v2.0 ideas were correctly excluded from v1.5 but are architecturally interesting enough to flag for later. Each carries an explicit **trigger** (what would have to happen to open the build) and a **rework note** (what about v2.0's framing would have to change). Nothing here is on the current path — these are reference candidates only.
+
+A fourth foreclosed item (the thread-adjacent inbox monitor) is *not* in the candidate list — see §0.5 below for why.
+
+### 0.1 Visual flowchart canvas as authoring surface
+
+**v2.0 framing.** Node-graph canvas with Trigger / Condition / Action (TCA) palette, drag-drop, arrow connectors, `canvas_nodes` + `canvas_edges` JSONB persisted on `workflow_version`. Replaces step-list builder as primary authoring surface.
+
+**Why deferred.** D-039 ratified step-list as canonical. Five reviewers flagged the proposal as a violation of snapshot-immutability and a re-litigation of D-034. Realistic build was 5–6 weeks, not the claimed 2.
+
+**Trigger for re-evaluation.** Either of:
+- A concrete dogfood customer surfaces a workflow that's genuinely hard to author as a step list (deep branching, parallel paths), with a sketch of how a canvas would express it better.
+- A sales pattern across 3+ prospects rejects the step-list-only builder during demos.
+
+**Required rework before implementation.**
+1. **Layout state lives in a separate `workflow_canvas_layout` table keyed by `workflow_id`** (per D-041) — NOT JSONB on `workflow_version`. v2.0's proposal would have bloated snapshot count on every node drag.
+2. **TCA node types are wrong for Workflows specifically** — Workflows are human-executed procedures where every step is an Action from the operator's POV. Conditions live inline on the step (Phase 6 visibility / due rules); Triggers live on the launch dispatcher (Phase 6 + 18 + S-09). A future canvas renders existing step-list metaphors visually, not parallel node-type vocabulary. (TCA *does* map cleanly to Playbooks structurally — see §0.4 below.)
+3. **AI authoring keeps emitting the step-list schema** per D-039. If a canvas exists, it's a render over that data with bidirectional sync (drag node ⇒ moves step; add step ⇒ appears as node). Forcing AI to emit nodes-and-edges JSON adds structured-output failure modes without changing what AI authors.
+4. **Per-step provenance (D-040) must propagate across canvas operations** — adding / deleting / regenerating a node on the canvas must correctly update `step.provenance`. v2.0 had no story for this.
+
+**Realistic scope when triggered.** 5–6 weeks for serviceable v1: data model + bidirectional sync + drag-drop + arrow connectors + contextual node-palette flyout (R3 pattern, captured in [UX_SPEC.md](UX_SPEC.md) §7) + layout-table persistence + canvas-aware AI authoring. The v1.5c constrained-viewport read-only flowchart render (per D-039 + canonical PRD §6.4) is a down-payment — a future canvas extends that render to be interactive rather than replacing it.
+
+### 0.2 Conversation task auto-detection
+
+**v2.0 framing.** LLM auto-parses inbox threads, extracts task / checklist items, surfaces them as Tasks linked to PMS work orders.
+
+**Why deferred.** Stacks several deferred dependencies: inbound-comms triggers (S-09 / v1.1+), entity-linked task extraction (no surface today), vendor PMS integration sync (Phase 17+), real-time stream-processing infra. Also: the inbox surface lives in Besty's product, not virn-ops's (per D-024 — see §0.5).
+
+**Trigger for re-evaluation.** Three conditions together:
+- S-09 (inbound-comms triggers) ships in v1.1+.
+- A concrete cross-product use case emerges where virn-ops receives a parsed-message payload from Besty's Unified Inbox via a new webhook event in the D-025 catalog.
+- Vendor PMS integration sync (Phase 17+) is far enough along that "linked work order" has a real destination.
+
+**Required rework before implementation.**
+1. **Inbox parsing happens in Besty, not virn-ops.** Per D-024, virn-ops does not own conversation surfaces. LLM extraction is PM-side; virn-ops receives a structured "extracted task intent" event via a new (TBD) D-025 catalog addition — requires mutual cross-repo agreement.
+2. **Output maps to `runs.launch`, not a free-standing Task.** virn-ops has no Task primitive; the equivalent is a launched run with kickoff payload per D-029.
+3. **Confidence / human-review gate required.** Extracted intent surfaces in a PM-side operator review queue; operator confirms before any `runs.launch` fires. Auto-launch unattended is not the trust model.
+
+**Realistic scope when triggered.** PM-side: 2–3 weeks (extraction pipeline + review queue UI). Cross-repo: 1 week (new webhook event + Ops handler). Ops-side: minimal — existing `runs.launch` handles the kickoff.
+
+### 0.3 Live PMS / CRM field hydration in Template Variables sidebar
+
+**v2.0 framing.** Sidebar tokens render live values from active listing integrations — `{{ listing.grill_code }}` displays the actual code for the listing in context.
+
+**Why deferred.** No vendor integration sync in v1.5. The `listing` table created in v1.5a (Phase 9.5) is minimal — not a live mirror of Hospitable / Guesty / Buildium fields. Building live hydration requires building upstream sync first.
+
+**Trigger for re-evaluation.** Vendor integration sync ships (Phase 17+ scope, not currently numbered). At that point, the Template Variables sidebar can opportunistically render live values for tokens that have a backing field.
+
+**Required rework before implementation.**
+1. **Static token list (R4 lift, shipped in v1.5a) stays — live hydration is additive.** Tokens with backing values render with the value visible; tokens without stay as chips. No new UI primitive — enrichment of the existing sidebar.
+2. **Editor context matters.** Live values only make sense in the dry-render preview surface (canonical PRD §6.2) where the operator is previewing against a specific listing. The Author view edits workflows generically across all listings in scope — live values would be misleading there.
+3. **Field-key lock (D-017) still applies.** Live values are read-only over the lock; if an upstream key gets renamed, the locked-chip mechanism kicks in unchanged.
+
+**Realistic scope when triggered.** ~1 week of pure UI work to extend the sidebar + dry-render preview integration, *after* vendor sync ships.
+
+### 0.4 TCA framing for Playbooks (note only, no action)
+
+The Playbooks-alignment reviewer flagged that v2.0's Trigger / Condition / Action vocabulary maps cleanly onto Playbooks structurally (`playbook_lifecycle_event` ≈ Trigger; `branch_on_data_set` ≈ Condition; `launch_workflow` / `send_notification` / `write_to_data_set` ≈ Action). [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) already implements this structurally without using the TCA labels — the engine is right; only the surface vocabulary differs.
+
+**Status.** No action needed. The current Playbook step type names (`wait_for_duration`, `launch_workflow`, etc.) are more operator-friendly than "Action." If a future Playbook UI evolution wants to group steps visually by Trigger/Condition/Action category, the schema already supports it — no rework. This note exists so a future reader doesn't accidentally apply D-039's "TCA is wrong" verdict (which was about Workflows) to Playbooks too.
+
+### 0.5 Permanently foreclosed — thread-adjacent inbox monitor (NOT on the roadmap)
+
+**v2.0 framing (v2.0 §6.3.2).** An "Active Inbox view" docked to guest/tenant messaging threads, with real-time colored flowchart overlay, automated reply composer, PMS deep links, and per-thread Workflows / Tasks / Journeys / Autopilot / Upsells / Locks / Check-in / Calendar rails.
+
+**Why permanently foreclosed.** This is Besty's entire core product surface (UX-screenshot reviewer confirmed via the Case 1 storylane captures). Per D-024 (cross-repo agreement, 2026-05-27), virn-ops does not build a symmetric PM-side inbox surface — Besty owns that territory in the cross-product partnership. Building it in virn-ops would:
+
+1. **Violate D-024.** The cross-repo agreement partitions the inbox surface to Besty. Reopening it would require re-negotiating with the PM session, which has no path that doesn't break the cross-product partnership.
+2. **Duplicate Besty's product.** The cross-vertical positioning that justifies virn-ops's existence (D-021) depends on *not* being a PM-side inbox.
+3. **Re-introduce conversation surface as a virn-ops dependency.** virn-ops is mutually-standalone with Besty (D-024) and operates without an inbox. Adding one back as a v1.x build would couple us to a surface we explicitly designed away from.
+
+**Active Run right-rail card (R6 lift, shipped in v1.5c per canonical §6.4 + [UX_SPEC.md](UX_SPEC.md) §5.6) is the screenshot-honest, D-024-respecting answer to the in-context monitoring intent v2.0 was reaching for.** Card surfaces in-flight `run` + `playbook_run` rows on entity-context pages (listing / vendor / work-order detail) without coupling to a conversation thread.
+
+**Future PRDs proposing inbox-thread coupling must override D-024 with an ADR.** Not on the path. If a third party (not Besty) integrates with virn-ops and needs a comparable surface, the right answer is for them to build the inbox in their product and consume virn-ops's run events via the existing webhook surface — not for virn-ops to grow an inbox surface.
+
+---
+
+## Original v2.0 body (preserved as deliberation record below this line)
+
+The body that follows (§1 onward) is the original Gemini-authored v2.0 PRD as submitted. It contains claims that have been superseded by the canonical PRD + D-039/040/041 — read it as a record of what was proposed, not as live spec. For the in-force shape, see the canonical PRD and the §0 roadmap above.
+
+---
+
 ## 1. Background and architectural frame
 
 The Builder Pass 3 work shipped in Phase 5 gives operators a powerful authoring canvas with draft/publish, dry-render preview, and field-key locking ([docs/UX_SPEC.md](UX_SPEC.md) §5, [docs/DECISIONS.md](DECISIONS.md) D-017–D-020). The underlying schema in [packages/database/drizzle/schema/workflows.ts](../packages/database/drizzle/schema/workflows.ts) is strong: versioned, snapshot-immutable, audit-only governance, mode-aware participants.

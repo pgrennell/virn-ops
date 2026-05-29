@@ -1044,27 +1044,47 @@ property-ops pack's reference automations (Phase 17) and for S-07 mode (c) fully
 automated runs.
 
 **Phase 18a — Playbooks authoring** (see [PRD_PLAYBOOKS.md](PRD_PLAYBOOKS.md) §11).
-Playbook CRUD + builder UI (vertical step list) + dry-render preview +
-library tab + reader-KB integration via the v1.5c three-views unification (the
-Playbook detail page becomes a view-switcher on `?view={author|read}`, same
-pattern as Workflows; `/sop` indexes both). Read-only `playbookRuns.list/get`.
-No execution.
+Playbook CRUD + tri-column builder shell (left rail: Playbooks list, center:
+vertical step list, right rail: persistent Playbook Assistant chat panel) + top
+bar (Enabled/Disabled toggle / Scope chip / Review-state banner per PRD_PLAYBOOKS
+§6.1) + Template Variables sidebar (R4 — static tokens from
+`EntityAdapter.schemaForAI()`) + per-step Edit Action modal pattern (C5 — `{}`
+Template insert + inline Regenerate) + dry-render preview rendering the projected
+timeline against a fake trigger payload + library tab + reader-KB integration via
+the v1.5c three-views unification (the Playbook detail page becomes a view-switcher
+on `?view={author|read}`, same pattern as Workflows; `/sop` indexes both). Read
+view renders as a **chronological timeline** (not a flowchart — render asymmetry
+vs Workflows is intentional per D-039). Read-only `playbookRuns.list/get`. No
+execution.
 
 **Phase 18b — Playbooks execution.** Inngest dispatcher + orchestrator functions
 emit + subscribe to `run.completed` / `run.state_changed` / `listing.entity_set_added`
-/ `vendor.upserted` lifecycle events. `playbookRuns.launchManual` lights up. The
-orchestrator uses Inngest's `step.sleep` / `step.waitForEvent` for the
-`wait_for_duration` / `wait_for_event` step types — synchronous orchestration
-isn't an option once waits exist (rationale for the 18a/18b split). Cancellation
-flow (`playbookRuns.cancel`). Audit + activity attribution per D-027 (synthetic
-per-org system-agent; `crossProductOrigin` propagated from trigger).
+/ `vendor.upserted` lifecycle events. **Dispatcher filter includes
+`playbook.is_active = true`** (per PRD_PLAYBOOKS §6.4) — disabled Playbooks are
+skipped at dispatch time. `playbookRuns.launchManual` lights up (manual launch
+ignores `is_active` — operator-initiated, intentional override). The orchestrator
+uses Inngest's `step.sleep` / `step.waitForEvent` for the `wait_for_duration` /
+`wait_for_event` step types — synchronous orchestration isn't an option once waits
+exist (rationale for the 18a/18b split). Cancellation flow (`playbookRuns.cancel`).
+Audit + activity attribution per D-027 (synthetic per-org system-agent;
+`crossProductOrigin` propagated from trigger). **Active Run right-rail card
+widening** — the card shipped in Phase 10 grows to surface both `run` and
+`playbook_run` rows with a type chip (per canonical PRD §6.4 R6 lift +
+PRD_PLAYBOOKS §6.5). **Execute-view timeline** — `/playbooks/[id]?view=read&runId=<id>`
+flips the projected-timing timeline to actual fired-at + `next_wake_at` countdown.
 
 **Phase 18c — Playbooks AI authoring.** `agents.authorPlaybook` +
 `agents.regeneratePlaybookStep` on the agents oRPC router; system prompt grounded
 in tenant entity schema (same Layer-3 pattern as Workflow AI authoring per
-[PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.3). Reuses
-`ai_authoring_prompt` (no new provenance table) and prompt-caching strategy from
-v1.5b.
+[PRD_WORKFLOW_SOP_BUILDER.md](PRD_WORKFLOW_SOP_BUILDER.md) §6.3). **D-040
+partial-regeneration contract enforced** — `regeneratePlaybookStep` refuses to
+write any sibling step with `provenance='manually_edited'`; surface-side preview
+lists protected siblings before regen fires; "AI" chip lights up on
+`ai_generated` step cards. **Persistent Playbook Assistant chat panel** (R1)
+wired to `regeneratePlaybookStep` as the post-generation refinement surface
+(same component as Phase 12 / canonical PRD §6.3). Two-pane review right pane
+renders as the timeline (per §6.5), not as a flowchart. Reuses `ai_authoring_prompt`
+(no new provenance table) and prompt-caching strategy from v1.5b.
 
 ### Phase 19 — v1 polish + launch readiness
 
@@ -1083,6 +1103,22 @@ v1.5b.
 
 ## v1.1+ (post-launch — not in scope for the initial release)
 
+- **Authoring-grade visual flowchart canvas (gated by D-039 ADR override).**
+  Per D-039 (2026-05-28): step-list is canonical for both Workflows and Playbooks;
+  the v1.5c Read view ships a constrained-viewport flowchart **render** only.
+  Authoring-grade node-graph canvas (drag-drop nodes + arrow connectors +
+  click-create + Trigger/Condition/Action palette as authorable elements) is
+  deferred to a post-v1 phase **behind an explicit ADR override of D-039** — not
+  on the path unless real customer demand surfaces. When/if entry is triggered,
+  the build slots in as a numbered phase (likely Phase 13.x to avoid renumbering
+  existing Phase 13 Tango/Scribe import). Scope: node-graph data model, drag-drop
+  authoring UI, contextual node-palette flyout (R3 pattern from PRD §6.4),
+  layout persistence in a separate `workflow_canvas_layout` / `playbook_canvas_layout`
+  table keyed by parent id per D-041 (never on `*_version`). Realistic build:
+  5–6 weeks based on Gemini v2.0 PRD review (2026-05-28). Triggers: (a) a
+  concrete dogfood customer surfacing a workflow that's genuinely hard to author
+  as a step list, OR (b) a sales pattern where prospects reject the step-list-only
+  builder. Without either trigger, this stays on the v1.1+ list indefinitely.
 - **In-flow delivery (S-09)** — Slack first, Teams second (or together — see
   STRATEGY §8 open question).
 - **Pack marketplace, third-party publishing** — the platform-of-products moat
