@@ -36,6 +36,7 @@ vi.mock("@virn/database", () => ({
 	insertStep: vi.fn(),
 	insertWorkflowWithDraft: vi.fn(),
 	updateStep: vi.fn(),
+	updateWorkflow: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
 	// assertStepDueRefs (called from authoring's second pass) reads these via
 	// the same path structure.ts's assertDueRefs does -- stub to return rows
@@ -68,6 +69,7 @@ import {
 	insertStep,
 	insertWorkflowWithDraft,
 	updateStep,
+	updateWorkflow,
 	writeAuditAndActivity,
 } from "@virn/database";
 
@@ -142,6 +144,7 @@ beforeEach(() => {
 		id: `fld_${input.key}`,
 	}));
 	vi.mocked(updateStep).mockResolvedValue(undefined);
+	vi.mocked(updateWorkflow).mockResolvedValue(undefined);
 });
 
 describe("authorWorkflow -- happy path", () => {
@@ -451,5 +454,67 @@ describe("authorWorkflow -- two-pass dueAnchor / dueSourceField resolution", () 
 		await authorWorkflow({ ...CTX, callClaude }, { prompt: "go" });
 
 		expect(updateStep).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase 12 follow-up -- entitySetHints
+// ---------------------------------------------------------------------------
+
+describe("authorWorkflow -- entitySetHints", () => {
+	it("sets workflow entity_set_ids via updateWorkflow when hints supplied", async () => {
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{
+				prompt: "Mid-stay inspection",
+				entitySetHints: ["set_str_units", "set_penthouses"],
+			},
+		);
+
+		expect(updateWorkflow).toHaveBeenCalledTimes(1);
+		expect(updateWorkflow).toHaveBeenCalledWith({
+			organizationId: CTX.organizationId,
+			workflowId: "wf_1",
+			entitySetIds: ["set_str_units", "set_penthouses"],
+		});
+	});
+
+	it("does NOT call updateWorkflow when hints is undefined", async () => {
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "Mid-stay inspection" },
+		);
+
+		expect(updateWorkflow).not.toHaveBeenCalled();
+	});
+
+	it("does NOT call updateWorkflow when hints is empty array", async () => {
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "Mid-stay inspection", entitySetHints: [] },
+		);
+
+		// Empty hints semantically mean "applies to any entity" (the default).
+		// Calling updateWorkflow with an empty array would be a no-op but it
+		// would still trigger the audit/version-bump pathway updates eventually
+		// have; cheaper to skip entirely. Pinning the contract here.
+		expect(updateWorkflow).not.toHaveBeenCalled();
+	});
+
+	it("does NOT call updateWorkflow when hints is null", async () => {
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "Mid-stay inspection", entitySetHints: null },
+		);
+
+		expect(updateWorkflow).not.toHaveBeenCalled();
 	});
 });

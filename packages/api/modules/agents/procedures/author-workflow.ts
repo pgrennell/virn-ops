@@ -12,6 +12,8 @@
 // to the workflows/lib authoring module via workflowEngineCall so the typed
 // AI_AUTHORING_* error codes map cleanly to ORPCError shapes.
 
+import { ORPCError } from "@orpc/server";
+import { listEntitySetsForOrg } from "@virn/database";
 import { z } from "zod";
 
 import { adminOrgProcedure } from "../../../orpc/procedures";
@@ -36,13 +38,44 @@ export const authorWorkflowProc = adminOrgProcedure
 			// Optional doc-ingest source text. Phase 13 (Tango/Scribe import) wires the
 			// upstream path that produces this; for now it's accepted opportunistically.
 			sourceText: z.string().max(50000).nullish(),
+			// Phase 12 follow-up -- entity-set scope hints. When provided, the
+			// resulting workflow's entitySetIds is set to this list so the
+			// launcher's listForEntity filter narrows accordingly. Hard-capped at
+			// 25 to mirror the entity-set picker UX (an org with that many sets
+			// is well past the picker's usability ceiling).
+			entitySetHints: z.array(z.string().min(1)).max(25).nullish(),
 		}),
 	)
 	.handler(async ({ context, input }) => {
+		// Phase 12 follow-up -- if the caller supplied entitySetHints, validate
+		// every id belongs to the active org BEFORE spending model tokens. A
+		// forged id wouldn't break anything (entity_set_ids is a stored array,
+		// not a FK), but failing fast preserves the "the user sees an actionable
+		// error before paying for a generation" contract that the rest of the
+		// procedure observes (prompt min/max, model-error mapping, etc).
+		const hints = input.entitySetHints ?? null;
+		if (hints && hints.length > 0) {
+			const validSets = await listEntitySetsForOrg({
+				organizationId: context.organization.id,
+				entityType: "listing",
+			});
+			const validIds = new Set(validSets.map((s) => s.id));
+			const unknown = hints.filter((id) => !validIds.has(id));
+			if (unknown.length > 0) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: `Unknown entity set id${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`,
+					data: { code: "AI_AUTHORING_INVALID_ENTITY_SET_HINTS", unknownIds: unknown },
+				});
+			}
+		}
 		return await workflowEngineCall(() =>
 			authorWorkflow(
 				{ organizationId: context.organization.id, userId: context.user.id },
-				{ prompt: input.prompt, sourceText: input.sourceText ?? null },
+				{
+					prompt: input.prompt,
+					sourceText: input.sourceText ?? null,
+					entitySetHints: hints,
+				},
 			),
 		);
 	});

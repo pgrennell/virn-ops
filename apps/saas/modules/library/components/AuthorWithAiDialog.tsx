@@ -29,7 +29,8 @@ import {
 } from "@virn/ui/components/dialog";
 import { Spinner } from "@virn/ui/components/spinner";
 import { Textarea } from "@virn/ui/components/textarea";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@virn/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useState } from "react";
 
@@ -57,12 +58,21 @@ export function AuthorWithAiDialog({
 	const queryClient = useQueryClient();
 	const [prompt, setPrompt] = useState("");
 	const [sourceText, setSourceText] = useState("");
+	const [entitySetHints, setEntitySetHints] = useState<Set<string>>(new Set());
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [errorIssues, setErrorIssues] = useState<Array<{ path: string; message: string }>>(
 		[],
 	);
 
 	const authorMutation = useMutation(orpc.agents.authorWorkflow.mutationOptions());
+
+	// Phase 12 follow-up -- entity-set scope hint picker. Mirror the picker
+	// pattern from WorkflowConfigForm.tsx; v1.5 only registers 'listing'.
+	const setsQuery = useQuery({
+		...orpc.entitySets.list.queryOptions({ input: { entityType: "listing" } }),
+		// Don't pay for the round-trip until the dialog actually opens.
+		enabled: open,
+	});
 
 	const trimmedPrompt = prompt.trim();
 	const submitDisabled =
@@ -71,9 +81,19 @@ export function AuthorWithAiDialog({
 	const reset = () => {
 		setPrompt("");
 		setSourceText("");
+		setEntitySetHints(new Set());
 		setErrorMessage(null);
 		setErrorIssues([]);
 		authorMutation.reset();
+	};
+
+	const toggleHint = (id: string) => {
+		setEntitySetHints((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
 	};
 
 	const handleSubmit = (e: React.FormEvent) => {
@@ -87,6 +107,8 @@ export function AuthorWithAiDialog({
 			{
 				prompt: trimmedPrompt,
 				sourceText: sourceText.trim().length > 0 ? sourceText.trim() : null,
+				entitySetHints:
+					entitySetHints.size > 0 ? Array.from(entitySetHints) : null,
 			},
 			{
 				onSuccess: (result) => {
@@ -185,6 +207,33 @@ export function AuthorWithAiDialog({
 								</p>
 							</div>
 						</details>
+
+						<details className="text-sm">
+							<summary className="cursor-pointer font-medium text-foreground/70 hover:text-foreground select-none">
+								Scope to entity sets{" "}
+								<span className="text-foreground/50 font-normal">(optional)</span>
+								{entitySetHints.size > 0 && (
+									<span className="ml-1.5 text-[10px] uppercase tracking-wider font-semibold text-primary">
+										{entitySetHints.size} selected
+									</span>
+								)}
+							</summary>
+							<div className="mt-2">
+								<EntitySetHintPicker
+									sets={setsQuery.data ?? []}
+									selected={entitySetHints}
+									isLoading={setsQuery.isLoading}
+									isError={setsQuery.isError}
+									disabled={authorMutation.isPending}
+									onToggle={toggleHint}
+								/>
+								<p className="text-[11px] text-foreground/50 mt-2 leading-relaxed">
+									Picked sets become the new workflow's scope. Launchers will only
+									surface the workflow for entities in these sets. Leave empty for
+									&quot;applies to any entity.&quot;
+								</p>
+							</div>
+						</details>
 					</div>
 
 					{errorMessage && (
@@ -234,5 +283,83 @@ export function AuthorWithAiDialog({
 				</form>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12 follow-up -- entity-set hint multi-select.
+// ---------------------------------------------------------------------------
+
+interface EntitySetOption {
+	id: string;
+	name: string;
+	color: string | null;
+	description: string | null;
+}
+
+function EntitySetHintPicker({
+	sets,
+	selected,
+	isLoading,
+	isError,
+	disabled,
+	onToggle,
+}: {
+	sets: ReadonlyArray<EntitySetOption>;
+	selected: ReadonlySet<string>;
+	isLoading: boolean;
+	isError: boolean;
+	disabled: boolean;
+	onToggle: (id: string) => void;
+}) {
+	if (isLoading) {
+		return (
+			<div className="flex items-center gap-2 py-2 text-xs text-foreground/60">
+				<Spinner className="size-3.5" /> Loading entity sets…
+			</div>
+		);
+	}
+	if (isError) {
+		return (
+			<p className="text-xs text-destructive">
+				Couldn't load entity sets.
+			</p>
+		);
+	}
+	if (sets.length === 0) {
+		return (
+			<p className="text-xs text-foreground/60">
+				No entity sets exist yet. Create some under Library &rarr; Entity Sets
+				and they'll appear here.
+			</p>
+		);
+	}
+	return (
+		<div className="flex flex-wrap gap-1.5">
+			{sets.map((s) => {
+				const on = selected.has(s.id);
+				return (
+					<button
+						key={s.id}
+						type="button"
+						onClick={() => onToggle(s.id)}
+						disabled={disabled}
+						title={s.description ?? undefined}
+						className={cn(
+							"px-2.5 py-1 text-xs rounded border transition-colors disabled:opacity-50",
+							on
+								? "bg-primary text-primary-foreground border-primary"
+								: "border-border hover:border-foreground/40",
+						)}
+					>
+						<span
+							className="inline-block size-2 rounded-full mr-1.5 align-middle"
+							style={{ backgroundColor: s.color ?? "transparent" }}
+						/>
+						{s.name}
+					</button>
+				);
+			})}
+		</div>
 	);
 }

@@ -13,6 +13,7 @@ vi.mock("@virn/auth", () => ({
 
 vi.mock("@virn/database", () => ({
 	getOrganizationMembership: vi.fn(),
+	listEntitySetsForOrg: vi.fn(async () => []),
 }));
 
 // Stub the lib import to prevent the SDK module from being pulled into the test graph.
@@ -28,7 +29,7 @@ vi.mock("../../workflows/lib/ai-authoring/authoring", () => ({
 }));
 
 import { auth } from "@virn/auth";
-import { getOrganizationMembership } from "@virn/database";
+import { getOrganizationMembership, listEntitySetsForOrg } from "@virn/database";
 
 import { authorWorkflow } from "../../workflows/lib/ai-authoring/authoring";
 import { authorWorkflowProc } from "./author-workflow";
@@ -139,5 +140,65 @@ describe("agents.authorWorkflow -- input validation", () => {
 		const huge = "a".repeat(8001);
 		await expect(call(authorWorkflowProc, { prompt: huge }, ctx)).rejects.toThrow();
 		expect(authorWorkflow).not.toHaveBeenCalled();
+	});
+});
+
+describe("agents.authorWorkflow -- entitySetHints validation", () => {
+	beforeEach(() => {
+		vi.mocked(auth.api.getSession).mockResolvedValue(makeSession() as never);
+		vi.mocked(getOrganizationMembership).mockResolvedValue(makeMembership() as never);
+	});
+
+	it("forwards valid hints to the lib", async () => {
+		vi.mocked(listEntitySetsForOrg).mockResolvedValue([
+			// Cast through unknown -- the test only reads `id`; we don't need to
+			// reconstruct the full EntitySetRow shape here.
+			{ id: "set_str" } as unknown,
+			{ id: "set_pent" } as unknown,
+		] as never);
+
+		await call(
+			authorWorkflowProc,
+			{ prompt: "build me a workflow yes please", entitySetHints: ["set_str"] },
+			ctx,
+		);
+
+		expect(authorWorkflow).toHaveBeenCalledTimes(1);
+		const libInput = vi.mocked(authorWorkflow).mock.calls[0][1];
+		expect(libInput.entitySetHints).toEqual(["set_str"]);
+	});
+
+	it("rejects unknown ids with BAD_REQUEST before calling the lib", async () => {
+		vi.mocked(listEntitySetsForOrg).mockResolvedValue([
+			{ id: "set_str" } as unknown,
+		] as never);
+
+		await expect(
+			call(
+				authorWorkflowProc,
+				{
+					prompt: "build me a workflow yes please",
+					entitySetHints: ["set_str", "set_fake", "set_other_fake"],
+				},
+				ctx,
+			),
+		).rejects.toMatchObject({
+			code: "BAD_REQUEST",
+			data: {
+				code: "AI_AUTHORING_INVALID_ENTITY_SET_HINTS",
+				unknownIds: ["set_fake", "set_other_fake"],
+			},
+		});
+
+		expect(authorWorkflow).not.toHaveBeenCalled();
+	});
+
+	it("does not call listEntitySetsForOrg when hints is empty / absent", async () => {
+		await call(
+			authorWorkflowProc,
+			{ prompt: "build me a workflow yes please" },
+			ctx,
+		);
+		expect(listEntitySetsForOrg).not.toHaveBeenCalled();
 	});
 });

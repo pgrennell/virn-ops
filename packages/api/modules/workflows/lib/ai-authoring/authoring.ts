@@ -30,6 +30,7 @@ import {
 	insertStep,
 	insertWorkflowWithDraft,
 	updateStep,
+	updateWorkflow,
 	writeAuditAndActivity,
 } from "@virn/database";
 import { VIRN_AI_MODEL, getAnthropicClient } from "@virn/ai";
@@ -201,6 +202,14 @@ export interface AuthorWorkflowContext {
 export interface AuthorWorkflowInput {
 	prompt: string;
 	sourceText?: string | null;
+	/** Phase 12 follow-up -- entity-set scope hints. When provided, the resulting
+	 * workflow's `entitySetIds` is set to this list so the launcher's
+	 * listForEntity filter narrows accordingly. The procedure layer is
+	 * responsible for validating that each id exists in the caller's org
+	 * before passing it through; the lib trusts what it receives. Empty array
+	 * or undefined leaves the workflow scope at the default "applies-to-any-
+	 * entity" (entity_set_ids = '{}'). */
+	entitySetHints?: string[] | null;
 }
 
 export interface AuthorWorkflowResult {
@@ -420,6 +429,19 @@ export async function authorWorkflow(
 
 		return { workflowId, versionId, fieldCount };
 	});
+
+	// 7a. Phase 12 follow-up -- entity-set scope hints. The lib trusts the
+	// procedure layer to have validated each id belongs to the caller's org; a
+	// stray foreign id here would just no-op against the launcher filter
+	// (entity_set_ids is a stored text array, not a FK), but server-side
+	// validation upstream prevents that vector entirely.
+	if (input.entitySetHints && input.entitySetHints.length > 0) {
+		await updateWorkflow({
+			organizationId: ctx.organizationId,
+			workflowId: buildResult.workflowId,
+			entitySetIds: input.entitySetHints,
+		});
+	}
 
 	// 7. Audit + activity (best-effort; outside the workflow build transaction so a
 	// post-build audit failure can't roll back a fully-valid workflow).
