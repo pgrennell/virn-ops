@@ -33,9 +33,11 @@ import { Spinner } from "@virn/ui/components/spinner";
 import { cn } from "@virn/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, CheckCircle2, Eye, Pencil, Sparkles } from "lucide-react";
+import { useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
+import { AuthoringPromptDialog } from "./AuthoringPromptDialog";
 import { RunTimeline } from "./RunTimeline";
 import {
 	WorkflowFlowchart,
@@ -268,9 +270,7 @@ function ReadInner({
 								type={workflow.type}
 							/>
 							{workflow.aiAuthoring && (
-								<span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300">
-									<Sparkles className="size-3" /> AI-authored
-								</span>
+								<ReadViewAiChip promptId={workflow.aiAuthoring.promptId} />
 							)}
 							{hasRead && readAt && (
 								<span
@@ -506,6 +506,26 @@ function SectionBlock({
 				})}
 			</ol>
 		</section>
+	);
+}
+
+function ReadViewAiChip({ promptId }: { promptId: string }) {
+	// Phase 12 follow-up -- click opens the "View originating prompt" dialog.
+	// Pattern mirrors AiAuthoringChip in BuilderTopBar so the affordance is
+	// consistent between the Author and Read views.
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<button
+				type="button"
+				className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors"
+				title="Authored with AI. Click to view the originating prompt."
+				onClick={() => setOpen(true)}
+			>
+				<Sparkles className="size-3" /> AI-authored
+			</button>
+			<AuthoringPromptDialog open={open} onOpenChange={setOpen} promptId={promptId} />
+		</>
 	);
 }
 

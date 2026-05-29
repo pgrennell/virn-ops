@@ -889,8 +889,15 @@ interface BuilderShellProps {
 	onApproveReview?: () => void;
 	sendBackToDraftPending?: boolean;
 	onSendBackToDraft?: () => void;
-	/** Phase 12.1 -- AI authoring provenance; pass-through to BuilderTopBar. */
-	aiAuthoring?: { model: string; createdAt: string | Date } | null;
+	/** Phase 12.1 -- AI authoring provenance; pass-through to BuilderTopBar.
+	 * Phase 12 follow-up: promptId widens the type so the BuilderTopBar AI
+	 * chip can open the "View originating prompt" dialog. Optional so
+	 * pre-12-follow-up callers that pass only model/createdAt still typecheck. */
+	aiAuthoring?: {
+		model: string;
+		createdAt: string | Date;
+		promptId?: string;
+	} | null;
 	/** Phase 9.5 R2 -- Enabled/Disabled toggle + Scope chip pass-throughs. All
 	 * optional so view-mode / preview shells (which don't write) can omit them. */
 	isActive?: boolean;

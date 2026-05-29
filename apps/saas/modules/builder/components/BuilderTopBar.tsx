@@ -25,6 +25,9 @@ import {
 	Trash2,
 	UploadCloud,
 } from "lucide-react";
+import { useState } from "react";
+
+import { AuthoringPromptDialog } from "./AuthoringPromptDialog";
 
 interface BuilderTopBarProps {
 	workflowTitle: string;
@@ -71,8 +74,17 @@ interface BuilderTopBarProps {
 	/** Phase 12.1 -- AI authoring provenance. When present, renders a small chip
 	 * next to the version status indicating this workflow originated from
 	 * `agents.authorWorkflow`. The chip's title carries the model + date so a
-	 * hover reveals "claude-sonnet-4-6 · 2026-05-27" without crowding the header. */
-	aiAuthoring?: { model: string; createdAt: string | Date } | null;
+	 * hover reveals "claude-sonnet-4-6 · 2026-05-27" without crowding the header.
+	 *
+	 * Phase 12 follow-up: when `promptId` is supplied, the chip is clickable
+	 * and opens an AuthoringPromptDialog showing the originating prompt +
+	 * source text + entity schema snapshot. Backwards compatible -- callers
+	 * passing only model/createdAt fall back to the static-tooltip chip. */
+	aiAuthoring?: {
+		model: string;
+		createdAt: string | Date;
+		promptId?: string;
+	} | null;
 	/** Phase 9.5 R2 lift -- Enabled/Disabled toggle. Flips workflow.isActive.
 	 * Disabled workflows don't appear in launcher pickers and don't fire from
 	 * automation triggers (Phase 6 / 18). Operators stage workflows this way
@@ -315,8 +327,9 @@ function ScopeChip({
 function AiAuthoringChip({
 	aiAuthoring,
 }: {
-	aiAuthoring: { model: string; createdAt: string | Date };
+	aiAuthoring: { model: string; createdAt: string | Date; promptId?: string };
 }) {
+	const [dialogOpen, setDialogOpen] = useState(false);
 	const date =
 		aiAuthoring.createdAt instanceof Date
 			? aiAuthoring.createdAt
@@ -332,16 +345,40 @@ function AiAuthoringChip({
 	// header doesn't grow on long titles. Background is a soft violet -- distinct
 	// from the version-status palette (amber/emerald/muted) and the review-state
 	// indigo -- so the indicator is unambiguous at a glance.
-	const tooltip = formattedDate
+	const baseTooltip = formattedDate
 		? `Authored with AI -- ${aiAuthoring.model} on ${formattedDate}`
 		: `Authored with AI -- ${aiAuthoring.model}`;
+	const tooltip = aiAuthoring.promptId
+		? `${baseTooltip}. Click to view the originating prompt.`
+		: baseTooltip;
+
+	const className =
+		"inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300";
+
+	if (!aiAuthoring.promptId) {
+		return (
+			<span className={className} title={tooltip}>
+				<Sparkles className="size-3" /> AI-authored
+			</span>
+		);
+	}
+
 	return (
-		<span
-			className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300"
-			title={tooltip}
-		>
-			<Sparkles className="size-3" /> AI-authored
-		</span>
+		<>
+			<button
+				type="button"
+				className={`${className} hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors`}
+				title={tooltip}
+				onClick={() => setDialogOpen(true)}
+			>
+				<Sparkles className="size-3" /> AI-authored
+			</button>
+			<AuthoringPromptDialog
+				open={dialogOpen}
+				onOpenChange={setDialogOpen}
+				promptId={aiAuthoring.promptId}
+			/>
+		</>
 	);
 }
 

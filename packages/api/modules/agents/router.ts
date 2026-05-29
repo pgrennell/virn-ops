@@ -1,6 +1,7 @@
 import { authorWorkflowProc } from "./procedures/author-workflow";
 import { create } from "./procedures/create";
 import { get } from "./procedures/get";
+import { getAuthoringPromptProc } from "./procedures/get-authoring-prompt";
 import { list } from "./procedures/list";
 import { regenerateStepProc } from "./procedures/regenerate-step";
 import { rotateCredential } from "./procedures/rotate-credential";
@@ -16,4 +17,8 @@ export const agentsRouter = {
 	softDelete,
 	authorWorkflow: authorWorkflowProc,
 	regenerateStep: regenerateStepProc,
+	// Phase 12 follow-up (PRD §8.4) -- read-side surface for the
+	// ai_authoring_prompt provenance row. Powers the "View originating
+	// prompt" dialog on the Builder + Read view AI chips.
+	getAuthoringPrompt: getAuthoringPromptProc,
 };
