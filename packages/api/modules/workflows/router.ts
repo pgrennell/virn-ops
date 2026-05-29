@@ -30,6 +30,7 @@ import { editPublishedProc } from "./procedures/edit-published";
 import { getMyReadStatusProc } from "./procedures/get-my-read-status";
 import { getVersionBundleProc } from "./procedures/get-version-bundle";
 import { getWorkflowProc } from "./procedures/get-workflow";
+import { importFromMarkdownProc } from "./procedures/import-from-markdown";
 import { listForEntityProc } from "./procedures/list-for-entity";
 import { listForReviewProc } from "./procedures/list-for-review";
 import { listReadReceiptsProc } from "./procedures/list-read-receipts";
@@ -55,6 +56,8 @@ export const workflowsRouter = {
 	create: createWorkflowProc,
 	update: updateWorkflowProc,
 	archive: archiveWorkflowProc,
+	// Phase 13 slice B -- deterministic Tango/Scribe/numbered-markdown import.
+	importFromMarkdown: importFromMarkdownProc,
 
 	// Version operations
 	getVersionBundle: getVersionBundleProc,

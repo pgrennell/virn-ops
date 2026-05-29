@@ -51,6 +51,8 @@ const CODE_MAP: Record<
 	DUE_SOURCE_FIELD_NOT_DATE: "BAD_REQUEST",
 	DUE_SOURCE_STEP_NOT_EARLIER: "BAD_REQUEST",
 	FIELD_TYPE_CHANGE_LOCKED: "BAD_REQUEST",
+	// Phase 13 slice B markdown import
+	IMPORT_NO_RECOGNIZABLE_STRUCTURE: "BAD_REQUEST",
 };
 
 /** Wraps a lib helper call so any WorkflowEngineError becomes an ORPCError with a
