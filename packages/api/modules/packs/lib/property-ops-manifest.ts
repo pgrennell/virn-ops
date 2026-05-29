@@ -479,4 +479,314 @@ export const STR_TURNOVER_WORKFLOW: WorkflowSeed = {
 	],
 };
 
-export const PROPERTY_OPS_WORKFLOWS: readonly WorkflowSeed[] = [STR_TURNOVER_WORKFLOW];
+// ---------------------------------------------------------------------------
+// Workflow template: Property Inspection (Phase 17b)
+// ---------------------------------------------------------------------------
+//
+// One workflow covers four inspection occasions (move-in / move-out / periodic /
+// annual / between-guests for STR) via the `inspection_type` kickoff selector.
+// Property managers run the same systematic walk regardless of which occasion
+// triggered it; the type drives downstream paperwork (lease attachments,
+// owner reports) rather than the inspection itself. Mirrors the STR Turnover
+// shape -- ~16 steps across 5 sections, stop-task on the final report gate.
+
+export const PROPERTY_INSPECTION_WORKFLOW: WorkflowSeed = {
+	slug: "property-inspection",
+	title: "Property Inspection",
+	description:
+		"Systematic walk of a property covering exterior, grounds, interior rooms, and major systems. One workflow serves multiple occasions (move-in / move-out / periodic / annual / between-guests for STR) via the inspection_type kickoff selector. Final report gates on the photo set so the owner receives a complete record.",
+	type: "procedure",
+	kickoffFields: [
+		{
+			key: "property_name",
+			label: "Property name",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "property_address",
+			label: "Property address",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "unit_label",
+			label: "Unit / room label",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "inspection_type",
+			label: "Inspection occasion",
+			fieldType: "select",
+			isRequired: true,
+			config: {
+				options: [
+					{ value: "move_in", label: "Move-in (LTR)" },
+					{ value: "move_out", label: "Move-out (LTR)" },
+					{ value: "periodic", label: "Periodic (LTR)" },
+					{ value: "annual", label: "Annual (any tenure)" },
+					{ value: "between_guests", label: "Between guests (STR)" },
+				],
+			},
+		},
+		{
+			key: "tenant_display_name",
+			label: "Tenant / guest name",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "lease_id",
+			label: "Lease / booking reference",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "access_instructions",
+			label: "Access instructions",
+			fieldType: "textarea",
+			isRequired: false,
+		},
+	],
+	sections: [
+		{
+			manifestKey: "sec-prep",
+			title: "Pre-inspection prep",
+			steps: [
+				{
+					manifestKey: "step-schedule",
+					title: "Schedule inspection",
+					description:
+						"Confirm date + arrival window with the inspector. For LTR move-in/move-out: notify the tenant per state-required notice period. For STR between-guests: align with the turnover window so the inspection happens after cleaning, before next check-in.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-gather",
+					title: "Gather equipment + prior notes",
+					description:
+						"Equipment: flashlight, moisture meter, voltage tester, camera, signed checklist. Pull the prior inspection report from the file -- known issues to verify resolved, plus the baseline state of the property.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "prior_inspection_notes_pulled",
+							label: "Prior inspection report attached",
+							fieldType: "file",
+							isRequired: false,
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-exterior",
+			title: "Exterior + grounds",
+			steps: [
+				{
+					manifestKey: "step-exterior",
+					title: "Exterior walkaround",
+					description:
+						"Siding / paint / stucco condition. Roof visible from ground (no climbing). Gutters + downspouts. Foundation visible cracks. Window trim + sealant.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "exterior_issues",
+							label: "Exterior issues observed",
+							fieldType: "textarea",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-grounds",
+					title: "Grounds + driveway",
+					description:
+						"Landscaping condition. Driveway + walkway surface. Fencing + gates. Irrigation visible damage. Outdoor lighting fixtures.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-entry",
+					title: "Entry + common areas",
+					description:
+						"Entry doors + locks + weather seals. Common-area lighting. Mailbox + intercom + smart-lock operation.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-rooms",
+			title: "Interior — rooms",
+			steps: [
+				{
+					manifestKey: "step-kitchen",
+					title: "Kitchen",
+					description:
+						"All appliances power on + function (fridge cold, oven heats, dishwasher cycles, microwave runs, garbage disposal). Cabinets + drawers + counters condition. Sink + faucet + spray for leaks. Floor + grout condition.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-bathrooms",
+					title: "Bathrooms",
+					description:
+						"Toilets flush + refill cleanly. Showers / tubs for leaks + caulking. Sinks + faucets. Exhaust fan operation. Floor + grout. Cabinets.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-bedrooms",
+					title: "Bedrooms",
+					description:
+						"Windows open + close + lock. Closet doors + interiors. Wall + ceiling condition. Floor + carpet condition. Outlets + switches verified working.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-living-areas",
+					title: "Living areas",
+					description:
+						"Windows + window treatments. Walls + ceilings (water stains, cracks). Floor + baseboards. Fireplace + chimney damper (if present).",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-storage",
+					title: "Garage / utility / storage",
+					description:
+						"Water heater (age + visible corrosion + drain pan). Breaker box (labels + tripped breakers). Garage door operation + auto-reverse safety. Crawl space / attic access if reachable.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-systems",
+			title: "Interior — systems",
+			steps: [
+				{
+					manifestKey: "step-hvac",
+					title: "HVAC operation",
+					description:
+						"Thermostat responds. Heat cycle reaches setpoint. Cool cycle reaches setpoint. Filter date + cleanliness. Visible duct condition. Any unusual noise / smell.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "hvac_filter_replaced_date",
+							label: "HVAC filter replaced (date)",
+							fieldType: "date",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-plumbing",
+					title: "Plumbing pressure + leaks",
+					description:
+						"Run every faucet hot + cold for 30 seconds. Note any pressure issues. Check under-sink for moisture. Test main shutoff is accessible.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-electrical",
+					title: "Electrical + life safety",
+					description:
+						"Every outlet + switch tested. GFCI buttons trip + reset (kitchen, bathrooms, exterior). Smoke detectors test-button beeps. CO detectors test-button beeps. Fire extinguisher charge gauge (if present).",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "smoke_detectors_passed",
+							label: "Smoke detectors all tested OK",
+							fieldType: "select",
+							isRequired: true,
+							config: {
+								options: [
+									{ value: "pass", label: "All passed" },
+									{ value: "fail", label: "One or more failed" },
+									{ value: "na", label: "Not present (flagged for install)" },
+								],
+							},
+						},
+						{
+							key: "co_detectors_passed",
+							label: "CO detectors all tested OK",
+							fieldType: "select",
+							isRequired: true,
+							config: {
+								options: [
+									{ value: "pass", label: "All passed" },
+									{ value: "fail", label: "One or more failed" },
+									{ value: "na", label: "Not present (flagged for install)" },
+								],
+							},
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-wrap",
+			title: "Wrap up",
+			steps: [
+				{
+					manifestKey: "step-photos",
+					title: "Final photo set",
+					description:
+						"One representative photo per room, plus close-ups of any noted issue. Used as the baseline for the next inspection + supports any damage disputes.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "inspection_photos",
+							label: "Inspection photos",
+							fieldType: "file",
+							isRequired: true,
+							config: { multiple: true },
+						},
+					],
+				},
+				{
+					manifestKey: "step-report",
+					title: "File inspection report + notify owner",
+					description:
+						"Compile observations + photos into the inspection report. Sign + date. File under the property + (for LTR) attach to the lease record. Email the owner a summary with the report attached.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isStopTask: true,
+					dependsOn: ["step-photos"],
+					fields: [
+						{
+							key: "report_filed_at",
+							label: "Report filed (date/time)",
+							fieldType: "date",
+							isRequired: true,
+						},
+						{
+							key: "owner_notified",
+							label: "Owner notified",
+							fieldType: "select",
+							isRequired: true,
+							config: {
+								options: [
+									{ value: "yes", label: "Yes — owner emailed" },
+									{ value: "self_managed", label: "N/A — self-managed" },
+								],
+							},
+						},
+					],
+				},
+			],
+		},
+	],
+};
+
+export const PROPERTY_OPS_WORKFLOWS: readonly WorkflowSeed[] = [
+	STR_TURNOVER_WORKFLOW,
+	PROPERTY_INSPECTION_WORKFLOW,
+];
