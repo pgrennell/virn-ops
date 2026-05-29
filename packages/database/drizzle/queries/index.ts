@@ -5,6 +5,7 @@ export * from "./config";
 export * from "./cross-product-events";
 export * from "./datasets";
 export * from "./entitysets";
+export * from "./governance";
 export * from "./listings";
 export * from "./notifications";
 export * from "./organizations";
