@@ -46,6 +46,10 @@ export const config = {
 			"run-guest",
 			"settings",
 			"signup",
+			// Phase 10 / v1.5c -- the readers' index at /sop (PRD §6.4) browses
+			// published workflows across the org. Reserved alongside the
+			// route landing so an org can't claim "sop" as its slug.
+			"sop",
 			"verify",
 		],
 	},

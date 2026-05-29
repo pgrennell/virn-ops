@@ -286,6 +286,7 @@ describe("auth config snapshot (docs/AUTH_CONTRACT.md §6)", () => {
 			        "run-guest",
 			        "settings",
 			        "signup",
+			        "sop",
 			        "verify",
 			      ],
 			      "hideOrganization": false,

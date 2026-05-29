@@ -35,6 +35,13 @@ const INTENTIONALLY_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	// invariant check stays green until the route directory lands under
 	// apps/saas/app/.
 	"playbooks",
+	// Phase 10 / v1.5c (PRD §6.4) -- the readers' index ships as the
+	// org-scoped /[organizationSlug]/sop route, not a top-level /sop.
+	// The slug stays reserved so future evolution (e.g. a cross-org public
+	// SOP browser) can claim the top-level path without an org-slug
+	// collision risk. Move out of INTENTIONALLY_RESERVED_SLUGS if/when
+	// apps/saas/app/sop/ lands.
+	"sop",
 ]);
 
 /**
