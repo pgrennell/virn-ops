@@ -36,6 +36,11 @@ import { BookOpen, CheckCircle2, Eye, Pencil, Sparkles } from "lucide-react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
+import {
+	WorkflowFlowchart,
+	type FlowchartSection,
+	type FlowchartStep,
+} from "./WorkflowFlowchart";
 import { WorkflowViewToggle } from "./WorkflowViewToggle";
 
 interface ReadViewProps {
@@ -215,8 +220,34 @@ function ReadInner({
 	const sortedSections = [...bundle.sections].sort((a, b) => a.position - b.position);
 	const ungroupedSteps = stepsBySectionId.get(null) ?? [];
 
+	// R5 lift -- flowchart input shapes mirror the bundle but narrowed to
+	// what `WorkflowFlowchart` consumes. We thread step.type explicitly so the
+	// flowchart can tint nodes; the markdown SectionBlock doesn't need it.
+	const flowSections: FlowchartSection[] = sortedSections.map((s) => ({
+		id: s.id,
+		title: s.title,
+		position: s.position,
+	}));
+	const flowSteps: FlowchartStep[] = bundle.steps.map((s) => ({
+		id: s.id,
+		title: s.title,
+		type: s.type as FlowchartStep["type"],
+		position: s.position,
+		sectionId: s.sectionId,
+		isRequired: s.isRequired,
+		isStopTask: s.isStopTask,
+	}));
+
+	const handleSelectStep = (stepId: string) => {
+		// Node click in the flowchart -> scroll the matching SOP step into view.
+		// We use document.getElementById rather than refs so the flowchart and
+		// the markdown column don't need to share refs across the article tree.
+		const el = document.getElementById(`step-${stepId}`);
+		if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+	};
+
 	return (
-		<article className="mx-auto max-w-3xl px-4 py-6 flex flex-col gap-6">
+		<article className="mx-auto max-w-6xl px-4 py-6 flex flex-col gap-6">
 			<header className="flex flex-col gap-3">
 				<div className="flex items-start justify-between gap-3">
 					<div className="min-w-0 flex-1">
@@ -288,26 +319,40 @@ function ReadInner({
 				</section>
 			)}
 
-			<div className="flex flex-col gap-8">
-				{sortedSections.map((section) => {
-					const steps = stepsBySectionId.get(section.id) ?? [];
-					if (steps.length === 0) return null;
-					return (
+			<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
+				<div className="flex flex-col gap-8 min-w-0">
+					{sortedSections.map((section) => {
+						const steps = stepsBySectionId.get(section.id) ?? [];
+						if (steps.length === 0) return null;
+						return (
+							<SectionBlock
+								key={section.id}
+								title={section.title}
+								steps={steps}
+								fieldsByStepId={fieldsByStepId}
+							/>
+						);
+					})}
+					{ungroupedSteps.length > 0 && (
 						<SectionBlock
-							key={section.id}
-							title={section.title}
-							steps={steps}
+							title={sortedSections.length > 0 ? "Other steps" : "Steps"}
+							steps={ungroupedSteps}
 							fieldsByStepId={fieldsByStepId}
 						/>
-					);
-				})}
-				{ungroupedSteps.length > 0 && (
-					<SectionBlock
-						title={sortedSections.length > 0 ? "Other steps" : "Steps"}
-						steps={ungroupedSteps}
-						fieldsByStepId={fieldsByStepId}
+					)}
+				</div>
+				{/* R5 lift -- read-only flowchart. Sticky on wide viewports so the
+				    full SOP can scroll past while the flowchart stays as a map.
+				    Stacks below on narrow viewports (lg breakpoint < 1024px) to
+				    keep the markdown legible on phone widths. Height is fixed so
+				    React Flow's auto-fitView has a viewport to fit into. */}
+				<aside className="lg:sticky lg:top-4 lg:self-start h-128">
+					<WorkflowFlowchart
+						sections={flowSections}
+						steps={flowSteps}
+						onSelectStep={handleSelectStep}
 					/>
-				)}
+				</aside>
 			</div>
 
 			<footer className="border-t border-border pt-4 flex items-center justify-between">
@@ -380,7 +425,11 @@ function SectionBlock({
 				{steps.map((step, idx) => {
 					const stepFields = fieldsByStepId.get(step.id) ?? [];
 					return (
-						<li key={step.id} className="flex gap-3">
+						<li
+							key={step.id}
+							id={`step-${step.id}`}
+							className="flex gap-3 scroll-mt-4"
+						>
 							<span className="shrink-0 size-7 rounded-full bg-muted text-foreground/70 text-xs font-medium flex items-center justify-center mt-0.5">
 								{idx + 1}
 							</span>
