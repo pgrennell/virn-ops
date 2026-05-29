@@ -40,6 +40,11 @@ export interface WorkflowListRow {
 	 * The row painter renders a Sparkles chip; optional on this type so existing
 	 * test fixtures don't need to be updated en masse (resolver doesn't read it). */
 	aiAuthored?: boolean;
+	/** Phase 12 follow-up -- the provenance row id when aiAuthored. Drives the
+	 * row's AI chip click target (AuthoringPromptDialog). Optional for the same
+	 * test-fixture reason; the row painter falls back to a static chip when
+	 * missing. */
+	aiAuthoringPromptId?: string | null;
 }
 
 export interface RowPermissions {

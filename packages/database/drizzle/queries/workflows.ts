@@ -93,6 +93,10 @@ export interface WorkflowListRow {
 	 * Derived in the query rather than fetched on the row read so a stale
 	 * provenance row (FK is `on delete set null`) flips this to false. */
 	aiAuthored: boolean;
+	/** Phase 12 follow-up -- the provenance row id, when aiAuthored. The
+	 * Library row's AI chip uses this to open the "View originating prompt"
+	 * dialog (agents.getAuthoringPrompt). Null when aiAuthored is false. */
+	aiAuthoringPromptId: string | null;
 }
 
 /** List workflows in an org (Library consumer + Builder index). Excludes soft-deleted rows
@@ -175,6 +179,7 @@ export async function listWorkflowsForOrg(input: {
 			latestPublishedVersionId: pub?.id ?? null,
 			latestPublishedAt: pub?.publishedAt ?? null,
 			aiAuthored: r.aiAuthoringPromptId !== null,
+			aiAuthoringPromptId: r.aiAuthoringPromptId,
 		};
 	});
 }

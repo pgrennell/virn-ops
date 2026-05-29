@@ -14,7 +14,9 @@ import {
 } from "@virn/ui/components/dropdown-menu";
 import { BookOpen, MoreVertical, Pencil, Play, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
+import { AuthoringPromptDialog } from "@builder/components/AuthoringPromptDialog";
 import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation } from "@tanstack/react-query";
 
@@ -135,14 +137,7 @@ export function LibraryRow({
 								Inactive
 							</span>
 						)}
-						{row.aiAuthored && (
-							<span
-								className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300"
-								title="This workflow was authored via AI. Open it in the Builder to see the originating prompt."
-							>
-								<Sparkles className="size-2.5" /> AI
-							</span>
-						)}
+						{row.aiAuthored && <LibraryRowAiChip promptId={row.aiAuthoringPromptId ?? null} />}
 					</div>
 					{row.description && (
 						<p className="text-xs text-foreground/60 truncate mt-1">
@@ -295,5 +290,50 @@ function SecondaryKebab({
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
+	);
+}
+
+function LibraryRowAiChip({ promptId }: { promptId: string | null }) {
+	// Phase 12 follow-up -- click opens the "View originating prompt" dialog.
+	// Falls back to the static chip when promptId is missing (e.g. a stale
+	// query response from before the WorkflowListRow shape widened, or a
+	// provenance row that was cascade-nulled). The Builder + Read view chips
+	// (AiAuthoringChip / ReadViewAiChip) use the same pattern.
+	const [open, setOpen] = useState(false);
+
+	// Click handler stops propagation: rows in /sop wrap their content in an
+	// anchor to the Read view, and this chip lives inside that anchor. Without
+	// stopPropagation the click would navigate AND open the dialog (the dialog
+	// wins on next render but the URL flips first).
+	const handleClick = (e: React.MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setOpen(true);
+	};
+
+	if (!promptId) {
+		return (
+			<span
+				className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300"
+				title="This workflow was authored via AI."
+			>
+				<Sparkles className="size-2.5" /> AI
+			</span>
+		);
+	}
+
+	return (
+		<>
+			<button
+				type="button"
+				onClick={handleClick}
+				className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-violet-100 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors"
+				title="Authored with AI. Click to view the originating prompt."
+				aria-label="View originating prompt"
+			>
+				<Sparkles className="size-2.5" /> AI
+			</button>
+			<AuthoringPromptDialog open={open} onOpenChange={setOpen} promptId={promptId} />
+		</>
 	);
 }
