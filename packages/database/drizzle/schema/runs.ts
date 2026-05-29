@@ -16,7 +16,7 @@ import {
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
-import { id, orgId, softDelete, timestamps, user } from "./_shared";
+import { entityType, id, orgId, softDelete, timestamps, user } from "./_shared";
 import { agent } from "./agents";
 import { vendor, vendorContact } from "./vendors";
 import {
@@ -142,6 +142,16 @@ export const run = pgTable(
     // (run.state_changed, run.completed, vendor.upserted, run.comment_added) is
     // owned by the emission layer per Phase 11a step 3(c).
     callbackWebhookEvents: text("callback_webhook_events").array(),
+    // Phase 10 / v1.5c R6 lift -- entity context. When the run was launched
+    // against a specific entity (a listing, vendor, etc.), the launcher stamps
+    // (entity_type, entity_id) so entity-detail pages can surface in-flight
+    // runs in their Active Run right-rail card. Polymorphic via the shared
+    // entityType enum + plain entity_id text (no FK -- the entity type alone
+    // identifies which table the id lives in). Both NULL together for runs
+    // launched without an entity context (the common case pre-v1.5c, and any
+    // future cron / org-wide / multi-entity workflows).
+    entityType: entityType("entity_type"),
+    entityId: text("entity_id"),
     ...softDelete,
     ...timestamps,
   },
@@ -158,6 +168,13 @@ export const run = pgTable(
     index("idx_run_callback_pm_sr_id")
       .on(t.callbackPmServiceRequestId)
       .where(sql`${t.callbackPmServiceRequestId} is not null`),
+    // Phase 10 / v1.5c R6 lift -- composite for the Active Run card query
+    // ("in-flight runs whose entity context is this listing/vendor/etc.").
+    // Partial because entity_type/id are usually NULL; partial index is much
+    // cheaper than a full one and matches the actual query shape exactly.
+    index("idx_run_entity_context")
+      .on(t.organizationId, t.entityType, t.entityId, t.status)
+      .where(sql`${t.entityType} is not null`),
   ],
 );
 

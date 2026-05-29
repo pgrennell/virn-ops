@@ -141,6 +141,13 @@
       "when": 1780061952073,
       "tag": "0019_unique_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780080250828,
+      "tag": "0020_lethal_amazoness",
+      "breakpoints": true
     }
   ]
 }

@@ -90,6 +90,16 @@ export interface LaunchRunInput {
 		pmWorkOrderId?: string | null;
 		webhookEvents?: string[] | null;
 	} | null;
+	/** Phase 10 / v1.5c R6 lift -- entity context the run was launched against.
+	 * Stamped onto `run` so entity-detail pages can surface in-flight runs in
+	 * their Active Run right-rail card (PRD §6.5). Optional; absent for runs
+	 * launched org-wide / via cron / outside any single-entity context. When
+	 * supplied, entityType is one of the registered entity adapters (only
+	 * 'listing' in v1.5; Layer-1 broadens this post-v1). */
+	entityContext?: {
+		entityType: "listing";
+		entityId: string;
+	} | null;
 }
 
 export interface LaunchRunContext {
@@ -508,6 +518,7 @@ export async function launchRun(
 		roleAssignments: roleAssignmentRows,
 		stepAssignments: stepAssignmentRows,
 		callback: input.callback ?? null,
+		entityContext: input.entityContext ?? null,
 	});
 
 	// 9. Append-only writes (Invariant #6).

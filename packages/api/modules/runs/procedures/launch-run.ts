@@ -60,6 +60,16 @@ export const launchRunProc = agentOrUserOrgProcedure
 						webhookEvents: z.array(z.string().min(1)).optional(),
 					})
 					.optional(),
+				// Phase 10 / v1.5c R6 lift -- entity context. Stamps
+				// (entity_type, entity_id) onto the run so the Active Run
+				// right-rail card on the entity's detail page can surface it.
+				// Optional; absent for org-wide / multi-entity launches.
+				entityContext: z
+					.object({
+						entityType: z.literal("listing"),
+						entityId: z.string().min(1),
+					})
+					.optional(),
 			})
 			.refine(
 				(v) =>

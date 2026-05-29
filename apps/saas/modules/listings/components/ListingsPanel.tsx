@@ -118,12 +118,19 @@ export function ListingsPanel({ canMutate, organizationSlug }: ListingsPanelProp
 						return (
 							<li
 								key={l.id}
-								className="px-4 py-3 gap-3 flex items-center bg-background"
+								className="px-4 py-3 gap-3 flex items-center bg-background hover:bg-muted/30 transition-colors"
 							>
-								<div className="size-9 shrink-0 rounded-md bg-muted gap-0 flex items-center justify-center">
+								<a
+									href={`/${organizationSlug}/library/listings/${l.id}`}
+									className="size-9 shrink-0 rounded-md bg-muted gap-0 flex items-center justify-center"
+									aria-label={`Open ${l.name}`}
+								>
 									<Home className="size-4 text-foreground/70" />
-								</div>
-								<div className="flex-1 min-w-0 gap-0.5 flex flex-col">
+								</a>
+								<a
+									href={`/${organizationSlug}/library/listings/${l.id}`}
+									className="flex-1 min-w-0 gap-0.5 flex flex-col"
+								>
 									<div className="gap-2 flex items-center flex-wrap">
 										<span className="font-medium text-sm truncate">{l.name}</span>
 										{typeLabel && (
@@ -167,7 +174,7 @@ export function ListingsPanel({ canMutate, organizationSlug }: ListingsPanelProp
 										)}
 										{l.createdByUserName && <>added by {l.createdByUserName}</>}
 									</p>
-								</div>
+								</a>
 								{canMutate && (
 									<ListingRowMenu
 										listingId={l.id}

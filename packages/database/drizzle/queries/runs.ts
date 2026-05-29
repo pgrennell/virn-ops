@@ -137,6 +137,14 @@ export async function insertRunSnapshot(input: {
 		pmWorkOrderId?: string | null;
 		webhookEvents?: string[] | null;
 	} | null;
+	/** Phase 10 / v1.5c R6 lift -- entity context the run was launched against.
+	 * Stamps (entity_type, entity_id) on the run so entity-detail pages can
+	 * surface in-flight runs in their Active Run right-rail card. Both fields
+	 * MUST be supplied together or omitted together; service layer enforces. */
+	entityContext?: {
+		entityType: "listing";
+		entityId: string;
+	} | null;
 }): Promise<{
 	runId: string;
 	runStepIdByStepId: Map<string, string>;
@@ -157,6 +165,8 @@ export async function insertRunSnapshot(input: {
 				callbackPmServiceRequestId: input.callback?.pmServiceRequestId ?? null,
 				callbackPmWorkOrderId: input.callback?.pmWorkOrderId ?? null,
 				callbackWebhookEvents: input.callback?.webhookEvents ?? null,
+				entityType: input.entityContext?.entityType ?? null,
+				entityId: input.entityContext?.entityId ?? null,
 			})
 			.returning({ id: run.id });
 		const runId = runRow.id;
@@ -1078,6 +1088,70 @@ export async function writeAuditAndActivity(
 			data: input.activityData,
 		}),
 	]);
+}
+
+// ---------------------------------------------------------------------------
+// Entity-context run reads (Phase 10 / v1.5c R6 lift -- the Active Run
+// right-rail card on entity-detail pages, PRD §6.5)
+// ---------------------------------------------------------------------------
+
+/** One row in the Active Run card. Strictly the columns the card renders. */
+export interface ActiveRunForEntityRow {
+	id: string;
+	title: string;
+	workflowId: string;
+	workflowTitle: string;
+	workflowType: "procedure" | "document" | "policy" | "form";
+	startedAt: Date;
+	dueAt: Date | null;
+}
+
+/** Active runs whose entity context matches this (entityType, entityId).
+ * Org-scoped (Invariant #1), filtered to `status = 'active'`. Joins workflow
+ * for the row title + the link target. Ordered by startedAt desc so the most
+ * recent launches appear first.
+ *
+ * Returns at most `limit` rows (default 20). The card is a compact summary --
+ * "you have N runs in flight on this listing" -- not the full run list. For
+ * full enumeration, /runs filtered by entity context is the destination. */
+export async function listActiveRunsForEntity(
+	organizationId: string,
+	entityTypeValue: "listing",
+	entityId: string,
+	options?: { limit?: number },
+): Promise<ActiveRunForEntityRow[]> {
+	const limit = options?.limit ?? 20;
+	const rows = await db
+		.select({
+			id: run.id,
+			title: run.title,
+			workflowId: run.workflowId,
+			workflowTitle: workflow.title,
+			workflowType: workflow.type,
+			startedAt: run.startedAt,
+			dueAt: run.dueAt,
+		})
+		.from(run)
+		.innerJoin(workflow, eq(workflow.id, run.workflowId))
+		.where(
+			and(
+				eq(run.organizationId, organizationId),
+				eq(run.status, "active"),
+				eq(run.entityType, entityTypeValue),
+				eq(run.entityId, entityId),
+			),
+		)
+		.orderBy(desc(run.startedAt))
+		.limit(limit);
+	return rows.map((r) => ({
+		id: r.id,
+		title: r.title,
+		workflowId: r.workflowId,
+		workflowTitle: r.workflowTitle,
+		workflowType: r.workflowType,
+		startedAt: r.startedAt,
+		dueAt: r.dueAt,
+	}));
 }
 
 // ---------------------------------------------------------------------------
