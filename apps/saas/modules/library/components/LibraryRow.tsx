@@ -92,9 +92,12 @@ export function LibraryRow({
 	};
 
 	const handleOpen = () => {
-		// For document / policy, Open routes to the Builder's view mode. Integrity #4
-		// (the known UX compromise -- the reader-facing KB is S-03).
-		goToBuilder(row.id);
+		// Phase 10 / v1.5c -- doc/policy Open routes through the canonical detail
+		// URL. The bare /library/workflows/[id] page resolves ?view= + role
+		// default and redirects to /builder (admin) or /read (member). Replaces
+		// the prior compromise where Open routed directly to /builder for
+		// everyone (UX_SPEC integrity #4 from the Pass 1 Library doc).
+		router.push(`/${organizationSlug}/library/workflows/${row.id}`);
 	};
 
 	return (

@@ -58,6 +58,7 @@ import { PREVIEW_NOOP_COMPLETE, PREVIEW_NOOP_SET_FIELD } from "../lib/preview-ca
 import type { VersionEditBundleResponse } from "../lib/types";
 import { BuilderConfigPanel } from "./BuilderConfigPanel";
 import { BuilderTopBar } from "./BuilderTopBar";
+import { WorkflowViewToggle } from "./WorkflowViewToggle";
 import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
 import { KickoffPanel } from "./KickoffPanel";
 import { KickoffRailEntry } from "./KickoffRailEntry";
@@ -486,6 +487,8 @@ function BuilderInner({
 			<BuilderShell
 				bundle={bundle}
 				workflowTitle={workflowTitle}
+				workflowId={workflowId}
+				organizationSlug={organizationSlug}
 				forkedFromVersionNumber={forkedFromVersionNumber}
 				isDraft={isDraft}
 				isAdminOrOwner={isAdminOrOwner}
@@ -529,6 +532,8 @@ function BuilderInner({
 			<BuilderShell
 				bundle={bundle}
 				workflowTitle={workflowTitle}
+				workflowId={workflowId}
+				organizationSlug={organizationSlug}
 				forkedFromVersionNumber={forkedFromVersionNumber}
 				isDraft={isDraft}
 				isAdminOrOwner={isAdminOrOwner}
@@ -568,6 +573,8 @@ function BuilderInner({
 		<BuilderShell
 			bundle={bundle}
 			workflowTitle={workflowTitle}
+			workflowId={workflowId}
+			organizationSlug={organizationSlug}
 			forkedFromVersionNumber={forkedFromVersionNumber}
 			isDraft
 			isAdminOrOwner={isAdminOrOwner}
@@ -850,6 +857,11 @@ function BuilderInner({
 interface BuilderShellProps {
 	bundle: VersionEditBundleResponse;
 	workflowTitle: string;
+	/** Phase 10 / v1.5c -- needed for the Author | Read view-switcher in the
+	 * top bar. The toggle is only rendered for admin sessions outside of
+	 * preview; threading the ids unconditionally keeps the shell ergonomic. */
+	workflowId: string;
+	organizationSlug: string;
 	forkedFromVersionNumber: number | null;
 	isDraft: boolean;
 	isAdminOrOwner: boolean;
@@ -892,6 +904,8 @@ interface BuilderShellProps {
 function BuilderShell({
 	bundle,
 	workflowTitle,
+	workflowId,
+	organizationSlug,
 	forkedFromVersionNumber,
 	isDraft,
 	isAdminOrOwner,
@@ -933,6 +947,15 @@ function BuilderShell({
 				forkedFromVersionNumber={forkedFromVersionNumber}
 				previewAvailable={previewAvailable}
 				previewActive={previewActive}
+				viewSwitcher={
+					isAdminOrOwner && !previewActive ? (
+						<WorkflowViewToggle
+							organizationSlug={organizationSlug}
+							workflowId={workflowId}
+							active="author"
+						/>
+					) : null
+				}
 				onTogglePreview={onTogglePreview}
 				canEdit={canEdit}
 				editPending={editPending}

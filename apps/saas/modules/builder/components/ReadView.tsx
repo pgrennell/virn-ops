@@ -36,6 +36,8 @@ import { BookOpen, CheckCircle2, Eye, Pencil, Sparkles } from "lucide-react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
+import { WorkflowViewToggle } from "./WorkflowViewToggle";
+
 interface ReadViewProps {
 	workflowId: string;
 	organizationSlug: string;
@@ -246,12 +248,13 @@ function ReadInner({
 						</div>
 					</div>
 					{isAdminOrOwner && (
-						<a
-							href={`/${organizationSlug}/library/workflows/${workflow.id}/builder`}
-							className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted/40"
-						>
-							<Pencil className="size-3.5" /> Edit
-						</a>
+						<div className="shrink-0">
+							<WorkflowViewToggle
+								organizationSlug={organizationSlug}
+								workflowId={workflow.id}
+								active="read"
+							/>
+						</div>
 					)}
 				</div>
 				{workflow.description && (

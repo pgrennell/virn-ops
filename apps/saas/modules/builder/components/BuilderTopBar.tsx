@@ -85,6 +85,11 @@ interface BuilderTopBarProps {
 	 * routes through onConfigureWorkflow to the Scope panel (the picker still
 	 * lives there; the chip is just the visible-on-top-bar summary). */
 	entitySetIdsCount?: number;
+	/** Phase 10 / v1.5c -- segmented Author | Read view-switcher. Rendered by
+	 * the shell when the viewer has admin/owner perms and isn't in preview
+	 * mode; members never see it (their detail-page entry already lands on
+	 * Read). Slot-shaped so the shell decides whether to render. */
+	viewSwitcher?: React.ReactNode;
 }
 
 export function BuilderTopBar({
@@ -118,6 +123,7 @@ export function BuilderTopBar({
 	toggleActivePending,
 	onToggleActive,
 	entitySetIdsCount,
+	viewSwitcher,
 }: BuilderTopBarProps) {
 	// Phase 9.5g -- choose which publish-area button(s) to render based on the
 	// concierge-review state machine. Flag off OR review_state is draft (flag off
@@ -161,6 +167,11 @@ export function BuilderTopBar({
 			</div>
 
 			<div className="gap-2 flex items-center">
+				{/* Phase 10 / v1.5c -- Author | Read view-switcher. Lives first
+				    in the actions cluster so it reads as the "what am I
+				    looking at" anchor before any action verbs. Shell hides
+				    it for member sessions + during preview. */}
+				{viewSwitcher}
 				{/* Phase 9.5 R2 -- Enabled/Disabled toggle. Lives in the actions
 				    cluster because it's an operator decision (flipping the
 				    workflow's exposure), not a workflow attribute. The label
