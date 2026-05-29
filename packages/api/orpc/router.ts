@@ -5,6 +5,7 @@ import { agentsRouter } from "../modules/agents/router";
 import { aiRouter } from "../modules/ai/router";
 import { configRouter } from "../modules/config/router";
 import { datasetsRouter } from "../modules/datasets/router";
+import { entitiesRouter } from "../modules/entities/router";
 import { entitysetsRouter } from "../modules/entitysets/router";
 import { integrationsRouter } from "../modules/integrations/router";
 import { listingsRouter } from "../modules/listings/router";
@@ -33,6 +34,7 @@ export const router = publicProcedure.router({
 	listings: listingsRouter,
 	packs: packsRouter,
 	dataSets: datasetsRouter,
+	entities: entitiesRouter,
 	entitySets: entitysetsRouter,
 	integrations: integrationsRouter,
 	workflows: workflowsRouter,
