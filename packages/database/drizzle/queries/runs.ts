@@ -1033,7 +1033,15 @@ export async function writeAuditAndActivity(
 			| "vendor"
 			| "vendor_contact"
 			| "listing"
-			| "outbound_webhook_credential";
+			| "outbound_webhook_credential"
+			// Phase 9.6 -- mirrors the entity_type enum additions in
+			// packages/database/drizzle/schema/_shared.ts. Lets the playbook
+			// authoring + Phase 18b orchestration libs attribute audit/activity
+			// writes through this helper without bypassing the type guard.
+			| "playbook"
+			| "playbook_version"
+			| "playbook_run"
+			| "playbook_run_step";
 		entityId: string;
 		changes?: Record<string, unknown>;
 		metadata?: Record<string, unknown>;
