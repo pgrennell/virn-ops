@@ -1914,3 +1914,177 @@ scroll, last-selected-node) is per-(parent, user). The snapshot mechanism (`work
   one branch). No layout table needed for v1.5c.
 - PRD_PLAYBOOKS §15 ("any such canvas must follow D-041") cross-references this decision so
   the constraint is visible to future Playbook canvas proposals.
+
+### D-042 — Reader-grade and author-grade gates are separate NAV_AREAS, not co-mingled
+
+**Context:** Phase 10 / v1.5c shipped the reader-facing SOP surface (`/sop` index +
+`/library/workflows/[id]/read` + canonical `/library/workflows/[id]?view=` redirect). Initial
+implementation gated all three pages on `NAV_AREAS.library`, the same area the authoring
+index uses. Antigravity verification (REPORT 2026-05-29 §4) caught this: `NAV_AREAS.library`
+is restricted to `[builder, admin, owner]`, so standard members (Better Auth `member` →
+`ROLES.operator`) hit 404 on every reader surface — locking out the exact audience the
+surface was built for. The naive fixes are bad: widening `library` to operators exposes
+drafts + in-review states (authoring noise the reader surface filters out), and binding
+reader pages to `NAV_AREAS.home` or `.myWork` couples them to `phase: "defer-design"`
+placeholders that may shift role allow-lists for unrelated reasons.
+
+**Decision:** When a feature has BOTH an authoring surface and a reader surface, they get
+**separate NAV_AREAS entries** with appropriate role allow-lists. For workflows:
+
+- `NAV_AREAS.library` (existing) — authoring/admin index: drafts + in-review + all states.
+  Allowed roles: `[builder, admin, owner]`.
+- `NAV_AREAS.sop` (new) — reader index + Read view + canonical detail redirect. Allowed
+  roles: `[operator, builder, reviewer, admin, owner]` (everyone with a preset role).
+
+The canonical detail URL `/library/workflows/[id]` gates on `sop` (the wider, reader-grade
+gate). Admin redirects from there to `/builder` still hit `library`'s independent
+re-assertion, so the author-gate is unchanged. Reader-grade access is strictly additive.
+
+**Rationale:** The two surfaces have intrinsically different audiences:
+
+1. **Authoring surface needs author-state visibility.** Drafts, in-review rows, and version
+   pickers are noise on the reader surface — operators reading a published SOP should see
+   the published version, not "wfl_str_v3 (draft, last edited 2 hours ago)."
+2. **Reader surface needs broad org access.** Operators are the primary audience for
+   SOPs; if `library`'s author-grade gate locks them out, the reader surface has no
+   audience.
+3. **Coupling to other deferred areas is fragile.** `NAV_AREAS.home` and `.myWork` are
+   placeholder gates today (`phase: "defer-design"`). Binding shipped surfaces to deferred
+   areas means future role-allow-list changes for unrelated reasons silently affect SOP
+   access. A dedicated area is the right shape.
+
+**Consequences:**
+
+- The pattern generalizes: when vendor detail / work-order detail / lifecycle Playbook
+  reader surfaces ship, each gets its own reader-grade `NAV_AREAS` entry rather than
+  cramming into an authoring gate.
+- Sidebar nav: `NAV_AREAS.sop` lives in the "Operate" group (alongside Home / My Work /
+  Runs), not "Build." The grouping reflects the audience, not the data source.
+- Implementation cost is one enum entry + one definition + one sidebar item per reader
+  surface. Far cheaper than the regression risk of widening an authoring gate.
+- Reader surfaces' cross-org refusal stays NOT_FOUND-shaped (not FORBIDDEN), consistent
+  with the rest of the org-scoped read surface — a leaked id can't confirm "this exists
+  somewhere."
+
+### D-043 — Runs carry an optional polymorphic entity context for entity-detail surfacing
+
+**Context:** Phase 10 / v1.5c R6 lift added the "Active Run" right-rail card to entity
+detail pages (PRD §6.5). The card surfaces in-flight runs whose entity context matches the
+host entity. Before this work, the schema had no formal linkage from a `run` row to the
+entity it was launched against — entity tracking lived in free-text kickoff fields
+(`property_name`, `property_address`) that aren't queryable as a structured reference. The
+launcher path also had no way to bind a new run to a specific entity at launch time. Without
+a structured linkage, the Active Run card has no way to filter "runs FOR this listing"
+beyond fuzzy name match (unreliable) or entity_set intersection (too broad — applies-to-all
+workflows would flood every listing's card).
+
+**Decision:** `run` schema gains two nullable columns:
+
+- `run.entity_type` — references the shared `entityType` pgEnum (the same polymorphic
+  discriminator `activity_event` + `audit_log` use). v1.5 accepts only `'listing'`; future
+  EntityAdapter registrations widen the practical input.
+- `run.entity_id text` — plain text id pointing into whichever table `entity_type`
+  identifies. No foreign key (polymorphic; the type discriminates the target table).
+
+Both nullable + both must be set together (service-layer enforcement; no CHECK because
+the columns are independently NULL-able for the "no entity context" case). A partial
+composite index `(organization_id, entity_type, entity_id, status) WHERE entity_type IS NOT
+NULL` matches the Active Run card query exactly and stays cheap since the populated set is
+the minority.
+
+`launchRun.entityContext` becomes an optional input that stamps both columns at launch
+time. The /library row launcher leaves it undefined (`run.entity_type` and `.entity_id`
+stay NULL); the entity-detail launcher (`LaunchOnEntityDialog`) sets it to the host
+entity's discriminator + id.
+
+**Rationale:**
+
+1. **Polymorphic + nullable is forward-compatible.** Layer-1 will add tenant-defined
+   entity types as registered adapters. The `entity_type` enum already accommodates the
+   future set (the shared `entityType` enum is the source of truth for cross-cutting
+   tables; this just reuses it).
+2. **Nullable matches reality.** Many runs have no single entity context — cron-triggered
+   sweeps, multi-entity automations, org-wide compliance runs. Forcing a non-null
+   entity_type would either require synthetic catch-all entities or block these paths.
+3. **No foreign key is the right call here.** A polymorphic FK would mean either separate
+   columns per entity type (`listing_id`, `vendor_id`, ...) or a trigger-based check.
+   Service-layer enforcement is simpler and matches the existing pattern in
+   `activity_event` + `audit_log`.
+4. **Partial index keeps the read cheap.** The Active Run card query is the dominant
+   reader; a full composite index would index millions of NULL rows for every populated
+   one in a high-volume org. The partial index targets the populated subset exactly.
+
+**Consequences:**
+
+- Migration 0020 lands the two columns + index. Backfill: existing rows stay NULL (the
+  card surface is forward-going; pre-R6 runs don't have entity context).
+- `runs.launch` gains optional `entityContext: { entityType: "listing"; entityId: string }`
+  on the Zod input. Procedure validates upstream; the lib stamps the columns inside
+  `insertRunSnapshot`.
+- New query `listActiveRunsForEntity(orgId, entityType, entityId)` + procedure
+  `runs.listForEntity` powers the Active Run card. Org-scoped, hard-capped, ordered
+  newest-first.
+- Vendor + work-order detail pages, when they ship, reuse the same card component
+  unchanged — they just supply a different `entityType` literal.
+- Pre-R6 workflows that referenced listings via free-text kickoff fields are unaffected
+  by this decision. Migrating them to entity context is a separate per-pack decision
+  (the property-ops STR turnover workflow likely benefits; one-off compliance forms
+  probably don't).
+
+### D-044 — Deterministic markdown imports skip `ai_authoring_prompt`; the Sparkles chip is reserved for genuine AI authoring
+
+**Context:** Phase 13 slice B added `workflows.importFromMarkdown` for Tango / Scribe /
+numbered-markdown deterministic imports — programmatic, no LLM, no token cost. The
+question: should the resulting workflow get an `ai_authoring_prompt` provenance row + a
+non-null `workflow.aiAuthoringPromptId`, rendering the Sparkles "AI-authored" chip on the
+Library row + Builder header? The chip would be a useful traceability surface ("View
+originating source"), but the label "AI-authored" is wrong — this path is deterministic
+parsing, not AI authoring.
+
+**Decision:** Deterministic markdown imports do NOT write an `ai_authoring_prompt` row and
+do NOT set `workflow.aiAuthoringPromptId`. The Sparkles "AI-authored" chip remains
+reserved for `agents.authorWorkflow` calls (genuine LLM authoring). Traceability for
+imports comes from the `audit_log` row instead:
+
+- Action: `'workflow.imported_from_markdown'`
+- Activity verb: `'imported from markdown'`
+- `changes.detectedFormat`: `'tango-style' | 'scribe-style' | 'numbered-markdown'`
+- `metadata.sourceLength`: char count (raw source is not stored — too large for routine
+  audit rows; user retains the source)
+
+The procedure lives at `workflows.importFromMarkdown`, NOT `agents.importFromMarkdown`. The
+`agents.*` namespace is reserved for paid model calls (the convention `agents.authorWorkflow`
++ `agents.regenerateStep` already establishes this). Cost as a namespace signal: `agents.*`
+calls trigger a billable LLM round-trip; `workflows.*` calls don't.
+
+**Rationale:**
+
+1. **Chip semantics matter.** The Sparkles chip + the AuthoringPromptDialog tell the user
+   "this workflow was generated by AI, click to see the prompt." For a deterministic
+   import, that's misleading — there's no prompt, no model, no probabilistic content.
+2. **Provenance rows have schema constraints.** `ai_authoring_prompt` requires
+   `prompt`, `responseJson`, `entitySchemaSnapshot`, and `model` non-null. None of those
+   apply cleanly to a markdown import. Forcing dummy values would make the schema lie about
+   what's stored.
+3. **Audit log already does the job.** The `audit_log` table is the right place for "how
+   was this row created" forensics. The provenance row is a richer UX-facing surface
+   specifically for AI authoring; mixing in non-AI sources dilutes its purpose.
+4. **Namespace split scales.** Future deterministic ingress paths (PDF extraction, HTML
+   parse, structured-data import) go under `workflows.*`. AI-driven paths
+   (`agents.authorPlaybook`, future `agents.*`) keep the `agents.*` namespace. The split
+   is a cost signal AND a semantic signal.
+
+**Consequences:**
+
+- Imported workflows show no Sparkles chip in the Library row or Builder header. The
+  user's only trace is the audit_log row (admin-visible via Phase 15+ surfaces).
+- Step provenance: imported steps land with `step.provenance = 'manually_edited'` (D-040)
+  — the user explicitly chose to import this content; D-040's sibling-isolation guard
+  protects every step from accidental AI rewrite.
+- Future imports (PDF, HTML, file upload) follow the same rule: `workflows.*` namespace,
+  no `ai_authoring_prompt` row, audit_log carries the trace. If a future hybrid ingress
+  uses AI to *post-process* a deterministic parse (e.g. summarize step descriptions), the
+  AI step gets its own provenance row; the import step doesn't.
+- The `agents.*` namespace gains a small audit benefit: every `agents.*` procedure call
+  corresponds to a paid LLM round-trip. Future cost dashboards can filter on the
+  namespace prefix without per-procedure tagging.
