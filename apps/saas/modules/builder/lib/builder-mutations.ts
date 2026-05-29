@@ -293,6 +293,24 @@ export function useDeleteField(args: VersionBundleQueryArgs) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 12 (D-040) -- per-step AI regenerate
+// ---------------------------------------------------------------------------
+
+/** Regenerate a single step via agents.regenerateStep. AWAIT semantic (not
+ * optimistic): the server's response replaces the step's title / description /
+ * fields, so we invalidate + refetch rather than guessing intermediate state.
+ * onError surfaces the message; the form's Alert renders it. */
+export function useRegenerateStep(args: VersionBundleQueryArgs) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		...orpc.agents.regenerateStep.mutationOptions(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: bundleKey(args) });
+		},
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Versioning (publish + edit + discard)
 // ---------------------------------------------------------------------------
 

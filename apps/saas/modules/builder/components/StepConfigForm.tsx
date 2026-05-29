@@ -31,7 +31,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@virn/ui/components/select";
-import { Lock, Plus, X } from "lucide-react";
+import { Lock, Plus, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 import type { StepType } from "@runs/types";
@@ -69,6 +69,15 @@ export interface StepConfigFormProps {
 	 * server owns the cuid. Adjacent fix from the Pass-3 review: without this,
 	 * a fresh-org first-run lands in an empty picker with no recovery. */
 	onCreateRole: (name: string) => Promise<{ id: string }>;
+	/** Phase 12 (D-040) -- per-step AI regenerate. Optional so callers that
+	 * don't wire it (preview / view shells) just don't render the affordance.
+	 * `refinementPrompt` is the operator's optional steer; null when omitted. */
+	onRegenerateStep?: (refinementPrompt: string | null) => void;
+	regenerateStepPending?: boolean;
+	/** Error message from the last regenerate attempt, if any. Cleared when
+	 * the caller decides (typically on the next successful invocation or
+	 * panel close). */
+	regenerateStepError?: string | null;
 }
 
 export function StepConfigForm(props: StepConfigFormProps) {
@@ -87,6 +96,9 @@ export function StepConfigForm(props: StepConfigFormProps) {
 		onAddDependency,
 		onRemoveDependency,
 		onCreateRole,
+		onRegenerateStep,
+		regenerateStepPending,
+		regenerateStepError,
 	} = props;
 
 	const stepTypeOptions = getStepTypeOptions(gates);
@@ -441,6 +453,89 @@ export function StepConfigForm(props: StepConfigFormProps) {
 					</Alert>
 				)}
 			</Section>
+
+			{/* Phase 12 (D-040) -- per-step AI regenerate affordance. Only rendered
+			    when the parent wired onRegenerateStep (i.e. author mode on a draft;
+			    preview / view shells omit it). The collapsible RegenerateStepPanel
+			    surfaces the optional refinement prompt + the in-flight error if
+			    any. */}
+			{onRegenerateStep && (
+				<Section label="Regenerate with AI">
+					<RegenerateStepPanel
+						stepProvenance={step.provenance}
+						pending={regenerateStepPending ?? false}
+						error={regenerateStepError ?? null}
+						onRegenerate={onRegenerateStep}
+					/>
+				</Section>
+			)}
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12 (D-040) -- per-step regenerate UI
+// ---------------------------------------------------------------------------
+
+function RegenerateStepPanel({
+	stepProvenance,
+	pending,
+	error,
+	onRegenerate,
+}: {
+	stepProvenance: "ai_generated" | "manually_edited";
+	pending: boolean;
+	error: string | null;
+	onRegenerate: (refinementPrompt: string | null) => void;
+}) {
+	const [refinement, setRefinement] = useState("");
+	const trimmed = refinement.trim();
+	const isManuallyEdited = stepProvenance === "manually_edited";
+	return (
+		<div className="flex flex-col gap-2">
+			<p className="text-xs text-foreground/70">
+				Replaces this step's title, description, and fields with a fresh AI
+				generation. Sibling steps you've manually edited are{" "}
+				<strong>never touched or read</strong> by the model (D-040).
+			</p>
+			{isManuallyEdited && (
+				<Alert>
+					<AlertDescription className="text-xs">
+						This step is marked manually edited. Regenerating will overwrite
+						your changes and flip it back to AI-generated. Subsequent edits
+						will flip it back to manually edited again.
+					</AlertDescription>
+				</Alert>
+			)}
+			<textarea
+				className="border border-border rounded-md px-3 py-2 text-xs bg-background min-h-[60px] resize-y"
+				placeholder="Optional refinement: e.g. 'phrase as a question', 'add a vendor coordination field', 'make it terser'…"
+				value={refinement}
+				onChange={(e) => setRefinement(e.target.value)}
+				maxLength={2000}
+				disabled={pending}
+			/>
+			<div className="flex items-center gap-2">
+				<Button
+					size="sm"
+					variant="primary"
+					onClick={() => onRegenerate(trimmed.length > 0 ? trimmed : null)}
+					disabled={pending}
+				>
+					<Sparkles className="size-3.5 mr-1.5" />
+					{pending ? "Regenerating…" : "Regenerate"}
+				</Button>
+				{trimmed.length > 0 && (
+					<span className="text-[10px] text-foreground/60">
+						{trimmed.length} / 2000 chars
+					</span>
+				)}
+			</div>
+			{error && (
+				<Alert variant="error">
+					<AlertDescription className="text-xs">{error}</AlertDescription>
+				</Alert>
+			)}
 		</div>
 	);
 }

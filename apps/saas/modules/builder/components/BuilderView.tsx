@@ -43,6 +43,7 @@ import {
 	useDiscardDraft,
 	useEditPublished,
 	usePublishVersion,
+	useRegenerateStep,
 	useRemoveStepDependency,
 	useRenameField,
 	useReorderSteps,
@@ -410,6 +411,12 @@ function BuilderInner({
 	const createStep = useCreateStep(mutArgs);
 	const createField = useCreateField(mutArgs);
 	const updateStep = useUpdateStep(mutArgs);
+	const regenerateStep = useRegenerateStep(mutArgs);
+	// D-040 regenerate per-call error, cleared by the next invocation. Kept
+	// here rather than in StepConfigForm because the same form re-mounts when
+	// the operator selects a different step, and we want stale errors to clear
+	// then too.
+	const [regenerateError, setRegenerateError] = useState<string | null>(null);
 	const updateField = useUpdateField(mutArgs);
 	const renameField = useRenameField(mutArgs);
 	const deleteStep = useDeleteStep(mutArgs);
@@ -702,6 +709,22 @@ function BuilderInner({
 										// so the form can auto-select it.
 										return await createRole.mutateAsync({ name });
 									}}
+									onRegenerateStep={(refinementPrompt) => {
+										setRegenerateError(null);
+										regenerateStep.mutate(
+											{ stepId: step.id, refinementPrompt },
+											{
+												onError: (err) =>
+													setRegenerateError(
+														err instanceof Error
+															? err.message
+															: "Couldn't regenerate this step.",
+													),
+											},
+										);
+									}}
+									regenerateStepPending={regenerateStep.isPending}
+									regenerateStepError={regenerateError}
 								/>
 							);
 						})()}
