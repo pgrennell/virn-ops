@@ -1,28 +1,136 @@
+import type { ReactNode } from "react";
 import { cn } from "../lib";
 
-export function Logo({ withLabel = true, className }: { className?: string; withLabel?: boolean }) {
+export type ProductKey = "ops" | "pm";
+
+type ProductConfig = {
+	icon: (props: { badgeSrc?: string }) => ReactNode;
+	leadingText: string;
+	trailingText: string;
+};
+
+// "Virn" stays neutral, the product half ("Ops"/"PM") carries the emphasis so the
+// reader's eye lands on the disambiguating word. Icon and wordmark live together
+// here so every consumer (sidebar, marketing nav, docs, mail, admin) gets a
+// coherent identity by passing the same product key.
+const PRODUCTS: Record<ProductKey, ProductConfig> = {
+	ops: {
+		icon: ({ badgeSrc }) => <OpsBadge badgeSrc={badgeSrc} />,
+		leadingText: "Virn",
+		trailingText: "Ops",
+	},
+	pm: {
+		icon: () => <StackedTilesIcon id="virn-pm" letters={<PmLetters />} />,
+		leadingText: "Virn",
+		trailingText: "PM",
+	},
+};
+
+export function Logo({
+	product = "ops",
+	withLabel = true,
+	className,
+	badgeSrc,
+}: {
+	product?: ProductKey;
+	withLabel?: boolean;
+	className?: string;
+	// Optional override for the badge image URL. Web consumers can omit (the
+	// default relative path resolves against each app's public/ dir); mail
+	// templates must pass an absolute URL since email clients can't fetch
+	// relative paths.
+	badgeSrc?: string;
+}) {
+	const { icon, leadingText, trailingText } = PRODUCTS[product];
+	const label = `${leadingText} ${trailingText}`;
 	return (
-		<span className={cn("font-semibold flex items-center leading-none text-foreground", className)}>
-			<svg className="size-10 text-primary" viewBox="0 0 734 635">
-				<title>acme</title>
-				<path
-					opacity="0.2"
-					d="M282.102 232.435C328.904 205.42 404.785 205.42 451.588 232.435L697.946 374.634C744.748 401.648 744.748 445.447 697.946 472.462L451.588 614.661C404.785 641.676 328.904 641.676 282.102 614.661L35.7432 472.462C-11.059 445.447 -11.0589 401.648 35.7432 374.634L282.102 232.435Z"
-					fill="currentColor"
-				/>
-				<path
-					opacity="0.4"
-					d="M282.102 126.674C328.904 99.66 404.785 99.66 451.588 126.674L697.946 268.874C744.748 295.888 744.748 339.687 697.946 366.702L451.588 508.901C404.785 535.915 328.904 535.915 282.102 508.901L35.7432 366.702C-11.059 339.687 -11.0589 295.888 35.7432 268.874L282.102 126.674Z"
-					fill="currentColor"
-				/>
-				<path
-					fillRule="evenodd"
-					clipRule="evenodd"
-					d="M451.588 20.9141C404.785 -6.10027 328.904 -6.1003 282.102 20.9141L35.7432 163.113C-11.0589 190.128 -11.059 233.927 35.7432 260.941L282.102 403.141C328.904 430.155 404.785 430.155 451.588 403.141L697.946 260.941C744.748 233.927 744.748 190.128 697.946 163.113L451.588 20.9141ZM497.704 114.921C499.134 115.855 500.121 117.04 500.545 118.332C505.138 132.238 505.138 143.12 505.072 154.003C505.072 198.349 468.453 225.167 420.48 245.161V290.25C420.485 294.097 418.849 297.868 415.755 301.141C412.662 304.413 408.233 307.058 402.967 308.777L337.739 330.105C335.32 330.893 332.634 331.263 329.935 331.181C327.236 331.1 324.613 330.569 322.316 329.64C320.019 328.71 318.124 327.412 316.809 325.87C315.495 324.327 314.806 322.591 314.806 320.825V275.982L299.957 285.686C297.993 286.969 295.661 287.987 293.095 288.682C290.529 289.377 287.779 289.734 285.001 289.734C282.223 289.734 279.473 289.377 276.907 288.682C274.341 287.987 272.009 286.969 270.045 285.686L236.407 263.7C232.442 261.109 230.214 257.594 230.214 253.93C230.214 250.265 232.442 246.751 236.407 244.159L251.257 234.456H182.678C179.975 234.457 177.316 234.006 174.955 233.147C172.593 232.288 170.607 231.049 169.184 229.547C167.761 228.046 166.949 226.331 166.825 224.567C166.701 222.803 167.269 221.047 168.475 219.466L201.136 176.8C203.771 173.364 207.817 170.475 212.82 168.455C217.823 166.435 223.587 165.364 229.468 165.36H298.331C328.857 133.922 369.765 110.084 437.967 110.084C454.555 110.084 471.202 110.084 492.483 113.064C494.46 113.341 496.273 113.986 497.704 114.921ZM405.86 179.723C410.207 181.621 415.318 182.634 420.546 182.634C427.557 182.634 434.281 180.814 439.239 177.575C444.196 174.335 446.981 169.942 446.981 165.36C446.981 161.944 445.431 158.604 442.526 155.763C439.622 152.923 435.493 150.709 430.663 149.401C425.832 148.094 420.517 147.752 415.389 148.418C410.261 149.085 405.551 150.73 401.854 153.146C398.157 155.562 395.639 158.64 394.619 161.99C393.599 165.341 394.123 168.814 396.124 171.971C398.124 175.127 401.513 177.825 405.86 179.723Z"
-					fill="currentColor"
-				/>
-			</svg>
-			{withLabel && <span className="ml-3 text-lg md:block hidden">acme</span>}
+		<span
+			className={cn(
+				"font-semibold flex items-center leading-none text-foreground",
+				className,
+			)}
+			aria-label={label}
+		>
+			{icon({ badgeSrc })}
+			{withLabel && (
+				<span className="ml-3 text-lg tracking-tight flex items-baseline gap-1.5">
+					<span className="font-medium text-foreground">{leadingText}</span>
+					<span className="font-semibold text-primary">{trailingText}</span>
+				</span>
+			)}
 		</span>
+	);
+}
+
+// Ops badge is a designed PNG (gradient hex with the "virn OPS" wordmark baked
+// in). Same image is duplicated under apps/{saas,marketing,docs}/public/brand/
+// so the relative path resolves consistently across Next apps.
+function OpsBadge({ badgeSrc }: { badgeSrc?: string }) {
+	return (
+		<img
+			src={badgeSrc ?? "/brand/virn-ops-logo.png"}
+			alt=""
+			width={48}
+			height={48}
+			className="size-12 shrink-0"
+		/>
+	);
+}
+
+// PM keeps the geometric stacked-tile mark until a designed badge exists. Three
+// isometric tiles (32% / 48% / 100% opacity) with "PM" painted on the front
+// tile in fill-background so the letters flip with the theme.
+function StackedTilesIcon({
+	id,
+	letters,
+}: {
+	id: string;
+	letters: ReactNode;
+}) {
+	const tileId = `${id}-tile`;
+	return (
+		<svg
+			className="size-12 shrink-0"
+			style={{ color: "#4FBFC9" }}
+			viewBox="80 85 340 290"
+			shapeRendering="geometricPrecision"
+		>
+			<title>Virn</title>
+			<defs>
+				<path
+					id={tileId}
+					d="M 37.71 -73.93 L 132.29 -21.07 Q 170 0 132.29 21.07 L 37.71 73.93 Q 0 95 -37.71 73.93 L -132.29 21.07 Q -170 0 -132.29 -21.07 L -37.71 -73.93 Q 0 -95 37.71 -73.93 Z"
+				/>
+			</defs>
+			<use
+				href={`#${tileId}`}
+				x="250"
+				y="280"
+				fill="currentColor"
+				opacity="0.32"
+			/>
+			<use
+				href={`#${tileId}`}
+				x="250"
+				y="230"
+				fill="currentColor"
+				opacity="0.48"
+			/>
+			<use href={`#${tileId}`} x="250" y="180" fill="currentColor" />
+			{letters}
+		</svg>
+	);
+}
+
+function PmLetters() {
+	return (
+		<g
+			className="fill-background"
+			fillRule="evenodd"
+			transform="translate(250 180) scale(0.525) translate(-249.5 -260.5) translate(0 500) scale(0.1 -0.1)"
+		>
+			<path d="M949 2934 c-12 -14 -14 -108 -17 -534 -2 -328 1 -527 7 -544 l11 -26 129 0 c119 0 131 2 141 19 5 11 10 84 10 165 l0 146 348 0 c281 0 359 3 407 15 169 44 224 152 212 421 -6 158 -23 211 -84 271 -80 77 -79 77 -649 81 -460 2 -502 1 -515 -14z m905 -258 c44 -18 60 -66 53 -154 -9 -111 8 -106 -362 -110 l-315 -3 0 141 0 140 295 0 c231 0 303 -3 329 -14z" />
+			<path d="M2420 2933 c-71 -36 -70 -29 -70 -583 0 -373 3 -499 12 -508 8 -8 51 -12 128 -12 77 0 120 4 128 12 9 9 12 116 12 420 0 396 1 408 19 408 20 0 39 -45 252 -590 82 -212 117 -242 285 -248 55 -2 119 1 142 8 48 12 105 59 129 104 9 17 78 186 153 376 118 300 138 345 158 348 l22 3 0 -408 c0 -305 3 -412 12 -421 8 -8 51 -12 130 -12 108 0 118 2 128 20 8 15 10 170 8 513 -3 453 -4 495 -21 525 -29 53 -64 62 -249 62 -178 0 -212 -8 -251 -61 -10 -14 -83 -199 -162 -410 -140 -377 -143 -384 -171 -387 l-29 -2 -138 368 c-147 391 -166 433 -210 466 -26 19 -44 21 -205 24 -154 2 -182 0 -212 -15z" />
+		</g>
 	);
 }

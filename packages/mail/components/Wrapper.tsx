@@ -2,6 +2,13 @@ import { Logo } from "@virn/ui";
 import React, { type PropsWithChildren } from "react";
 import { Container, Font, Head, Html, Section, Tailwind } from "react-email";
 
+// Email clients can't resolve relative asset paths, so the ops badge has to be
+// served from an absolute URL. Marketing is the canonical public host for
+// brand assets; fall back to the saas URL if marketing isn't configured.
+const badgeHost =
+	process.env.NEXT_PUBLIC_MARKETING_URL ?? process.env.NEXT_PUBLIC_SAAS_URL;
+const badgeSrc = badgeHost ? `${badgeHost}/brand/virn-ops-logo.png` : undefined;
+
 export default function Wrapper({ children }: PropsWithChildren) {
 	return (
 		<Tailwind
@@ -67,7 +74,7 @@ export default function Wrapper({ children }: PropsWithChildren) {
 				</Head>
 				<Section className="p-4 bg-background">
 					<Container className="p-6 rounded-lg bg-card text-card-foreground">
-						<Logo />
+						<Logo badgeSrc={badgeSrc} />
 						{children}
 					</Container>
 				</Section>
