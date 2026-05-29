@@ -27,12 +27,15 @@ import { deleteStepProc } from "./procedures/delete-step";
 import { deleteWorkflowRoleProc } from "./procedures/delete-workflow-role";
 import { discardDraftProc } from "./procedures/discard-draft";
 import { editPublishedProc } from "./procedures/edit-published";
+import { getMyReadStatusProc } from "./procedures/get-my-read-status";
 import { getVersionBundleProc } from "./procedures/get-version-bundle";
 import { getWorkflowProc } from "./procedures/get-workflow";
 import { listForEntityProc } from "./procedures/list-for-entity";
 import { listForReviewProc } from "./procedures/list-for-review";
+import { listReadReceiptsProc } from "./procedures/list-read-receipts";
 import { listWorkflowRolesProc } from "./procedures/list-workflow-roles";
 import { listWorkflowsProc } from "./procedures/list-workflows";
+import { markAsReadProc } from "./procedures/mark-as-read";
 import { publishVersionProc } from "./procedures/publish-version";
 import { removeStepDependencyProc } from "./procedures/remove-step-dependency";
 import { reorderStepsProc } from "./procedures/reorder-steps";
@@ -90,4 +93,9 @@ export const workflowsRouter = {
 	createRole: createWorkflowRoleProc,
 	updateRole: updateWorkflowRoleProc,
 	deleteRole: deleteWorkflowRoleProc,
+
+	// Phase 10 / v1.5c -- read receipts (PRD §6.4)
+	markAsRead: markAsReadProc,
+	getMyReadStatus: getMyReadStatusProc,
+	listReadReceipts: listReadReceiptsProc,
 };
