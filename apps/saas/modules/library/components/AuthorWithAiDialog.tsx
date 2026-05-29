@@ -209,7 +209,7 @@ export function AuthorWithAiDialog({
 
 						<details className="text-sm">
 							<summary className="cursor-pointer font-medium text-foreground/70 hover:text-foreground select-none">
-								Paste an existing SOP, doc, or transcript{" "}
+								Paste an SOP, doc, or Tango/Scribe export{" "}
 								<span className="text-foreground/50 font-normal">(optional)</span>
 							</summary>
 							<div className="mt-2">
@@ -217,12 +217,19 @@ export function AuthorWithAiDialog({
 									id="ai-source"
 									value={sourceText}
 									onChange={(e) => setSourceText(e.target.value)}
-									placeholder="Paste source content here. The AI will use it as the structural source of truth; your request above clarifies scope."
+									placeholder="Paste markdown, plain text, or a Tango/Scribe export. The AI uses this as the structural source of truth; your request above clarifies scope."
 									maxLength={MAX_SOURCE_CHARS}
 									rows={6}
 									disabled={authorMutation.isPending}
 								/>
-								<p className="text-[11px] text-foreground/50 mt-1.5 text-right">
+								<p className="text-[11px] text-foreground/50 mt-1.5 leading-relaxed">
+									Tip: Tango / Scribe / Loom Doc / Notion exports work
+									well. Export to markdown from the source tool, paste
+									here, then write a short prompt above to clarify scope
+									(e.g. &quot;build this as a turnover SOP, drop the
+									sign-off step&quot;).
+								</p>
+								<p className="text-[11px] text-foreground/50 mt-1 text-right">
 									{sourceText.length} / {MAX_SOURCE_CHARS}
 								</p>
 							</div>
