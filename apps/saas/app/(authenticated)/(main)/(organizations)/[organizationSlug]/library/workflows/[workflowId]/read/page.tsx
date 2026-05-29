@@ -31,11 +31,20 @@ export const metadata = { title: "Workflow (Read)" };
 
 export default async function WorkflowReadPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ organizationSlug: string; workflowId: string }>;
+	searchParams: Promise<{ runId?: string | string[] }>;
 }) {
 	const { organizationSlug, workflowId } = await params;
+	const { runId: runIdRaw } = await searchParams;
 	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.sop);
+
+	// R5 cont. -- when ?runId is present (typically from clicking an Active Run
+	// card), the Read view's right column flips from the generic flowchart to a
+	// per-run activity timeline. We normalize the param here so the client
+	// component receives a clean `string | null`.
+	const runId = typeof runIdRaw === "string" && runIdRaw.length > 0 ? runIdRaw : null;
 
 	return (
 		<div className="h-full min-h-0 p-4">
@@ -43,6 +52,7 @@ export default async function WorkflowReadPage({
 				workflowId={workflowId}
 				organizationSlug={organizationSlug}
 				isAdminOrOwner={snapshot.isAdminSuperset}
+				runId={runId}
 			/>
 		</div>
 	);

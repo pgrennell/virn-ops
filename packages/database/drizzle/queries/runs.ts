@@ -26,6 +26,7 @@ import {
 	runStepAssignee,
 	step,
 	stepDependency,
+	user,
 	workflow,
 	type fieldType as fieldTypeEnum,
 } from "../schema/postgres";
@@ -1077,6 +1078,78 @@ export async function writeAuditAndActivity(
 			data: input.activityData,
 		}),
 	]);
+}
+
+// ---------------------------------------------------------------------------
+// Activity timeline reads (Phase 10 / v1.5c R5 cont. -- the Read view's
+// per-run timeline column when opened with ?runId=)
+// ---------------------------------------------------------------------------
+
+/** One row in the per-run timeline rendered by ReadView. Strictly the columns
+ * the UI reads -- the JSON `data` payload is passed through verbatim because
+ * pack-defined verbs may extend the schema (ARCHITECTURE.md §7). */
+export interface RunActivityRow {
+	id: string;
+	verb: string;
+	actorKind: "user" | "guest" | "agent" | "vendor";
+	actorUserId: string | null;
+	actorUserName: string | null;
+	actorParticipantId: string | null;
+	crossProductOrigin: string | null;
+	data: Record<string, unknown> | null;
+	createdAt: Date;
+}
+
+/** Fetch the activity timeline for one run. Org-scoped (Invariant #1) and
+ * pinned to `entity_type='run'`. Ordered oldest-first so the timeline reads
+ * top-to-bottom: launch event at the top, latest event at the bottom.
+ *
+ * The actor's display name is left-joined from `user` (NULL when the actor is
+ * a guest / agent / vendor or when the user has been deleted -- the schema
+ * sets actor_user_id to NULL on user delete). Callers that need richer actor
+ * resolution (e.g. agent name, vendor contact name) join through
+ * actor_participant_id -- that lives in a separate query so the timeline
+ * read stays cheap. */
+export async function listActivityForRun(
+	organizationId: string,
+	runId: string,
+	options?: { limit?: number },
+): Promise<RunActivityRow[]> {
+	const limit = options?.limit ?? 200;
+	const rows = await db
+		.select({
+			id: activityEvent.id,
+			verb: activityEvent.verb,
+			actorKind: activityEvent.actorKind,
+			actorUserId: activityEvent.actorUserId,
+			actorUserName: user.name,
+			actorParticipantId: activityEvent.actorParticipantId,
+			crossProductOrigin: activityEvent.crossProductOrigin,
+			data: activityEvent.data,
+			createdAt: activityEvent.createdAt,
+		})
+		.from(activityEvent)
+		.leftJoin(user, eq(user.id, activityEvent.actorUserId))
+		.where(
+			and(
+				eq(activityEvent.organizationId, organizationId),
+				eq(activityEvent.entityType, "run"),
+				eq(activityEvent.entityId, runId),
+			),
+		)
+		.orderBy(activityEvent.createdAt)
+		.limit(limit);
+	return rows.map((r) => ({
+		id: r.id,
+		verb: r.verb,
+		actorKind: r.actorKind,
+		actorUserId: r.actorUserId,
+		actorUserName: r.actorUserName,
+		actorParticipantId: r.actorParticipantId,
+		crossProductOrigin: r.crossProductOrigin,
+		data: r.data as Record<string, unknown> | null,
+		createdAt: r.createdAt,
+	}));
 }
 
 // ---------------------------------------------------------------------------

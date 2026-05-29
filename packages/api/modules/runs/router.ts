@@ -5,6 +5,7 @@ import { getRunProc } from "./procedures/get-run";
 import { getRunForGuestProc } from "./procedures/get-run-for-guest";
 import { issueParticipantTokenProc } from "./procedures/issue-participant-token";
 import { launchRunProc } from "./procedures/launch-run";
+import { listActivityProc } from "./procedures/list-activity";
 import { listActiveRunsProc } from "./procedures/list-active-runs";
 import { listMyTasksProc } from "./procedures/list-my-tasks";
 import { revokeParticipantTokenProc } from "./procedures/revoke-participant-token";
@@ -21,6 +22,9 @@ export const runsRouter = {
 	completeStep: completeStepProc,
 	listMyTasks: listMyTasksProc,
 	listActiveRuns: listActiveRunsProc,
+	// Phase 10 / v1.5c (PRD §6.4 / R5 cont.) -- per-run activity timeline
+	// rendered in the Read view's right column when opened with ?runId=.
+	listActivity: listActivityProc,
 	getHomeSummary: getHomeSummaryProc,
 	// Phase 8 step 5: admin-triggered SLA sweep for the active org. Vercel Cron
 	// (apps/saas/app/api/cron/sla-sweep) handles the scheduled platform-wide sweep;

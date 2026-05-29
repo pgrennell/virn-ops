@@ -36,6 +36,7 @@ import { BookOpen, CheckCircle2, Eye, Pencil, Sparkles } from "lucide-react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
+import { RunTimeline } from "./RunTimeline";
 import {
 	WorkflowFlowchart,
 	type FlowchartSection,
@@ -49,12 +50,18 @@ interface ReadViewProps {
 	/** Admin/owner sees the read-receipt count + an "Edit" affordance back
 	 * to the Author view. */
 	isAdminOrOwner: boolean;
+	/** Phase 10 / v1.5c (R5 cont.) -- when set, the right column flips from
+	 * the generic flowchart to a per-run activity timeline. Comes from the
+	 * `?runId=` search param on the page (typically linked from an Active
+	 * Run card). `null` means no run context; show the flowchart. */
+	runId?: string | null;
 }
 
 export function ReadView({
 	workflowId,
 	organizationSlug,
 	isAdminOrOwner,
+	runId,
 }: ReadViewProps) {
 	const workflowQuery = useQuery(
 		orpc.workflows.get.queryOptions({ input: { workflowId } }),
@@ -108,6 +115,7 @@ export function ReadView({
 			workflowVersionId={latestPublished.id}
 			organizationSlug={organizationSlug}
 			isAdminOrOwner={isAdminOrOwner}
+			runId={runId ?? null}
 		/>
 	);
 }
@@ -126,11 +134,13 @@ function ReadInner({
 	workflowVersionId,
 	organizationSlug,
 	isAdminOrOwner,
+	runId,
 }: {
 	workflow: WorkflowReadHeader;
 	workflowVersionId: string;
 	organizationSlug: string;
 	isAdminOrOwner: boolean;
+	runId: string | null;
 }) {
 	const queryClient = useQueryClient();
 
@@ -347,11 +357,15 @@ function ReadInner({
 				    keep the markdown legible on phone widths. Height is fixed so
 				    React Flow's auto-fitView has a viewport to fit into. */}
 				<aside className="lg:sticky lg:top-4 lg:self-start h-128">
-					<WorkflowFlowchart
-						sections={flowSections}
-						steps={flowSteps}
-						onSelectStep={handleSelectStep}
-					/>
+					{runId !== null ? (
+						<RunTimeline runId={runId} />
+					) : (
+						<WorkflowFlowchart
+							sections={flowSections}
+							steps={flowSteps}
+							onSelectStep={handleSelectStep}
+						/>
+					)}
 				</aside>
 			</div>
 
