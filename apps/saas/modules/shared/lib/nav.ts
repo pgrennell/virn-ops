@@ -17,6 +17,16 @@ export const NAV_AREAS = {
 	library: "library",
 	templates: "templates",
 	automations: "automations",
+	// Read (Phase 10 / v1.5c -- reader-facing SOP surface, PRD §6.4).
+	// Distinct from `library` because:
+	//   - `library` is the authoring index: it lists drafts + in-review + all
+	//     workflow states, gated to author-grade roles (builder/admin/owner).
+	//   - `sop` is the readers' index: it lists ONLY published workflows,
+	//     gated to everyone with org membership. Operators and reviewers
+	//     need to read SOPs but should not see authoring noise (drafts /
+	//     review state) on a workflow that hasn't been released yet.
+	// /sop, /[id]/read, and the canonical /[id] redirect all gate on this.
+	sop: "sop",
 	// Understand
 	reports: "reports",
 	// Admin
@@ -144,6 +154,20 @@ export const NAV_AREA_DEFINITIONS: Record<NavArea, NavAreaDefinition> = {
 		capability: CAPABILITIES.automationRules,
 		phase: "now",
 	},
+	// Phase 10 / v1.5c (PRD §6.4) -- reader-facing SOP surface. All org members
+	// can browse + read published SOPs; operators are the primary audience.
+	// Authoring is still gated through `library`, which excludes operators.
+	[NAV_AREAS.sop]: {
+		area: NAV_AREAS.sop,
+		allowedRoles: [
+			ROLES.operator,
+			ROLES.builder,
+			ROLES.reviewer,
+			ROLES.admin,
+			ROLES.owner,
+		],
+		phase: "now",
+	},
 	// Understand
 	[NAV_AREAS.reports]: {
 		area: NAV_AREAS.reports,
@@ -236,6 +260,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 			{ area: NAV_AREAS.home, segment: "home", icon: "Home", label: "Home" },
 			{ area: NAV_AREAS.myWork, segment: "my-work", icon: "CheckSquare", label: "My work" },
 			{ area: NAV_AREAS.runs, segment: "runs", icon: "Play", label: "Runs" },
+			{ area: NAV_AREAS.sop, segment: "sop", icon: "BookOpen", label: "SOPs" },
 		],
 	},
 	{

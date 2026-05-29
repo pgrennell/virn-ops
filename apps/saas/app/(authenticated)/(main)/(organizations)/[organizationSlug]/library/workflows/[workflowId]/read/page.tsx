@@ -12,11 +12,15 @@
 // empty state pointing back to the builder.
 //
 // Permission gating:
-//   - assertCanSee(NAV_AREAS.library) -- same gate as the builder. The Read
-//     view is part of the library surface; cross-org or no-library-access
-//     users get 404.
-//   - All org members see the Read view (no admin restriction).
-//     `mark-as-read` is open to all members per PRD §6.4 (passive signal).
+//   - assertCanSee(NAV_AREAS.sop) -- the reader-grade gate. Operators,
+//     builders, reviewers, admins, and owners all pass; cross-org access
+//     refuses with the standard not-found shape.
+//     (The original gating used NAV_AREAS.library, which excludes
+//     operators and locked out the very audience the Read view was built
+//     for -- Antigravity REPORT 2026-05-29 §4.)
+//   - All org members can mark-as-read per PRD §6.4 (passive signal).
+//   - Admin/owner-only affordances (Edit toggle, reader count) are
+//     handled client-side via the `isAdminOrOwner` prop below.
 
 import { ReadView } from "@builder/components/ReadView";
 import { assertCanSee } from "@shared/lib/gating-server";
@@ -31,7 +35,7 @@ export default async function WorkflowReadPage({
 	params: Promise<{ organizationSlug: string; workflowId: string }>;
 }) {
 	const { organizationSlug, workflowId } = await params;
-	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.library);
+	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.sop);
 
 	return (
 		<div className="h-full min-h-0 p-4">

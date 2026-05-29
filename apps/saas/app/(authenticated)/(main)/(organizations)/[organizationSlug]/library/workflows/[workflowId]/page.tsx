@@ -25,7 +25,12 @@ export default async function WorkflowDetailRedirectPage({
 	const { organizationSlug, workflowId } = await params;
 	const { view } = await searchParams;
 
-	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.library);
+	// Gate on NAV_AREAS.sop (the wider, reader-grade gate) -- the canonical
+	// detail URL is the universal entry point. Admins still reach /builder
+	// because the resolver redirects them there, and /builder independently
+	// re-asserts NAV_AREAS.library. Operators redirect to /read, which
+	// shares this same `sop` gate. (Antigravity REPORT 2026-05-29 §4.)
+	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.sop);
 
 	const { redirectTo } = resolveWorkflowView({
 		organizationSlug,

@@ -23,9 +23,13 @@ export default async function SopIndexPage({
 	params: Promise<{ organizationSlug: string }>;
 }) {
 	const { organizationSlug } = await params;
-	// Same gating as /library -- the readers' index is a sibling view of the
-	// authors' index, not a separately-gated surface.
-	await assertCanSee(organizationSlug, NAV_AREAS.library);
+	// Gate on NAV_AREAS.sop, NOT NAV_AREAS.library. The original gating chose
+	// `library` for symmetry with the authors' index, but `library` excludes
+	// operators -- which 404s the very audience this surface is built for
+	// (Antigravity REPORT 2026-05-29 §4). `sop` widens the allow-list to
+	// every org member while leaving `library` (and its drafts/in-review
+	// visibility) author-only.
+	await assertCanSee(organizationSlug, NAV_AREAS.sop);
 
 	return (
 		<div className="h-full min-h-0 p-4">
