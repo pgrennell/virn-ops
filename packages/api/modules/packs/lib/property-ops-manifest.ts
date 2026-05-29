@@ -1552,9 +1552,362 @@ export const VENDOR_ONBOARDING_WORKFLOW: WorkflowSeed = {
 	],
 };
 
+// ---------------------------------------------------------------------------
+// Workflow template: Tenant Onboarding (Phase 17e)
+// ---------------------------------------------------------------------------
+//
+// One workflow serves both LTR move-in AND STR guest pre-arrival via a
+// `tenancy_type` kickoff selector. Most steps apply to both modes; a few
+// are marked `isRequired: false` so the operator skips them when the
+// tenancy_type doesn't apply (e.g. STR guests don't sign a residential
+// lease; LTR move-ins don't need check-in/check-out timestamps).
+//
+// The PM judgment is the gate today; when Phase 6 visibility rules ship,
+// the optional steps auto-show/hide based on tenancy_type. Until then,
+// the step descriptions explicitly call out when each step is or isn't
+// applicable.
+//
+// Stop-task on the final filing gate ensures the onboarding record is
+// complete + filed before the run is marked done.
+
+export const TENANT_ONBOARDING_WORKFLOW: WorkflowSeed = {
+	slug: "tenant-onboarding",
+	title: "Tenant Onboarding",
+	description:
+		"Bring a new tenant or guest in. One workflow serves both long-term residential move-in (LTR) and short-term guest pre-arrival (STR) via the tenancy_type kickoff selector. Covers pre-arrival prep, documents + payment, key handoff, orientation, and post-arrival check-in. Stop-task on the final filing gate so the onboarding record is complete before the run closes.",
+	type: "procedure",
+	kickoffFields: [
+		{
+			key: "property_name",
+			label: "Property name",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "property_address",
+			label: "Property address",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "unit_label",
+			label: "Unit / room label",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "tenancy_type",
+			label: "Tenancy type",
+			fieldType: "select",
+			isRequired: true,
+			config: {
+				options: [
+					{
+						value: "long_term_lease",
+						label: "Long-term residential lease (LTR)",
+					},
+					{
+						value: "short_term_guest",
+						label: "Short-term guest (STR)",
+					},
+					{
+						value: "corporate_furnished",
+						label: "Corporate / furnished mid-term (30+ days)",
+					},
+				],
+			},
+		},
+		{
+			key: "tenant_display_name",
+			label: "Tenant / guest name",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "lease_id",
+			label: "Lease / booking reference",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "move_in_date",
+			label: "Move-in / check-in date",
+			fieldType: "date",
+			isRequired: true,
+		},
+		{
+			key: "lease_term_months",
+			label: "Lease term (months, LTR only)",
+			fieldType: "number",
+			isRequired: false,
+		},
+		{
+			key: "monthly_rent_usd",
+			label: "Monthly rent / nightly rate (USD)",
+			fieldType: "number",
+			isRequired: false,
+		},
+		{
+			key: "security_deposit_usd",
+			label: "Security deposit (USD, LTR only)",
+			fieldType: "number",
+			isRequired: false,
+		},
+		{
+			key: "party_size",
+			label: "Party size (STR only)",
+			fieldType: "number",
+			isRequired: false,
+		},
+		{
+			key: "pet_disclosed",
+			label: "Pet disclosed?",
+			fieldType: "select",
+			isRequired: false,
+			config: {
+				options: [
+					{ value: "no", label: "No" },
+					{ value: "yes_approved", label: "Yes — approved" },
+					{ value: "yes_pending", label: "Yes — pending review" },
+					{ value: "not_disclosed", label: "Not disclosed (LTR concern)" },
+				],
+			},
+		},
+		{
+			key: "special_accommodations",
+			label: "Special accommodations / requests",
+			fieldType: "textarea",
+			isRequired: false,
+		},
+	],
+	sections: [
+		{
+			manifestKey: "sec-prep",
+			title: "Pre-arrival prep",
+			steps: [
+				{
+					manifestKey: "step-confirm-details",
+					title: "Confirm lease / booking details",
+					description:
+						"Pull the lease (LTR) or booking record (STR) and verify: dates, rate, occupants, pets, parking, any special accommodations. Reconcile against the kickoff data -- mismatches are common when intake came in via multiple channels.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-schedule-walkthrough",
+					title: "Schedule move-in walkthrough (LTR) OR confirm cleaning complete (STR)",
+					description:
+						"LTR: schedule the move-in walkthrough with the tenant -- ideally same day as the lease starts. STR: confirm the turnover from the previous guest is fully complete (cleaning, inspection, restock) -- block the guest from arriving early if anything's outstanding.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-prepare-welcome",
+					title: "Prepare welcome packet",
+					description:
+						"LTR: keys, parking pass, building access fobs, building rules summary, emergency contact card, WiFi credentials, vendor contact info, lease addenda. STR: keys (or smart-lock code timing), WiFi credentials, house rules, local recommendations, emergency contact card, departure instructions.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "welcome_packet_items_pending",
+							label: "Welcome packet items still pending",
+							fieldType: "textarea",
+							isRequired: false,
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-documents",
+			title: "Documents + payment",
+			steps: [
+				{
+					manifestKey: "step-verify-payment",
+					title: "Verify deposit + first payment received",
+					description:
+						"LTR: confirm security deposit + first month's rent (or pro-rated first month) cleared. STR: confirm the booking payment cleared, including any cleaning fees and taxes. Block proceeding to key handoff until payment is verified -- post-handoff collection is painful.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "payment_verified_at",
+							label: "Payment verified (date)",
+							fieldType: "date",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-lease-signed",
+					title: "Lease signed by all parties",
+					description:
+						"LTR: verify the lease is signed by all listed tenants AND the property owner / management entity, with all addenda (pet, parking, smoking, HOA rules). STR: skip -- short-term bookings are governed by the platform's terms + house rules acknowledgment.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+					fields: [
+						{
+							key: "lease_attachment",
+							label: "Fully-executed lease",
+							fieldType: "file",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-renters-insurance",
+					title: "Verify renters insurance (LTR optional)",
+					description:
+						"If the lease requires renters insurance, confirm the tenant has a policy listing the management entity as an additional interested party. Cap the move-in if it's a strict requirement; defer + remind if it's a soft-requirement carrying a deadline. Skip for STR -- short-term guests don't carry renters insurance.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-handoff",
+			title: "Move-in / check-in",
+			steps: [
+				{
+					manifestKey: "step-move-in-inspection",
+					title: "Move-in inspection (LTR) / Cleaning acceptance (STR)",
+					description:
+						"LTR: walk the unit with the tenant. Document existing condition with photos for every room -- this is the baseline for the eventual move-out inspection. Have the tenant initial each room or sign the inspection form. STR: guest doesn't typically participate in an inspection; instead, confirm the post-cleaning inspection from Phase 17a's STR turnover ran clean.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "move_in_inspection_photos",
+							label: "Move-in inspection photos",
+							fieldType: "file",
+							isRequired: false,
+							config: { multiple: true },
+						},
+						{
+							key: "tenant_initialed_inspection",
+							label: "Tenant initialed inspection form (LTR)",
+							fieldType: "select",
+							isRequired: false,
+							config: {
+								options: [
+									{ value: "yes", label: "Yes" },
+									{ value: "no", label: "No — flagged for follow-up" },
+									{ value: "na", label: "N/A (STR)" },
+								],
+							},
+						},
+					],
+				},
+				{
+					manifestKey: "step-welcome-delivered",
+					title: "Welcome package delivered",
+					description:
+						"Hand off the welcome packet (LTR: at the walkthrough; STR: leave in the unit or send via the booking platform message). Confirm the tenant / guest knows where everything is and how to reach you for issues.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-key-handoff",
+					title: "Key / smart-lock handoff",
+					description:
+						"LTR: physical keys handed over + tenant signs receipt. If the property has a smart lock, also walk them through changing the code to one they choose. STR: smart-lock code window timed to check-in/check-out per the booking; verify the code rotated correctly + the guest received it via the platform.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-building-access",
+					title: "Building access setup (LTR)",
+					description:
+						"For multi-unit buildings: program the tenant's key fob / building access card, share the gate / garage code, register them with building management or HOA if required, set up mail key access. Skip entirely for STR or single-family LTR rentals.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-orientation",
+			title: "Orientation",
+			steps: [
+				{
+					manifestKey: "step-house-rules",
+					title: "House rules + emergency contacts review",
+					description:
+						"Walk through (or send a recap of): quiet hours, smoking policy, pets, guests, trash pickup days, recycling rules, parking rules, what to do if the power goes out, what to do in a fire / gas leak, after-hours emergency contact.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-vendor-contacts",
+					title: "Vendor contact card (LTR)",
+					description:
+						"Provide the LTR tenant with the maintenance request channel (portal URL, phone number, or email). For minor self-fix items (changing furnace filters, GFCI reset), give them basic guidance. STR guests should NOT have direct vendor contact -- they route through the PM.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+				{
+					manifestKey: "step-amenity-orientation",
+					title: "Parking + amenity orientation",
+					description:
+						"Pool / gym / laundry / clubhouse access codes. Pool hours, gym etiquette, laundry room operation. Parking spot location and any visitor parking rules. STR: applies if the unit has shared amenities; skip if standalone.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-followup",
+			title: "Post-arrival follow-up",
+			steps: [
+				{
+					manifestKey: "step-24h-check",
+					title: "24-hour check-in",
+					description:
+						"Within 24 hours of move-in / check-in, ping the tenant / guest: anything not working? Any questions on the rules or amenities? Catches the small fixes early and signals attentive management. LTR + STR both benefit; STR especially because reviews are heavily weighted by first-impressions.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 1,
+				},
+				{
+					manifestKey: "step-30-day-check",
+					title: "30-day check-in (LTR)",
+					description:
+						"At 30 days, schedule a brief check-in: any issues with the unit, any neighbor concerns, any rent-payment changes coming up. For STRs that converted to extended stays (corporate / mid-term), the same applies. Skip for short stays under 30 days.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 30,
+					isRequired: false,
+				},
+				{
+					manifestKey: "step-file-record",
+					title: "File completed onboarding record",
+					description:
+						"Compile: signed lease (LTR) or booking confirmation (STR), move-in inspection photos + form, payment verification, all welcome-packet acknowledgments, any pet / vehicle / accommodation addenda. File under the tenant or booking reference for the eventual move-out / departure cross-reference.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-close",
+					title: "Mark onboarding complete",
+					description:
+						"Final gate. The onboarding run closes only when the record is filed -- the operator can't slip past the record-keeping by completing this step early.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isStopTask: true,
+					dependsOn: ["step-file-record"],
+				},
+			],
+		},
+	],
+};
+
 export const PROPERTY_OPS_WORKFLOWS: readonly WorkflowSeed[] = [
 	STR_TURNOVER_WORKFLOW,
 	PROPERTY_INSPECTION_WORKFLOW,
 	MAINTENANCE_ROUTING_WORKFLOW,
 	VENDOR_ONBOARDING_WORKFLOW,
+	TENANT_ONBOARDING_WORKFLOW,
 ];
