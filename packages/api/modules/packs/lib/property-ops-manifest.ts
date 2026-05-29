@@ -150,6 +150,12 @@ export interface StepSeed {
 	/** manifestKeys of steps this one stop-task-depends on (must complete first). */
 	dependsOn?: readonly string[];
 	fields?: readonly FieldSeed[];
+	/** Whether the step blocks run completion. Defaults to `true` (matching
+	 * `step.isRequired` default). Set `false` for steps that are skipped when
+	 * the precondition doesn't apply (e.g. "notify tenant" when the unit is
+	 * vacant). Until conditional visibility ships (Phase 6), `isRequired: false`
+	 * is the operator's "skip when appropriate" signal. */
+	isRequired?: boolean;
 }
 
 export interface SectionSeed {
@@ -786,7 +792,396 @@ export const PROPERTY_INSPECTION_WORKFLOW: WorkflowSeed = {
 	],
 };
 
+// ---------------------------------------------------------------------------
+// Workflow template: Maintenance Routing (Phase 17c)
+// ---------------------------------------------------------------------------
+//
+// End-to-end work-order flow: receive request -> triage -> dispatch to vendor
+// -> verify completion -> close out. Designed to handle the common case
+// (tenant reports leak, PM routes to plumber, plumber fixes + invoices, PM
+// closes WO) while leaving room for the optional owner-approval gate when
+// cost exceeds threshold.
+//
+// Conditional visibility is deferred to Phase 6, so the owner-approval step
+// is `isRequired: false` rather than branched -- operators skip it when
+// not needed. When Phase 6 ships visibility rules, that step becomes
+// hiddenByDefault + revealed when severity in {emergency, urgent} OR cost
+// exceeds a configurable threshold.
+
+export const MAINTENANCE_ROUTING_WORKFLOW: WorkflowSeed = {
+	slug: "maintenance-routing",
+	title: "Maintenance Routing",
+	description:
+		"End-to-end work-order flow: receive a maintenance request, triage severity + category, dispatch to the right vendor, verify completion, and close out with invoice reconciliation. Stop-task on the final close gate ensures the record is filed before the WO can be marked closed.",
+	type: "procedure",
+	kickoffFields: [
+		{
+			key: "property_name",
+			label: "Property name",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "property_address",
+			label: "Property address",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "unit_label",
+			label: "Unit / room label",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "tenant_display_name",
+			label: "Reporting tenant / guest",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "lease_id",
+			label: "Lease / booking reference",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "request_description",
+			label: "Issue description",
+			fieldType: "textarea",
+			isRequired: true,
+		},
+		{
+			key: "severity",
+			label: "Severity",
+			fieldType: "select",
+			isRequired: true,
+			config: {
+				options: [
+					{
+						value: "emergency",
+						label: "Emergency (life safety / habitability — same-day)",
+					},
+					{
+						value: "urgent",
+						label: "Urgent (no hot water, AC out — 24-48h)",
+					},
+					{
+						value: "standard",
+						label: "Standard (within a week)",
+					},
+					{
+						value: "non_urgent",
+						label: "Non-urgent (next scheduled visit)",
+					},
+				],
+			},
+		},
+		{
+			key: "request_source",
+			label: "Source of request",
+			fieldType: "select",
+			isRequired: false,
+			config: {
+				options: [
+					{ value: "tenant_self_serve", label: "Tenant self-service portal" },
+					{ value: "phone_call", label: "Phone call / text" },
+					{ value: "inspection_finding", label: "Inspection finding" },
+					{ value: "pm_observed", label: "PM-observed during walk-through" },
+					{ value: "owner_directed", label: "Owner-directed" },
+				],
+			},
+		},
+		{
+			key: "access_instructions",
+			label: "Access instructions",
+			fieldType: "textarea",
+			isRequired: false,
+		},
+		{
+			key: "photo_r2_keys",
+			label: "Issue photos",
+			fieldType: "file",
+			isRequired: false,
+			config: { multiple: true },
+		},
+	],
+	sections: [
+		{
+			manifestKey: "sec-triage",
+			title: "Triage",
+			steps: [
+				{
+					manifestKey: "step-acknowledge",
+					title: "Acknowledge request",
+					description:
+						"Log the request receipt time. Send a tenant acknowledgement ('we received your request, here's the next step') if the request came in through self-service or phone. Set the internal SLA based on severity: emergency = same-day, urgent = 48h, standard = 1 week, non-urgent = next scheduled visit.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "tenant_acknowledged_at",
+							label: "Tenant acknowledged at",
+							fieldType: "date",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-classify",
+					title: "Classify vendor category",
+					description:
+						"Pick the vendor category that should handle this WO (pest-control / HVAC / plumbing / electrical / landscaping / cleaning / pool-spa / locksmith / appliance-repair / general-contractor). Drives the candidate vendor list in the next step.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "vendor_category",
+							label: "Vendor category",
+							fieldType: "select",
+							isRequired: true,
+							config: {
+								options: [
+									{ value: "pest-control", label: "Pest Control" },
+									{ value: "hvac", label: "HVAC" },
+									{ value: "plumbing", label: "Plumbing" },
+									{ value: "electrical", label: "Electrical" },
+									{ value: "landscaping", label: "Landscaping & Grounds" },
+									{ value: "cleaning", label: "Cleaning" },
+									{ value: "pool-spa", label: "Pool & Spa" },
+									{ value: "locksmith", label: "Locksmith" },
+									{
+										value: "appliance-repair",
+										label: "Appliance Repair",
+									},
+									{
+										value: "general-contractor",
+										label: "General Contractor",
+									},
+								],
+							},
+						},
+					],
+				},
+				{
+					manifestKey: "step-confirm-severity",
+					title: "Confirm severity",
+					description:
+						"Review the reporter-supplied severity in light of any photos or detail you have. Adjust if the reporter under- or over-stated (e.g. 'water everywhere' might be a slow drip, not a burst pipe). The confirmed severity drives owner-approval requirements + vendor SLA expectations.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "confirmed_severity",
+							label: "Confirmed severity",
+							fieldType: "select",
+							isRequired: true,
+							config: {
+								options: [
+									{ value: "emergency", label: "Emergency" },
+									{ value: "urgent", label: "Urgent" },
+									{ value: "standard", label: "Standard" },
+									{ value: "non_urgent", label: "Non-urgent" },
+								],
+							},
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-dispatch",
+			title: "Vendor selection + dispatch",
+			steps: [
+				{
+					manifestKey: "step-select-vendor",
+					title: "Select vendor + contact",
+					description:
+						"Pick from the preferred vendor list for the chosen category. For emergencies, check vendor on-call availability before selecting. For non-urgent: bundle with other open WOs at the same property if possible to reduce trip charges.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-send-wo",
+					title: "Send work order",
+					description:
+						"Issue the work order with scope, issue photos, severity, access instructions, and authorization cap. Include the lease/booking reference so the vendor can address any tenant questions correctly.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "authorization_cap_usd",
+							label: "Authorization cap (USD)",
+							fieldType: "number",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-confirm-accepted",
+					title: "Confirm vendor accepted",
+					description:
+						"Wait for vendor acknowledgement of the WO + ETA. Re-route to a different vendor if no response within the severity-appropriate window (15 minutes for emergencies, 4 hours for urgent, 24 hours for standard).",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-notify-tenant",
+					title: "Notify tenant of scheduling",
+					description:
+						"Tell the tenant when the vendor will arrive and what to expect (need access? pets need to be secured? water shutoff scheduled?). Skip when there's no tenant in residence (vacant unit, STR between guests).",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-work",
+			title: "Vendor work + verification",
+			steps: [
+				{
+					manifestKey: "step-arrival",
+					title: "Track on-site arrival",
+					description:
+						"Log when the vendor actually arrives. Compare to the promised ETA; flag for future-vendor-scoring if significantly late without notice.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "vendor_arrived_at",
+							label: "Vendor arrived at",
+							fieldType: "date",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-completion-notice",
+					title: "Receive completion notice",
+					description:
+						"Vendor reports work complete (via text, email, or vendor portal once Phase 17+ ships). Capture the work-performed summary + any deviations from the original scope.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "work_performed_summary",
+							label: "Work performed (vendor's summary)",
+							fieldType: "textarea",
+							isRequired: true,
+						},
+					],
+				},
+				{
+					manifestKey: "step-review-photos",
+					title: "Review completion photos",
+					description:
+						"Verify before/after photos demonstrate the issue is resolved. Required for any WO exceeding the inspection threshold OR any cosmetic/visible repair. Flag for revisit if photos are missing, blurry, or inconclusive.",
+					roleManifestKey: "inspector",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "completion_photos",
+							label: "Completion photos (before / after)",
+							fieldType: "file",
+							isRequired: false,
+							config: { multiple: true },
+						},
+					],
+				},
+				{
+					manifestKey: "step-tenant-confirm",
+					title: "Tenant follow-up confirmation",
+					description:
+						"Check with the tenant within 24 hours: is the issue actually resolved from their perspective? Catches the 'vendor fixed something but not what the tenant meant' miscommunication. Skip when the unit is vacant.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+					fields: [
+						{
+							key: "tenant_confirmation",
+							label: "Tenant confirmation",
+							fieldType: "select",
+							isRequired: false,
+							config: {
+								options: [
+									{ value: "resolved", label: "Resolved — tenant satisfied" },
+									{
+										value: "partial",
+										label: "Partial — additional work needed",
+									},
+									{
+										value: "not_resolved",
+										label: "Not resolved — re-open WO",
+									},
+									{ value: "vacant", label: "N/A — unit vacant" },
+								],
+							},
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-close",
+			title: "Close-out",
+			steps: [
+				{
+					manifestKey: "step-reconcile-invoice",
+					title: "Reconcile vendor invoice",
+					description:
+						"Match the vendor invoice against the WO scope + authorization cap. Flag any line items not pre-approved. Dispute with vendor before paying if the invoice exceeds authorization without prior change-order approval.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "invoice_total_usd",
+							label: "Invoice total (USD)",
+							fieldType: "number",
+							isRequired: false,
+						},
+						{
+							key: "invoice_attachment",
+							label: "Invoice attachment",
+							fieldType: "file",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-owner-approval",
+					title: "Owner notification + approval",
+					description:
+						"Required when the final cost exceeds the owner's standing-authorization threshold OR the work was non-emergency capital expenditure. Skip for routine repairs within the standing limit. (Phase 6 visibility rules will auto-reveal this step based on invoice total when shipped; today the operator includes/skips by judgment.)",
+					roleManifestKey: "owner",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+				{
+					manifestKey: "step-file-record",
+					title: "File work order record",
+					description:
+						"Compile the WO record: original request + photos, severity classification, vendor + invoice, completion photos, tenant confirmation, owner approval (if applicable). File under the property + the lease (if LTR). This is the durable record auditors and owners reference.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-close",
+					title: "Mark work order closed",
+					description:
+						"Final gate -- the WO is officially closed only when the record is filed. Blocks until the previous step completes so a hurried close can't bypass the record-keeping.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isStopTask: true,
+					dependsOn: ["step-file-record"],
+				},
+			],
+		},
+	],
+};
+
 export const PROPERTY_OPS_WORKFLOWS: readonly WorkflowSeed[] = [
 	STR_TURNOVER_WORKFLOW,
 	PROPERTY_INSPECTION_WORKFLOW,
+	MAINTENANCE_ROUTING_WORKFLOW,
 ];

@@ -212,6 +212,10 @@ async function installWorkflow(
 				type: "task",
 				title: stepSeed.title,
 				description: stepSeed.description,
+				// Default to required to match step.isRequired's schema default;
+				// pack manifests explicitly set false on legitimately-optional
+				// steps (e.g. "notify tenant" when the unit is vacant).
+				isRequired: stepSeed.isRequired ?? true,
 				isStopTask: stepSeed.isStopTask ?? false,
 				dueType: stepSeed.dueOffsetDays !== undefined ? "offset_from_start" : "none",
 				dueOffsetDays: stepSeed.dueOffsetDays ?? null,
