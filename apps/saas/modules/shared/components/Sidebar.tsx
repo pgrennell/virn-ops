@@ -222,8 +222,13 @@ export function Sidebar({ groups, homeHref, showOrgSwitcher = true }: SidebarPro
 					collapsed && "px-2 justify-center",
 				)}
 			>
-				<Link href={homeHref} className="block shrink-0" aria-label="Home">
-					<Logo withLabel={!collapsed} />
+				<Link
+					href={homeHref}
+					className="flex items-center shrink-0 leading-none"
+					aria-label="Virn Ops home"
+				>
+					<Logo withLabel={false} />
+					{!collapsed && <ProductWordmark className="ml-3" />}
 				</Link>
 				{!collapsed && (
 					<Button
@@ -278,8 +283,9 @@ export function MobileSidebar({
 }) {
 	return (
 		<div className="flex h-full flex-col">
-			<div className="px-4 py-4">
-				<Logo withLabel />
+			<div className="px-4 py-4 flex items-center leading-none">
+				<Logo withLabel={false} />
+				<ProductWordmark className="ml-3" />
 			</div>
 			{showOrgSwitcher && (
 				<div className="px-3">
@@ -293,5 +299,28 @@ export function MobileSidebar({
 				<UserMenu showUserName />
 			</div>
 		</div>
+	);
+}
+
+/** Saas-specific product wordmark rendered next to the shared Logo SVG.
+ *
+ * "Virn" stays neutral (default foreground, medium weight); "Ops" carries the
+ * disambiguating emphasis -- semibold + primary color -- so the reader's eye
+ * lands on the product half of the name at a glance. The sibling Virn PM app
+ * presumably uses an analogous mark with "PM" emphasized. Kept in this file
+ * (rather than promoted to packages/ui) because the Logo SVG remains shared
+ * generic placeholder branding while this label is per-product. */
+function ProductWordmark({ className }: { className?: string }) {
+	return (
+		<span
+			className={cn(
+				"text-lg tracking-tight flex items-baseline gap-1.5",
+				className,
+			)}
+			aria-label="Virn Ops"
+		>
+			<span className="font-medium text-foreground">Virn</span>
+			<span className="font-semibold text-primary">Ops</span>
+		</span>
 	);
 }
