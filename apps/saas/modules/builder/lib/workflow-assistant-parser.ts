@@ -170,6 +170,25 @@ export function parseAssistantPrompt(
 		return { kind: "no-target", reason: "Empty prompt." };
 	}
 
+	// 0. Intercept questions BEFORE any step-resolution branches.
+	//
+	// Bug surfaced by the 2026-05-29 Antigravity verification (REPORT.md
+	// §Recommend Amend): a question like "what's the difference between
+	// approval and one_off?" has no numeric / ordinal / quoted reference,
+	// so the implicit-step branch below would otherwise treat it as a
+	// refinement of the active step. Because the Builder opens with the
+	// first step selected by default, `input.activeStepId` is almost
+	// always populated -- meaning every question dispatched a real
+	// regenerateStep call instead of being refused. Intercepting at the
+	// top guarantees questions are unrouted regardless of selection state.
+	if (isLikelyQuestion(raw)) {
+		return {
+			kind: "unrouted",
+			reason:
+				"I can only help with step edits right now. Try a request like \"make step 3 terser\" or \"add a vendor field to step 5\".",
+		};
+	}
+
 	// 1. Quoted titles take highest precedence -- the operator typed an exact
 	// step name, so we match against the bundle's titles directly.
 	const quoted = extractQuotedTitles(raw);
@@ -229,16 +248,10 @@ export function parseAssistantPrompt(
 		}
 	}
 
-	// 5. If still no target -- distinguish "looks like a question" from "looks
-	// like an edit request without a step reference."
+	// 5. If still no target -- prompt looks like an edit request without a
+	// resolvable step reference. (Question routing already happened at step 0
+	// so we don't need to re-check here.)
 	if (!resolved) {
-		if (isLikelyQuestion(raw)) {
-			return {
-				kind: "unrouted",
-				reason:
-					"I can only help with step edits right now. Try a request like \"make step 3 terser\" or \"add a vendor field to step 5\".",
-			};
-		}
 		return {
 			kind: "no-target",
 			reason:

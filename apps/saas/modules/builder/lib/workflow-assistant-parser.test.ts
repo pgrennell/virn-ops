@@ -148,6 +148,34 @@ describe("parseAssistantPrompt -- refusals + edge cases", () => {
 		expect(result.kind).toBe("unrouted");
 	});
 
+	// Regression tests for the 2026-05-29 Antigravity-surfaced parser bug.
+	// Before the fix, questions with an active step set fell through to the
+	// implicit-active-step branch and dispatched real regenerateStep calls.
+	// The Builder defaults to a step being selected, so this was the common
+	// case -- not the edge case. See REPORT.md §Recommend Amend for the
+	// repro path.
+
+	it("question with an active step still routes to unrouted (regression: 2026-05-29)", () => {
+		// Pre-fix this returned `kind: 'structured'` with targetStepId='st_2'
+		// because activeStepId was set; the question slipped past the unrouted
+		// check.
+		const result = call(
+			"what's the difference between approval and one_off step types?",
+			"st_2",
+		);
+		expect(result.kind).toBe("unrouted");
+	});
+
+	it('"explain..." prompts with an active step still route to unrouted (regression)', () => {
+		const result = call("explain how due rules work", "st_1");
+		expect(result.kind).toBe("unrouted");
+	});
+
+	it("question ending with ? + active selection routes to unrouted regardless of active step (regression)", () => {
+		const result = call("how does offset_from_step resolve at launch?", "st_3");
+		expect(result.kind).toBe("unrouted");
+	});
+
 	it('returns "no-target" when no step reference resolves and no active step is set', () => {
 		const result = call("make it terser please", null);
 		expect(result.kind).toBe("no-target");
