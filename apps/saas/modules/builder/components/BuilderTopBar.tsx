@@ -11,10 +11,12 @@
 // without leaving the page.
 
 import { Button } from "@virn/ui/components/button";
+import { Switch } from "@virn/ui/components/switch";
 import { cn } from "@virn/ui";
 import {
 	CheckCircle2,
 	Eye,
+	Filter,
 	Pencil,
 	RotateCcw,
 	Send,
@@ -71,6 +73,18 @@ interface BuilderTopBarProps {
 	 * `agents.authorWorkflow`. The chip's title carries the model + date so a
 	 * hover reveals "claude-sonnet-4-6 · 2026-05-27" without crowding the header. */
 	aiAuthoring?: { model: string; createdAt: string | Date } | null;
+	/** Phase 9.5 R2 lift -- Enabled/Disabled toggle. Flips workflow.isActive.
+	 * Disabled workflows don't appear in launcher pickers and don't fire from
+	 * automation triggers (Phase 6 / 18). Operators stage workflows this way
+	 * before publishing exposure. */
+	isActive?: boolean;
+	toggleActivePending?: boolean;
+	onToggleActive?: (next: boolean) => void;
+	/** Phase 9.5 R2 lift -- Scope chip. Shows the workflow's current entity-set
+	 * scope ("All listings" when empty, "N scoped" when narrowed); clicking
+	 * routes through onConfigureWorkflow to the Scope panel (the picker still
+	 * lives there; the chip is just the visible-on-top-bar summary). */
+	entitySetIdsCount?: number;
 }
 
 export function BuilderTopBar({
@@ -100,6 +114,10 @@ export function BuilderTopBar({
 	sendBackToDraftPending,
 	onSendBackToDraft,
 	aiAuthoring,
+	isActive,
+	toggleActivePending,
+	onToggleActive,
+	entitySetIdsCount,
 }: BuilderTopBarProps) {
 	// Phase 9.5g -- choose which publish-area button(s) to render based on the
 	// concierge-review state machine. Flag off OR review_state is draft (flag off
@@ -123,6 +141,16 @@ export function BuilderTopBar({
 						status={versionStatus}
 						forkedFromVersionNumber={forkedFromVersionNumber}
 					/>
+					{/* Phase 9.5 R2 -- Scope chip. Visible-on-top-bar summary of the
+					    workflow's entity-set scope. Click routes to the existing
+					    Scope panel via onConfigureWorkflow (the picker lives there;
+					    this chip is just the at-a-glance indicator). */}
+					{typeof entitySetIdsCount === "number" && onConfigureWorkflow && (
+						<ScopeChip
+							entitySetIdsCount={entitySetIdsCount}
+							onClick={onConfigureWorkflow}
+						/>
+					)}
 					{inReviewBranch && (
 						<span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-indigo-100 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-300">
 							<Send className="size-3" /> In review
@@ -133,6 +161,31 @@ export function BuilderTopBar({
 			</div>
 
 			<div className="gap-2 flex items-center">
+				{/* Phase 9.5 R2 -- Enabled/Disabled toggle. Lives in the actions
+				    cluster because it's an operator decision (flipping the
+				    workflow's exposure), not a workflow attribute. The label
+				    sits to the left of the Switch and changes between "Enabled"
+				    and "Disabled" so the current state reads at a glance. */}
+				{typeof isActive === "boolean" && onToggleActive && (
+					<label
+						className="gap-2 flex items-center text-xs text-foreground/70 cursor-pointer select-none"
+						title={
+							isActive
+								? "Workflow is live -- visible in launchers; future automation triggers will fire."
+								: "Workflow is disabled -- hidden from launchers; automation triggers will skip it."
+						}
+					>
+						<Switch
+							checked={isActive}
+							onCheckedChange={onToggleActive}
+							disabled={toggleActivePending}
+							aria-label="Enable workflow"
+						/>
+						<span className="uppercase tracking-wide font-medium">
+							{isActive ? "Enabled" : "Disabled"}
+						</span>
+					</label>
+				)}
 				{onConfigureWorkflow && (
 					<Button
 						variant="ghost"
@@ -218,6 +271,33 @@ export function BuilderTopBar({
 				)}
 			</div>
 		</header>
+	);
+}
+
+function ScopeChip({
+	entitySetIdsCount,
+	onClick,
+}: {
+	entitySetIdsCount: number;
+	onClick: () => void;
+}) {
+	const label =
+		entitySetIdsCount === 0
+			? "All listings"
+			: `${entitySetIdsCount} scoped`;
+	const tooltip =
+		entitySetIdsCount === 0
+			? "Applies to all listings. Click to narrow to specific entity sets."
+			: `Scoped to ${entitySetIdsCount} entity set${entitySetIdsCount === 1 ? "" : "s"}. Click to edit.`;
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			title={tooltip}
+			className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-muted text-muted-foreground hover:bg-muted/70 transition-colors"
+		>
+			<Filter className="size-3" /> {label}
+		</button>
 	);
 }
 

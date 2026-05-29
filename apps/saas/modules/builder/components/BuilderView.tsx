@@ -126,6 +126,27 @@ export function BuilderView({
 	const submitForReviewMutation = useSubmitForReview();
 	const approveReviewMutation = useApproveReview();
 	const sendBackToDraftMutation = useSendBackToDraft();
+	// Phase 9.5 R2 -- Enabled/Disabled toggle. Single-field workflows.update;
+	// onSuccess refetches the workflow query so the top bar reflects the new
+	// state (and so downstream surfaces that read isActive stay consistent).
+	const toggleActiveMutation = useMutation({
+		...orpc.workflows.update.mutationOptions(),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({
+				queryKey: orpc.workflows.get.queryKey({ input: { workflowId } }),
+			});
+		},
+		onError: (err) =>
+			setTopLevelError(
+				err instanceof Error
+					? err.message
+					: "Couldn't change Enabled/Disabled state.",
+			),
+	});
+	const handleToggleActive = (next: boolean) => {
+		setTopLevelError(null);
+		toggleActiveMutation.mutate({ workflowId, isActive: next });
+	};
 
 	// Reconstruct the gating snapshot from the serialized props + derive the
 	// per-affordance palette gates the config forms read. Memoized so the gates
@@ -274,6 +295,7 @@ export function BuilderView({
 			workflowId={workflowId}
 			workflowTitle={workflowQuery.data.workflow.title}
 			workflowEntitySetIds={workflowQuery.data.workflow.entitySetIds ?? []}
+			workflowIsActive={workflowQuery.data.workflow.isActive ?? true}
 			workflowReviewState={workflowReviewState}
 			aiAuthoring={workflowQuery.data.aiAuthoring ?? null}
 			requireConciergeReview={requireConciergeReview}
@@ -297,6 +319,8 @@ export function BuilderView({
 			onApproveReview={handleApproveReview}
 			sendBackToDraftPending={sendBackToDraftMutation.isPending}
 			onSendBackToDraft={handleSendBackToDraft}
+			toggleActivePending={toggleActiveMutation.isPending}
+			onToggleActive={handleToggleActive}
 		/>
 	);
 }
@@ -312,6 +336,9 @@ interface BuilderInnerProps {
 	workflowTitle: string;
 	/** Current workflow-level entity-set scope (Phase 9.5e). Empty array = applies-to-all. */
 	workflowEntitySetIds: string[];
+	/** Phase 9.5 R2 -- current workflow.isActive value. Drives the Enabled/Disabled
+	 * switch state in the top bar. Default true mirrors the schema default. */
+	workflowIsActive: boolean;
 	/** Phase 9.5g (PRD §6.6) -- editorial review state. Drives top-bar Publish vs
 	 * Submit-for-review vs Approve+SendBack buttons. */
 	workflowReviewState: "draft" | "in_review" | "published" | "archived";
@@ -340,6 +367,9 @@ interface BuilderInnerProps {
 	onApproveReview: () => void;
 	sendBackToDraftPending: boolean;
 	onSendBackToDraft: () => void;
+	// Phase 9.5 R2 -- Enabled/Disabled toggle on the top bar.
+	toggleActivePending: boolean;
+	onToggleActive: (next: boolean) => void;
 }
 
 function BuilderInner({
@@ -347,6 +377,7 @@ function BuilderInner({
 	workflowId,
 	workflowTitle,
 	workflowEntitySetIds,
+	workflowIsActive,
 	workflowReviewState,
 	requireConciergeReview,
 	aiAuthoring,
@@ -370,6 +401,8 @@ function BuilderInner({
 	onApproveReview,
 	sendBackToDraftPending,
 	onSendBackToDraft,
+	toggleActivePending,
+	onToggleActive,
 }: BuilderInnerProps) {
 	// Mutation hooks (mount unconditionally; they no-op if not invoked).
 	const mutArgs = { versionId: bundle.version.id };
@@ -556,6 +589,10 @@ function BuilderInner({
 			sendBackToDraftPending={sendBackToDraftPending}
 			onSendBackToDraft={onSendBackToDraft}
 			aiAuthoring={aiAuthoring}
+			isActive={workflowIsActive}
+			toggleActivePending={toggleActivePending}
+			onToggleActive={onToggleActive}
+			entitySetIdsCount={workflowEntitySetIds.length}
 			topLevelError={topLevelError}
 		>
 			<div className="flex flex-1 min-h-0">
@@ -803,6 +840,12 @@ interface BuilderShellProps {
 	onSendBackToDraft?: () => void;
 	/** Phase 12.1 -- AI authoring provenance; pass-through to BuilderTopBar. */
 	aiAuthoring?: { model: string; createdAt: string | Date } | null;
+	/** Phase 9.5 R2 -- Enabled/Disabled toggle + Scope chip pass-throughs. All
+	 * optional so view-mode / preview shells (which don't write) can omit them. */
+	isActive?: boolean;
+	toggleActivePending?: boolean;
+	onToggleActive?: (next: boolean) => void;
+	entitySetIdsCount?: number;
 	topLevelError: string | null;
 	children: React.ReactNode;
 }
@@ -835,6 +878,10 @@ function BuilderShell({
 	sendBackToDraftPending,
 	onSendBackToDraft,
 	aiAuthoring,
+	isActive,
+	toggleActivePending,
+	onToggleActive,
+	entitySetIdsCount,
 	topLevelError,
 	children,
 }: BuilderShellProps) {
@@ -867,6 +914,10 @@ function BuilderShell({
 				sendBackToDraftPending={sendBackToDraftPending}
 				onSendBackToDraft={onSendBackToDraft}
 				aiAuthoring={aiAuthoring}
+				isActive={isActive}
+				toggleActivePending={toggleActivePending}
+				onToggleActive={onToggleActive}
+				entitySetIdsCount={entitySetIdsCount}
 			/>
 			{topLevelError && (
 				<div className="px-4 py-2">
