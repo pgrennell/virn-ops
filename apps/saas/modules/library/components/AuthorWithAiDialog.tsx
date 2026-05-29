@@ -59,6 +59,7 @@ export function AuthorWithAiDialog({
 	const [prompt, setPrompt] = useState("");
 	const [sourceText, setSourceText] = useState("");
 	const [entitySetHints, setEntitySetHints] = useState<Set<string>>(new Set());
+	const [templateHintId, setTemplateHintId] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [errorIssues, setErrorIssues] = useState<Array<{ path: string; message: string }>>(
 		[],
@@ -74,6 +75,16 @@ export function AuthorWithAiDialog({
 		enabled: open,
 	});
 
+	// Phase 12 follow-up (slice B) -- template hint dropdown. Lists the
+	// caller's published workflows so the user can say "start from this
+	// shape." Filtered client-side to executable types (procedure / form);
+	// documents / policies could be valid references too but most users
+	// reach for a procedure when seeding a procedure.
+	const workflowsQuery = useQuery({
+		...orpc.workflows.list.queryOptions({ input: {} }),
+		enabled: open,
+	});
+
 	const trimmedPrompt = prompt.trim();
 	const submitDisabled =
 		trimmedPrompt.length < MIN_PROMPT_CHARS || authorMutation.isPending;
@@ -82,6 +93,7 @@ export function AuthorWithAiDialog({
 		setPrompt("");
 		setSourceText("");
 		setEntitySetHints(new Set());
+		setTemplateHintId(null);
 		setErrorMessage(null);
 		setErrorIssues([]);
 		authorMutation.reset();
@@ -109,6 +121,7 @@ export function AuthorWithAiDialog({
 				sourceText: sourceText.trim().length > 0 ? sourceText.trim() : null,
 				entitySetHints:
 					entitySetHints.size > 0 ? Array.from(entitySetHints) : null,
+				templateHintId,
 			},
 			{
 				onSuccess: (result) => {
@@ -210,6 +223,33 @@ export function AuthorWithAiDialog({
 
 						<details className="text-sm">
 							<summary className="cursor-pointer font-medium text-foreground/70 hover:text-foreground select-none">
+								Start from a template{" "}
+								<span className="text-foreground/50 font-normal">(optional)</span>
+								{templateHintId !== null && (
+									<span className="ml-1.5 text-[10px] uppercase tracking-wider font-semibold text-primary">
+										picked
+									</span>
+								)}
+							</summary>
+							<div className="mt-2">
+								<TemplateHintPicker
+									workflows={workflowsQuery.data ?? []}
+									selected={templateHintId}
+									isLoading={workflowsQuery.isLoading}
+									isError={workflowsQuery.isError}
+									disabled={authorMutation.isPending}
+									onChange={setTemplateHintId}
+								/>
+								<p className="text-[11px] text-foreground/50 mt-2 leading-relaxed">
+									The AI uses the picked workflow's shape as a starting point and
+									adapts it to your request. Step titles, fields, and structure
+									are guidance, not a copy.
+								</p>
+							</div>
+						</details>
+
+						<details className="text-sm">
+							<summary className="cursor-pointer font-medium text-foreground/70 hover:text-foreground select-none">
 								Scope to entity sets{" "}
 								<span className="text-foreground/50 font-normal">(optional)</span>
 								{entitySetHints.size > 0 && (
@@ -295,6 +335,71 @@ interface EntitySetOption {
 	name: string;
 	color: string | null;
 	description: string | null;
+}
+
+// Phase 12 follow-up (slice B) -- template hint dropdown. Filters to
+// published procedures + forms only; documents and policies can be valid
+// references but rarely seed a new procedural workflow well.
+function TemplateHintPicker({
+	workflows,
+	selected,
+	isLoading,
+	isError,
+	disabled,
+	onChange,
+}: {
+	workflows: ReadonlyArray<{
+		id: string;
+		title: string;
+		type: "procedure" | "document" | "policy" | "form";
+		latestPublishedVersionNumber: number | null;
+	}>;
+	selected: string | null;
+	isLoading: boolean;
+	isError: boolean;
+	disabled: boolean;
+	onChange: (id: string | null) => void;
+}) {
+	if (isLoading) {
+		return (
+			<div className="flex items-center gap-2 py-2 text-xs text-foreground/60">
+				<Spinner className="size-3.5" /> Loading workflows…
+			</div>
+		);
+	}
+	if (isError) {
+		return (
+			<p className="text-xs text-destructive">Couldn't load workflows.</p>
+		);
+	}
+	const eligible = workflows.filter(
+		(w) =>
+			w.latestPublishedVersionNumber !== null &&
+			(w.type === "procedure" || w.type === "form"),
+	);
+	if (eligible.length === 0) {
+		return (
+			<p className="text-xs text-foreground/60">
+				No published procedures or forms exist yet. Publish one and it'll appear
+				here as a template option.
+			</p>
+		);
+	}
+	return (
+		<select
+			value={selected ?? ""}
+			disabled={disabled}
+			onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+			className="w-full px-2.5 py-1.5 text-sm rounded-md border border-border bg-background disabled:opacity-50"
+		>
+			<option value="">— No template —</option>
+			{eligible.map((w) => (
+				<option key={w.id} value={w.id}>
+					{w.title} (v{w.latestPublishedVersionNumber})
+				</option>
+			))}
+		</select>
+	);
 }
 
 function EntitySetHintPicker({

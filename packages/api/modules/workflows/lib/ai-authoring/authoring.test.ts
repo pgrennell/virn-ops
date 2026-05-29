@@ -38,6 +38,10 @@ vi.mock("@virn/database", () => ({
 	updateStep: vi.fn(),
 	updateWorkflow: vi.fn(),
 	writeAuditAndActivity: vi.fn(),
+	// Phase 12 follow-up (slice B) -- template reference fetch path
+	getWorkflowForOrg: vi.fn(),
+	getLatestPublishedWorkflowVersion: vi.fn(),
+	getVersionEditBundle: vi.fn(),
 	// assertStepDueRefs (called from authoring's second pass) reads these via
 	// the same path structure.ts's assertDueRefs does -- stub to return rows
 	// in the same version so the guard passes by default. Individual tests
@@ -63,6 +67,9 @@ vi.mock("@virn/ai", () => ({
 }));
 
 import {
+	getLatestPublishedWorkflowVersion,
+	getVersionEditBundle,
+	getWorkflowForOrg,
 	insertAuthoringPrompt,
 	insertField,
 	insertSection,
@@ -74,7 +81,7 @@ import {
 } from "@virn/database";
 
 import { WorkflowEngineError } from "../errors";
-import { authorWorkflow, __testables } from "./authoring";
+import { type CallClaudeFn, authorWorkflow, __testables } from "./authoring";
 
 const CTX = {
 	organizationId: "org_1",
@@ -82,7 +89,10 @@ const CTX = {
 };
 
 function makeStubClaude(rawText: string) {
-	return vi.fn(async () => ({ text: rawText }));
+	// Typed via the CallClaudeFn return type so `mock.calls[0][0]` resolves to
+	// the input shape (see memory: feedback_vi_fn_typing). Tests that inspect
+	// the userMessage / system blocks depend on this.
+	return vi.fn<CallClaudeFn>(async () => ({ text: rawText }));
 }
 
 function validAuthoredJson(overrides: Partial<Record<string, unknown>> = {}): string {
@@ -516,5 +526,94 @@ describe("authorWorkflow -- entitySetHints", () => {
 		);
 
 		expect(updateWorkflow).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase 12 follow-up (slice B) -- templateHintId
+// ---------------------------------------------------------------------------
+
+describe("authorWorkflow -- templateHintId (structural reference)", () => {
+	function stubTemplateResolution() {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue({
+			id: "wf_template",
+			title: "STR Turnover",
+			description: "Reference SOP",
+			type: "procedure",
+			isActive: true,
+			organizationId: "org_1",
+			aiAuthoringPromptId: null,
+		} as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValue({
+			id: "ver_template_v3",
+		} as never);
+		vi.mocked(getVersionEditBundle).mockResolvedValue({
+			version: { id: "ver_template_v3" } as unknown,
+			sections: [{ id: "sec_a", title: "Prep", position: 0 }] as never,
+			steps: [
+				{
+					id: "st_1",
+					title: "Clean kitchen",
+					description: null,
+					type: "task",
+					position: 0,
+					sectionId: "sec_a",
+					isRequired: true,
+					isStopTask: false,
+					dueType: "offset_from_start",
+					dueOffsetDays: 1,
+				},
+			] as never,
+			fields: [],
+			dependencies: [],
+		} as never);
+	}
+
+	it("passes the template structure into the user message when hint is supplied", async () => {
+		stubTemplateResolution();
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "STR turnover for studios", templateHintId: "wf_template" },
+		);
+
+		expect(callClaude).toHaveBeenCalledTimes(1);
+		const userMessage = callClaude.mock.calls[0][0].userMessage;
+		expect(userMessage).toContain("Structural reference");
+		// The model sees the projected template -- pin a substring so a future
+		// schema-projection change is forced to update this expectation.
+		expect(userMessage).toContain('"title":"STR Turnover"');
+		expect(userMessage).toContain('"Clean kitchen"');
+	});
+
+	it("omits the structural reference block when no templateHintId is supplied", async () => {
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "STR turnover for studios" },
+		);
+
+		const userMessage = callClaude.mock.calls[0][0].userMessage;
+		expect(userMessage).not.toContain("Structural reference");
+		// And we should NOT have hit the template-resolution path at all.
+		expect(getWorkflowForOrg).not.toHaveBeenCalled();
+	});
+
+	it("soft-fails when the template is unreachable (deleted in the race window)", async () => {
+		// Procedure layer validated the id, but between then and the lib's
+		// re-load the row was deleted. The lib drops the reference + proceeds.
+		vi.mocked(getWorkflowForOrg).mockResolvedValue(null);
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "STR turnover", templateHintId: "wf_deleted" },
+		);
+
+		expect(callClaude).toHaveBeenCalledTimes(1);
+		const userMessage = callClaude.mock.calls[0][0].userMessage;
+		expect(userMessage).not.toContain("Structural reference");
 	});
 });

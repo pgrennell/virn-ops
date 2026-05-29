@@ -251,33 +251,60 @@ export function composeSystemPrompt(input: ComposeSystemPromptInput): SystemBloc
 }
 
 /** Compose the user message text that pairs with the cached system blocks. Keeps the
- * volatile inputs (prompt + optional sourceText) together so the cache prefix
- * (system blocks) is unchanged across requests for the same org. */
+ * volatile inputs (prompt + optional sourceText + optional templateReferenceJson)
+ * together so the cache prefix (system blocks) is unchanged across requests for
+ * the same org.
+ *
+ * Phase 12 follow-up slice B: when `templateReferenceJson` is supplied, the
+ * message includes a "Structural reference" block AFTER the request + source
+ * sections. The model is told to ADAPT the reference based on the request
+ * rather than copy verbatim. The reference goes in the user message (not the
+ * system block) because it's user-volatile -- different requests pick
+ * different templates and a cached template would poison cross-request hits. */
 export function composeUserMessage(input: {
 	prompt: string;
 	sourceText: string | null;
+	templateReferenceJson?: string | null;
 }): string {
-	if (!input.sourceText) {
-		return [
-			"Build a workflow for the following request. Return ONE JSON object matching",
-			"the OUTPUT SHAPE in the system contract; no prose, no code fence.",
-			"",
-			"Request:",
-			input.prompt,
-		].join("\n");
+	const sections: string[] = [];
+
+	if (input.sourceText) {
+		sections.push(
+			[
+				"Build a workflow for the following request, grounded in the supplied source text",
+				"(e.g. an existing SOP, a Tango export, a meeting transcript). Treat the source as",
+				"authoritative for structure; use the request to clarify scope. Return ONE JSON",
+				"object matching the OUTPUT SHAPE in the system contract; no prose, no code fence.",
+			].join("\n"),
+		);
+	} else {
+		sections.push(
+			[
+				"Build a workflow for the following request. Return ONE JSON object matching",
+				"the OUTPUT SHAPE in the system contract; no prose, no code fence.",
+			].join("\n"),
+		);
 	}
-	return [
-		"Build a workflow for the following request, grounded in the supplied source text",
-		"(e.g. an existing SOP, a Tango export, a meeting transcript). Treat the source as",
-		"authoritative for structure; use the request to clarify scope. Return ONE JSON",
-		"object matching the OUTPUT SHAPE in the system contract; no prose, no code fence.",
-		"",
-		"Request:",
-		input.prompt,
-		"",
-		"Source text:",
-		input.sourceText,
-	].join("\n");
+
+	sections.push(`Request:\n${input.prompt}`);
+
+	if (input.sourceText) {
+		sections.push(`Source text:\n${input.sourceText}`);
+	}
+
+	if (input.templateReferenceJson) {
+		sections.push(
+			[
+				"Structural reference (use this workflow's shape as a starting point;",
+				"ADAPT based on the request above -- do not copy verbatim. Field keys,",
+				"step titles, and descriptions should reflect the request's scope, not",
+				"the reference's. Add, remove, or rename steps/fields freely):",
+				input.templateReferenceJson,
+			].join("\n"),
+		);
+	}
+
+	return sections.join("\n\n");
 }
 
 // ---------------------------------------------------------------------------

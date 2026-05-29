@@ -14,6 +14,8 @@ vi.mock("@virn/auth", () => ({
 vi.mock("@virn/database", () => ({
 	getOrganizationMembership: vi.fn(),
 	listEntitySetsForOrg: vi.fn(async () => []),
+	getWorkflowForOrg: vi.fn(),
+	getLatestPublishedWorkflowVersion: vi.fn(),
 }));
 
 // Stub the lib import to prevent the SDK module from being pulled into the test graph.
@@ -29,7 +31,12 @@ vi.mock("../../workflows/lib/ai-authoring/authoring", () => ({
 }));
 
 import { auth } from "@virn/auth";
-import { getOrganizationMembership, listEntitySetsForOrg } from "@virn/database";
+import {
+	getLatestPublishedWorkflowVersion,
+	getOrganizationMembership,
+	getWorkflowForOrg,
+	listEntitySetsForOrg,
+} from "@virn/database";
 
 import { authorWorkflow } from "../../workflows/lib/ai-authoring/authoring";
 import { authorWorkflowProc } from "./author-workflow";
@@ -200,5 +207,74 @@ describe("agents.authorWorkflow -- entitySetHints validation", () => {
 			ctx,
 		);
 		expect(listEntitySetsForOrg).not.toHaveBeenCalled();
+	});
+});
+
+describe("agents.authorWorkflow -- templateHintId validation", () => {
+	beforeEach(() => {
+		vi.mocked(auth.api.getSession).mockResolvedValue(makeSession() as never);
+		vi.mocked(getOrganizationMembership).mockResolvedValue(makeMembership() as never);
+	});
+
+	it("forwards a valid templateHintId to the lib", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue({ id: "wf_template" } as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValue({
+			id: "ver_template_v3",
+		} as never);
+
+		await call(
+			authorWorkflowProc,
+			{ prompt: "STR turnover for studios", templateHintId: "wf_template" },
+			ctx,
+		);
+
+		expect(authorWorkflow).toHaveBeenCalledTimes(1);
+		const libInput = vi.mocked(authorWorkflow).mock.calls[0][1];
+		expect(libInput.templateHintId).toBe("wf_template");
+	});
+
+	it("rejects a cross-org / unknown templateHintId with TEMPLATE_HINT_NOT_FOUND", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue(null);
+
+		await expect(
+			call(
+				authorWorkflowProc,
+				{ prompt: "STR turnover for studios", templateHintId: "wf_other_org" },
+				ctx,
+			),
+		).rejects.toMatchObject({
+			code: "BAD_REQUEST",
+			data: { code: "AI_AUTHORING_TEMPLATE_HINT_NOT_FOUND" },
+		});
+
+		expect(authorWorkflow).not.toHaveBeenCalled();
+	});
+
+	it("rejects an unpublished templateHintId with TEMPLATE_HINT_NO_PUBLISHED_VERSION", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue({ id: "wf_draft_only" } as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValue(null);
+
+		await expect(
+			call(
+				authorWorkflowProc,
+				{ prompt: "STR turnover for studios", templateHintId: "wf_draft_only" },
+				ctx,
+			),
+		).rejects.toMatchObject({
+			code: "BAD_REQUEST",
+			data: { code: "AI_AUTHORING_TEMPLATE_HINT_NO_PUBLISHED_VERSION" },
+		});
+
+		expect(authorWorkflow).not.toHaveBeenCalled();
+	});
+
+	it("does not call the template-resolution queries when templateHintId is absent", async () => {
+		await call(
+			authorWorkflowProc,
+			{ prompt: "STR turnover for studios" },
+			ctx,
+		);
+		expect(getWorkflowForOrg).not.toHaveBeenCalled();
+		expect(getLatestPublishedWorkflowVersion).not.toHaveBeenCalled();
 	});
 });

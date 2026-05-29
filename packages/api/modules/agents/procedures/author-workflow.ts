@@ -13,7 +13,11 @@
 // AI_AUTHORING_* error codes map cleanly to ORPCError shapes.
 
 import { ORPCError } from "@orpc/server";
-import { listEntitySetsForOrg } from "@virn/database";
+import {
+	getLatestPublishedWorkflowVersion,
+	getWorkflowForOrg,
+	listEntitySetsForOrg,
+} from "@virn/database";
 import { z } from "zod";
 
 import { adminOrgProcedure } from "../../../orpc/procedures";
@@ -44,6 +48,11 @@ export const authorWorkflowProc = adminOrgProcedure
 			// 25 to mirror the entity-set picker UX (an org with that many sets
 			// is well past the picker's usability ceiling).
 			entitySetHints: z.array(z.string().min(1)).max(25).nullish(),
+			// Phase 12 follow-up (slice B) -- "start from this template" hint.
+			// References any published workflow in the caller's org. The lib
+			// embeds its structure in the user message as a "use this as a
+			// starting point; adapt based on the request" block.
+			templateHintId: z.string().min(1).nullish(),
 		}),
 	)
 	.handler(async ({ context, input }) => {
@@ -68,6 +77,34 @@ export const authorWorkflowProc = adminOrgProcedure
 				});
 			}
 		}
+		// Phase 12 follow-up (slice B) -- templateHintId validation. Verify the
+		// id is a workflow in the caller's org AND has a published version
+		// before paying for the model call. Two failure shapes:
+		//   - workflow doesn't exist / is cross-org -> TEMPLATE_HINT_NOT_FOUND
+		//   - workflow exists but has no published version -> TEMPLATE_HINT_NO_PUBLISHED_VERSION
+		// Both surface as BAD_REQUEST with a structured `data.code` so the
+		// dialog can render an actionable inline error rather than a generic
+		// failure message.
+		const templateHintId = input.templateHintId ?? null;
+		if (templateHintId) {
+			const wf = await getWorkflowForOrg(
+				context.organization.id,
+				templateHintId,
+			);
+			if (!wf) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Template workflow not found.",
+					data: { code: "AI_AUTHORING_TEMPLATE_HINT_NOT_FOUND" },
+				});
+			}
+			const ver = await getLatestPublishedWorkflowVersion(templateHintId);
+			if (!ver) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "Template workflow has no published version to reference.",
+					data: { code: "AI_AUTHORING_TEMPLATE_HINT_NO_PUBLISHED_VERSION" },
+				});
+			}
+		}
 		return await workflowEngineCall(() =>
 			authorWorkflow(
 				{ organizationId: context.organization.id, userId: context.user.id },
@@ -75,6 +112,7 @@ export const authorWorkflowProc = adminOrgProcedure
 					prompt: input.prompt,
 					sourceText: input.sourceText ?? null,
 					entitySetHints: hints,
+					templateHintId,
 				},
 			),
 		);

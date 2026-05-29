@@ -24,6 +24,9 @@ import {
 	type InsertFieldInput,
 	type InsertStepInput,
 	db,
+	getLatestPublishedWorkflowVersion,
+	getVersionEditBundle,
+	getWorkflowForOrg,
 	insertAuthoringPrompt,
 	insertField,
 	insertSection,
@@ -210,6 +213,14 @@ export interface AuthorWorkflowInput {
 	 * or undefined leaves the workflow scope at the default "applies-to-any-
 	 * entity" (entity_set_ids = '{}'). */
 	entitySetHints?: string[] | null;
+	/** Phase 12 follow-up (slice B) -- "start from this template" hint. When
+	 * provided, the lib resolves the workflow id to its latest published
+	 * version's bundle and includes that structure in the user message as a
+	 * structural reference for the model to adapt. The procedure layer
+	 * validates the id belongs to the caller's org + that a published version
+	 * exists; the lib trusts what it receives. Undefined / null means the
+	 * model authors from scratch (the pre-slice-B path). */
+	templateHintId?: string | null;
 }
 
 export interface AuthorWorkflowResult {
@@ -237,11 +248,32 @@ export async function authorWorkflow(
 	// 1. Snapshot entity schemas (reproducibility per PRD §8.4).
 	const entitySchemas = snapshotEntitySchemas();
 
+	// 1b. Resolve templateHintId -> structural reference JSON (Phase 12 follow-
+	// up slice B). When supplied, the lib loads the latest published version
+	// of the workflow, projects it into the same shape the AI emits, and the
+	// composeUserMessage embeds it as a "structural reference" block. The
+	// procedure validated org ownership + that the workflow exists. We re-load
+	// here to keep the call site lib-local (the procedure shouldn't ferry the
+	// bundle through; that couples too tightly to the AI lib's needs).
+	let templateReferenceJson: string | null = null;
+	if (input.templateHintId) {
+		const ref = await buildTemplateReference(
+			ctx.organizationId,
+			input.templateHintId,
+		);
+		if (ref) templateReferenceJson = ref;
+		// `ref === null` means the template was deleted between the procedure's
+		// validation pass and our re-load (race window). Soft-fail: drop the
+		// reference and proceed without it rather than erroring -- the user gets
+		// a workflow generated from scratch, which is the pre-slice-B behavior.
+	}
+
 	// 2. Compose prompt blocks.
 	const system = composeSystemPrompt({ entitySchemas });
 	const userMessage = composeUserMessage({
 		prompt: input.prompt,
 		sourceText: input.sourceText ?? null,
+		templateReferenceJson,
 	});
 
 	// 3. Call Claude. Network failures bubble as AI_AUTHORING_MODEL_ERROR so the
@@ -477,6 +509,84 @@ export async function authorWorkflow(
 		stepCount: authored.steps.length,
 		fieldCount: buildResult.fieldCount,
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12 follow-up (slice B) -- template reference projection
+// ---------------------------------------------------------------------------
+
+/** Fetch a template workflow's latest published version and project it into
+ * a compact JSON shape mirroring the AI's output contract (sections + steps
+ * + fields + kickoffFields + title + description + type). Returns the
+ * serialized JSON ready to drop into the user message, or null when the
+ * workflow / version / bundle isn't reachable (deleted, no published yet, or
+ * a race against the procedure-layer validation).
+ *
+ * Why a separate projection rather than the raw bundle: the bundle carries
+ * forensic columns (ids, version pinning, lock flags, dependency rows) that
+ * are noise to the model and would bloat the message. The model wants
+ * "shape to mimic" not "row to insert." Shape mirrors the AI's own output
+ * contract so a few-shot-style nudge is what arrives at the model. */
+async function buildTemplateReference(
+	organizationId: string,
+	workflowId: string,
+): Promise<string | null> {
+	const wf = await getWorkflowForOrg(organizationId, workflowId);
+	if (!wf) return null;
+	const ver = await getLatestPublishedWorkflowVersion(workflowId);
+	if (!ver) return null;
+	const bundle = await getVersionEditBundle(ver.id);
+	if (!bundle) return null;
+
+	const sectionsSorted = [...bundle.sections].sort((a, b) => a.position - b.position);
+	const sectionIndexById = new Map<string, number>();
+	sectionsSorted.forEach((s, i) => sectionIndexById.set(s.id, i));
+
+	const stepsSorted = [...bundle.steps].sort((a, b) => a.position - b.position);
+	const kickoffFieldsSorted = bundle.fields
+		.filter((f) => f.stepId === null)
+		.sort((a, b) => a.position - b.position);
+	const fieldsByStepId = new Map<string, typeof bundle.fields>();
+	for (const f of bundle.fields) {
+		if (f.stepId === null) continue;
+		const arr = fieldsByStepId.get(f.stepId) ?? [];
+		arr.push(f);
+		fieldsByStepId.set(f.stepId, arr);
+	}
+	for (const arr of fieldsByStepId.values()) {
+		arr.sort((a, b) => a.position - b.position);
+	}
+
+	const reference = {
+		title: wf.title,
+		description: wf.description,
+		type: wf.type,
+		sections: sectionsSorted.map((s) => ({ title: s.title })),
+		kickoffFields: kickoffFieldsSorted.map((f) => ({
+			key: f.key,
+			label: f.label,
+			fieldType: f.fieldType,
+			isRequired: f.isRequired,
+		})),
+		steps: stepsSorted.map((s) => ({
+			title: s.title,
+			description: s.description,
+			type: s.type,
+			sectionIndex: s.sectionId === null ? null : sectionIndexById.get(s.sectionId) ?? null,
+			isRequired: s.isRequired,
+			isStopTask: s.isStopTask,
+			dueType: s.dueType,
+			dueOffsetDays: s.dueOffsetDays,
+			fields: (fieldsByStepId.get(s.id) ?? []).map((f) => ({
+				key: f.key,
+				label: f.label,
+				fieldType: f.fieldType,
+				isRequired: f.isRequired,
+			})),
+		})),
+	};
+
+	return JSON.stringify(reference);
 }
 
 // Expose internals for unit-test reachability without re-exporting them from the
