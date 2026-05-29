@@ -48,12 +48,18 @@ import {
 } from "@virn/database";
 
 import { WorkflowEngineError } from "../errors";
+import type { CallClaudeFn } from "./authoring";
 import { regenerateStep } from "./regenerate-step";
 
 const CTX = { organizationId: "org_1", userId: "user_1" };
 
-function makeStubClaude(rawText: string) {
-	return vi.fn(async () => ({ text: rawText }));
+// Type the stub explicitly as CallClaudeFn so mock.calls carries the right
+// Parameters tuple (default vi.fn inference gives mock.calls: [], which makes
+// any destructure of the recorded args a tsc error -- not a runtime error,
+// but it'd block the type-check pipeline). Same fix as the
+// cross-product-delivery.test.ts fetchImpl tightening.
+function makeStubClaude(rawText: string): ReturnType<typeof vi.fn<CallClaudeFn>> {
+	return vi.fn<CallClaudeFn>(async () => ({ text: rawText }));
 }
 
 function validRegeneratedStepJson(

@@ -1180,8 +1180,381 @@ export const MAINTENANCE_ROUTING_WORKFLOW: WorkflowSeed = {
 	],
 };
 
+// ---------------------------------------------------------------------------
+// Workflow template: Vendor Onboarding (Phase 17d)
+// ---------------------------------------------------------------------------
+//
+// End-to-end intake of a new vendor into the org's preferred-vendor list.
+// Covers initial intake, documentation collection (W-9, COI, license),
+// references, insurance verification, scope agreement, and system
+// activation. Stop-task on the final activation gate ensures the vendor
+// can't be marked active in the launcher until everything upstream is
+// signed off.
+//
+// The workflow's natural caller is the PM bringing on a vendor in a new
+// service category (e.g. setting up a plumber relationship for a new
+// property), or formalizing an existing ad-hoc relationship.
+//
+// Insurance-verification steps are written for U.S. commercial-liability
+// norms (GL + WC + auto coverage minimums + additional-insured
+// endorsement). When the vendor sync surface eventually feeds licensed-
+// vendor databases (post-v1), the license-verification step can auto-
+// fill from that source.
+
+export const VENDOR_ONBOARDING_WORKFLOW: WorkflowSeed = {
+	slug: "vendor-onboarding",
+	title: "Vendor Onboarding",
+	description:
+		"Bring a new vendor into the preferred-vendor list. Covers intake, documentation (W-9, COI, license), references, insurance verification, scope agreement, and system activation. Stop-task on the final activation gate so the vendor can't appear in launcher pickers until everything upstream is signed off.",
+	type: "procedure",
+	kickoffFields: [
+		{
+			key: "vendor_business_name",
+			label: "Vendor business name",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "vendor_contact_name",
+			label: "Primary contact name",
+			fieldType: "text",
+			isRequired: true,
+		},
+		{
+			key: "vendor_phone",
+			label: "Primary contact phone",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "vendor_email",
+			label: "Primary contact email",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "vendor_category",
+			label: "Service category",
+			fieldType: "select",
+			isRequired: true,
+			config: {
+				options: [
+					{ value: "pest-control", label: "Pest Control" },
+					{ value: "hvac", label: "HVAC" },
+					{ value: "plumbing", label: "Plumbing" },
+					{ value: "electrical", label: "Electrical" },
+					{ value: "landscaping", label: "Landscaping & Grounds" },
+					{ value: "cleaning", label: "Cleaning" },
+					{ value: "pool-spa", label: "Pool & Spa" },
+					{ value: "locksmith", label: "Locksmith" },
+					{ value: "appliance-repair", label: "Appliance Repair" },
+					{ value: "general-contractor", label: "General Contractor" },
+				],
+			},
+		},
+		{
+			key: "vendor_referral_source",
+			label: "How were they referred?",
+			fieldType: "text",
+			isRequired: false,
+		},
+		{
+			key: "intended_property_scope",
+			label: "Properties they'll serve",
+			fieldType: "textarea",
+			isRequired: false,
+		},
+		{
+			key: "urgency",
+			label: "Onboarding urgency",
+			fieldType: "select",
+			isRequired: false,
+			config: {
+				options: [
+					{
+						value: "emergency_replacement",
+						label: "Emergency replacement — same-week activation",
+					},
+					{
+						value: "standard",
+						label: "Standard (within 2-3 weeks)",
+					},
+					{
+						value: "wait_listed",
+						label: "Wait-listed (backup vendor; activate when current vendor lapses)",
+					},
+				],
+			},
+		},
+	],
+	sections: [
+		{
+			manifestKey: "sec-intake",
+			title: "Initial intake",
+			steps: [
+				{
+					manifestKey: "step-initial-call",
+					title: "Initial call",
+					description:
+						"Capture services offered, business form (sole proprietor / LLC / corp), years in business, service area + coverage hours. Note whether they're licensed + insured + bonded before sending the onboarding packet.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "intake_call_notes",
+							label: "Intake call notes",
+							fieldType: "textarea",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-send-packet",
+					title: "Send onboarding packet",
+					description:
+						"Email the vendor: W-9 form, insurance requirements (GL + WC + auto if applicable), reference request form, scope-of-work template, and the additional-insured endorsement language. Include 7-day turnaround target.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-receive-packet",
+					title: "Receive completed packet",
+					description:
+						"Log receipt of W-9 + COI + license docs + references. If any document is missing, follow up before proceeding to verification (the verification steps assume the documents are in hand).",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "packet_received_at",
+							label: "Packet received (date)",
+							fieldType: "date",
+							isRequired: false,
+						},
+						{
+							key: "packet_attachments",
+							label: "Submitted documents",
+							fieldType: "file",
+							isRequired: false,
+							config: { multiple: true },
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-documents",
+			title: "Documentation verification",
+			steps: [
+				{
+					manifestKey: "step-verify-w9",
+					title: "Verify W-9",
+					description:
+						"Name on W-9 matches the legal business name. EIN (or SSN for sole proprietors) is filled. Business address matches what they gave on the intake call. Box checked for tax classification.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-verify-license",
+					title: "Verify license",
+					description:
+						"Look up the license number against the state licensing board. Confirm: license is current (not expired), classification covers the category (e.g. plumber license for plumbing vendor), no recent disciplinary actions. Skip for categories that don't require licensing in your state (e.g. general cleaning often doesn't).",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+					fields: [
+						{
+							key: "license_number",
+							label: "License number",
+							fieldType: "text",
+							isRequired: false,
+						},
+						{
+							key: "license_expiration",
+							label: "License expiration date",
+							fieldType: "date",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-insurance-baseline",
+					title: "Insurance baseline check",
+					description:
+						"Vendor carries General Liability AND (if they have employees) Workers Compensation AND (if they drive to job sites in marked vehicles) commercial auto. Skip baseline coverage types not applicable to this vendor's category (e.g. WC waived for sole-proprietor categories per state rules).",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "carries_gl",
+							label: "General Liability",
+							fieldType: "select",
+							isRequired: true,
+							config: {
+								options: [
+									{ value: "yes", label: "Yes" },
+									{ value: "no", label: "No (deal-breaker)" },
+								],
+							},
+						},
+						{
+							key: "carries_wc",
+							label: "Workers Compensation",
+							fieldType: "select",
+							isRequired: false,
+							config: {
+								options: [
+									{ value: "yes", label: "Yes" },
+									{ value: "waived", label: "Waived (sole proprietor)" },
+									{ value: "no", label: "No (deal-breaker if has employees)" },
+								],
+							},
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-references",
+			title: "References",
+			steps: [
+				{
+					manifestKey: "step-reference-1",
+					title: "Call reference 1",
+					description:
+						"Reach the first reference. Confirm they've actually worked with this vendor. Ask: scope + duration of the relationship, quality of work, communication / responsiveness, any issues, would they hire again.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "reference_1_notes",
+							label: "Reference 1 notes",
+							fieldType: "textarea",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-reference-2",
+					title: "Call reference 2",
+					description:
+						"Second reference, same questions. If reference 1 was lukewarm or you couldn't reach them, prioritize getting a strong reference 2 before moving forward. If 2/2 references are weak, decline the vendor at this gate -- the agreement-signing step downstream is much harder to reverse.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "reference_2_notes",
+							label: "Reference 2 notes",
+							fieldType: "textarea",
+							isRequired: false,
+						},
+					],
+				},
+			],
+		},
+		{
+			manifestKey: "sec-insurance",
+			title: "Insurance verification",
+			steps: [
+				{
+					manifestKey: "step-coi-limits",
+					title: "COI matches required limits",
+					description:
+						"Check the Certificate of Insurance against your minimum coverage requirements. Typical baseline for residential property work: GL $1M/$2M, WC statutory, auto $1M CSL. Note the policy expiration date and set a calendar reminder for renewal verification 30 days out.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "coi_policy_expiration",
+							label: "Policy expiration date",
+							fieldType: "date",
+							isRequired: true,
+						},
+						{
+							key: "coi_attachment",
+							label: "COI document",
+							fieldType: "file",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-additional-insured",
+					title: "Additional insured endorsement",
+					description:
+						"For categories with elevated liability exposure (general contractor, electrical, plumbing, pool/spa), require the vendor to add your management entity as an additional insured on their GL policy. Verify the endorsement is attached to the COI. Skip for low-exposure categories (cleaning, landscaping) unless your owners require it.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+			],
+		},
+		{
+			manifestKey: "sec-activation",
+			title: "Agreement + activation",
+			steps: [
+				{
+					manifestKey: "step-scope-agreement",
+					title: "Scope of work agreement",
+					description:
+						"Sign the scope-of-work agreement: services covered, pricing model (flat rate / T&M / per visit), dispatch protocol (how WOs are received, ETAs for each severity), invoicing cadence + payment terms, authorization cap for non-emergency work without prior PM approval.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					fields: [
+						{
+							key: "agreement_signed_at",
+							label: "Agreement signed (date)",
+							fieldType: "date",
+							isRequired: false,
+						},
+						{
+							key: "agreement_attachment",
+							label: "Signed agreement",
+							fieldType: "file",
+							isRequired: false,
+						},
+						{
+							key: "authorization_cap_usd",
+							label: "Default authorization cap (USD)",
+							fieldType: "number",
+							isRequired: false,
+						},
+					],
+				},
+				{
+					manifestKey: "step-add-to-system",
+					title: "Add vendor to system",
+					description:
+						"Create the vendor record in Virn: business name, primary contact, category, status='approved'. If they're a backup vendor (urgency='wait_listed'), set status='approved' but flag in notes -- the launcher picker still surfaces them but the PM can prefer-sort accordingly.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+				},
+				{
+					manifestKey: "step-test-dispatch",
+					title: "Test dispatch (optional)",
+					description:
+						"For higher-stakes categories (general contractor, HVAC, plumbing for emergency response), send a low-stakes test WO to validate the dispatch flow + their responsiveness before relying on them for emergencies. Skip for lower-stakes categories or when urgency='emergency_replacement'.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isRequired: false,
+				},
+				{
+					manifestKey: "step-activate",
+					title: "Mark vendor active in launcher",
+					description:
+						"Final gate. Flip the vendor's isActive flag to true so they appear in the launcher's vendor picker for new runs. Blocks until the vendor's been added to the system above -- the activation gate exists so a half-onboarded vendor can't surface in pickers and accidentally get dispatched.",
+					roleManifestKey: "property-manager",
+					dueOffsetDays: 0,
+					isStopTask: true,
+					dependsOn: ["step-add-to-system"],
+				},
+			],
+		},
+	],
+};
+
 export const PROPERTY_OPS_WORKFLOWS: readonly WorkflowSeed[] = [
 	STR_TURNOVER_WORKFLOW,
 	PROPERTY_INSPECTION_WORKFLOW,
 	MAINTENANCE_ROUTING_WORKFLOW,
+	VENDOR_ONBOARDING_WORKFLOW,
 ];
