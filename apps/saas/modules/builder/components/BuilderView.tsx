@@ -988,6 +988,10 @@ function AuthorBody({
 						? fieldKeyById.get(s.dueSourceFieldId) ?? null
 						: null,
 				},
+				// D-040 -- thread the row's provenance so the rail can render the
+				// AI badge on ai_generated steps. Default (manually_edited) renders
+				// no badge, so user-authored steps stay visually clean.
+				provenance: s.provenance,
 			})),
 		[bundle.steps, stepTitleById, fieldKeyById],
 	);

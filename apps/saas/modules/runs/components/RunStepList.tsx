@@ -52,6 +52,12 @@ export interface RunStepListDefinitionStep {
 		dueAnchorStepTitle: string | null;
 		dueSourceFieldKey: string | null;
 	};
+	/** D-040 -- per-step provenance. When `'ai_generated'`, the row renders a
+	 * small AI badge to remind the author that a future regenerateStep call may
+	 * touch this row. `'manually_edited'` rows render no badge (the default
+	 * state -- noise floor). Omitted in run / preview modes, where provenance
+	 * is meaningless. */
+	provenance?: "ai_generated" | "manually_edited";
 }
 
 export interface RunStepListItem {
@@ -258,6 +264,14 @@ function RunStepRow({
 					<DueRuleSummary rule={def.dueRule} />
 				)}
 			</span>
+			{authorMode && def?.provenance === "ai_generated" && (
+				<span
+					className="shrink-0 px-1.5 py-0.5 text-[9px] uppercase tracking-wide font-semibold rounded bg-primary/10 text-primary"
+					title="AI-generated step. Manually edit to claim ownership; subsequent regenerate calls will skip rows you've touched."
+				>
+					AI
+				</span>
+			)}
 			{showOptionalPill && (
 				<span
 					className="shrink-0 px-1.5 py-0.5 text-[9px] uppercase tracking-wide font-medium rounded bg-muted text-muted-foreground"
