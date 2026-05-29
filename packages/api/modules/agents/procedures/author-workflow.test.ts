@@ -278,3 +278,72 @@ describe("agents.authorWorkflow -- templateHintId validation", () => {
 		expect(getLatestPublishedWorkflowVersion).not.toHaveBeenCalled();
 	});
 });
+
+describe("agents.authorWorkflow -- templateMode validation (slice C)", () => {
+	beforeEach(() => {
+		vi.mocked(auth.api.getSession).mockResolvedValue(makeSession() as never);
+		vi.mocked(getOrganizationMembership).mockResolvedValue(makeMembership() as never);
+	});
+
+	it("rejects templateMode='adapt' without templateHintId", async () => {
+		await expect(
+			call(
+				authorWorkflowProc,
+				{
+					prompt: "STR turnover for studios",
+					templateMode: "adapt",
+				},
+				ctx,
+			),
+		).rejects.toMatchObject({
+			code: "BAD_REQUEST",
+			data: { code: "AI_AUTHORING_TEMPLATE_MODE_REQUIRES_HINT" },
+		});
+
+		expect(authorWorkflow).not.toHaveBeenCalled();
+		// And the template-resolution queries should not have been hit -- the
+		// mode-without-hint guard runs before the hint validation.
+		expect(getWorkflowForOrg).not.toHaveBeenCalled();
+	});
+
+	it("allows templateMode='reference' without templateHintId (no-op)", async () => {
+		// `reference` without a hint is benign: the lib has no template to
+		// reference, so the mode signal is ignored. We accept the input rather
+		// than complain because the dialog might send the default mode value
+		// even when the user hasn't picked a template.
+		await call(
+			authorWorkflowProc,
+			{
+				prompt: "STR turnover for studios",
+				templateMode: "reference",
+			},
+			ctx,
+		);
+
+		expect(authorWorkflow).toHaveBeenCalledTimes(1);
+		const libInput = vi.mocked(authorWorkflow).mock.calls[0][1];
+		expect(libInput.templateHintId).toBeNull();
+		expect(libInput.templateMode).toBe("reference");
+	});
+
+	it("forwards templateMode='adapt' with a valid templateHintId", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue({ id: "wf_template" } as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValue({
+			id: "ver_template_v3",
+		} as never);
+
+		await call(
+			authorWorkflowProc,
+			{
+				prompt: "STR turnover, skip the kitchen check",
+				templateHintId: "wf_template",
+				templateMode: "adapt",
+			},
+			ctx,
+		);
+
+		const libInput = vi.mocked(authorWorkflow).mock.calls[0][1];
+		expect(libInput.templateHintId).toBe("wf_template");
+		expect(libInput.templateMode).toBe("adapt");
+	});
+});

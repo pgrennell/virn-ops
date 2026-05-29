@@ -221,6 +221,19 @@ export interface AuthorWorkflowInput {
 	 * exists; the lib trusts what it receives. Undefined / null means the
 	 * model authors from scratch (the pre-slice-B path). */
 	templateHintId?: string | null;
+	/** Phase 12 follow-up (slice C) -- how strongly the model should lean on
+	 * the templateHintId structure:
+	 *   - "reference" (default): the template is a starting point; the AI
+	 *     adapts based on the prompt. Step titles, fields, structure may all
+	 *     change to reflect the user's request.
+	 *   - "adapt": the template is the BASE. The AI modifies only what the
+	 *     prompt explicitly asks for and otherwise keeps the structure
+	 *     intact. Useful for "this STR turnover but skip the kitchen check"
+	 *     workflows where verbatim fidelity matters more than free
+	 *     restructure.
+	 * Ignored when templateHintId is absent. The procedure layer refuses
+	 * `adapt` without a templateHintId since there's nothing to adapt. */
+	templateMode?: "reference" | "adapt" | null;
 }
 
 export interface AuthorWorkflowResult {
@@ -274,6 +287,9 @@ export async function authorWorkflow(
 		prompt: input.prompt,
 		sourceText: input.sourceText ?? null,
 		templateReferenceJson,
+		// Slice C -- pass through the strength signal; ignored when no
+		// template was loaded (e.g. soft-fail in the race window above).
+		templateMode: templateReferenceJson ? input.templateMode ?? "reference" : null,
 	});
 
 	// 3. Call Claude. Network failures bubble as AI_AUTHORING_MODEL_ERROR so the

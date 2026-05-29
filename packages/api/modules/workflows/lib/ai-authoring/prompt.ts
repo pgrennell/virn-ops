@@ -265,6 +265,11 @@ export function composeUserMessage(input: {
 	prompt: string;
 	sourceText: string | null;
 	templateReferenceJson?: string | null;
+	/** Slice C -- how strongly to lean on the template. `"reference"` (the
+	 * default) tells the model to adapt freely; `"adapt"` tells it to keep
+	 * the template intact except where the prompt explicitly asks for
+	 * changes. Ignored when templateReferenceJson is absent. */
+	templateMode?: "reference" | "adapt" | null;
 }): string {
 	const sections: string[] = [];
 
@@ -293,15 +298,31 @@ export function composeUserMessage(input: {
 	}
 
 	if (input.templateReferenceJson) {
-		sections.push(
-			[
-				"Structural reference (use this workflow's shape as a starting point;",
-				"ADAPT based on the request above -- do not copy verbatim. Field keys,",
-				"step titles, and descriptions should reflect the request's scope, not",
-				"the reference's. Add, remove, or rename steps/fields freely):",
-				input.templateReferenceJson,
-			].join("\n"),
-		);
+		// Slice C -- adapt vs reference. The JSON we pass is identical; the
+		// instructions differ.
+		const mode = input.templateMode ?? "reference";
+		if (mode === "adapt") {
+			sections.push(
+				[
+					"Base workflow (this is the BASE -- keep the structure intact except where",
+					"the request above explicitly asks for changes. Do not rename steps or",
+					"fields unless asked. Do not add or remove steps unless asked. Preserve",
+					"every field key the base uses unless the request requires removal. Your",
+					"output should look like a targeted edit of the base, not a rewrite):",
+					input.templateReferenceJson,
+				].join("\n"),
+			);
+		} else {
+			sections.push(
+				[
+					"Structural reference (use this workflow's shape as a starting point;",
+					"ADAPT based on the request above -- do not copy verbatim. Field keys,",
+					"step titles, and descriptions should reflect the request's scope, not",
+					"the reference's. Add, remove, or rename steps/fields freely):",
+					input.templateReferenceJson,
+				].join("\n"),
+			);
+		}
 	}
 
 	return sections.join("\n\n");

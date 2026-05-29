@@ -60,6 +60,9 @@ export function AuthorWithAiDialog({
 	const [sourceText, setSourceText] = useState("");
 	const [entitySetHints, setEntitySetHints] = useState<Set<string>>(new Set());
 	const [templateHintId, setTemplateHintId] = useState<string | null>(null);
+	const [templateMode, setTemplateMode] = useState<"reference" | "adapt">(
+		"reference",
+	);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [errorIssues, setErrorIssues] = useState<Array<{ path: string; message: string }>>(
 		[],
@@ -94,6 +97,7 @@ export function AuthorWithAiDialog({
 		setSourceText("");
 		setEntitySetHints(new Set());
 		setTemplateHintId(null);
+		setTemplateMode("reference");
 		setErrorMessage(null);
 		setErrorIssues([]);
 		authorMutation.reset();
@@ -122,6 +126,9 @@ export function AuthorWithAiDialog({
 				entitySetHints:
 					entitySetHints.size > 0 ? Array.from(entitySetHints) : null,
 				templateHintId,
+				// Slice C -- only send templateMode when there's a template to
+				// apply it to; "adapt" without a hint is server-side rejected.
+				templateMode: templateHintId !== null ? templateMode : null,
 			},
 			{
 				onSuccess: (result) => {
@@ -231,7 +238,7 @@ export function AuthorWithAiDialog({
 									</span>
 								)}
 							</summary>
-							<div className="mt-2">
+							<div className="mt-2 flex flex-col gap-3">
 								<TemplateHintPicker
 									workflows={workflowsQuery.data ?? []}
 									selected={templateHintId}
@@ -240,10 +247,18 @@ export function AuthorWithAiDialog({
 									disabled={authorMutation.isPending}
 									onChange={setTemplateHintId}
 								/>
-								<p className="text-[11px] text-foreground/50 mt-2 leading-relaxed">
-									The AI uses the picked workflow's shape as a starting point and
-									adapts it to your request. Step titles, fields, and structure
-									are guidance, not a copy.
+								{templateHintId !== null && (
+									<TemplateModeRadio
+										value={templateMode}
+										onChange={setTemplateMode}
+										disabled={authorMutation.isPending}
+									/>
+								)}
+								<p className="text-[11px] text-foreground/50 leading-relaxed">
+									The AI uses the picked workflow's shape as a starting point.
+									&quot;Use as reference&quot; lets it restructure freely; &quot;Adapt this
+									template&quot; keeps the structure intact except for what you
+									explicitly ask for.
 								</p>
 							</div>
 						</details>
@@ -335,6 +350,60 @@ interface EntitySetOption {
 	name: string;
 	color: string | null;
 	description: string | null;
+}
+
+// Phase 12 follow-up (slice C) -- template mode toggle. Only rendered when
+// a template is picked; "adapt" without a template is server-side rejected
+// (AI_AUTHORING_TEMPLATE_MODE_REQUIRES_HINT) so hiding the picker until then
+// keeps the wire payload + the UI in sync.
+function TemplateModeRadio({
+	value,
+	onChange,
+	disabled,
+}: {
+	value: "reference" | "adapt";
+	onChange: (next: "reference" | "adapt") => void;
+	disabled: boolean;
+}) {
+	return (
+		<div className="flex gap-2" role="radiogroup" aria-label="Template mode">
+			{(
+				[
+					{
+						id: "reference" as const,
+						label: "Use as reference",
+						help: "AI restructures freely based on your request",
+					},
+					{
+						id: "adapt" as const,
+						label: "Adapt this template",
+						help: "AI keeps the structure intact except where you ask",
+					},
+				]
+			).map((opt) => {
+				const on = value === opt.id;
+				return (
+					<button
+						key={opt.id}
+						type="button"
+						role="radio"
+						aria-checked={on}
+						disabled={disabled}
+						onClick={() => onChange(opt.id)}
+						className={cn(
+							"flex-1 text-left px-3 py-2 rounded-md border text-xs transition-colors disabled:opacity-50",
+							on
+								? "border-primary bg-primary/5"
+								: "border-border hover:border-foreground/40",
+						)}
+					>
+						<div className="font-medium">{opt.label}</div>
+						<div className="mt-0.5 text-[10px] text-foreground/60">{opt.help}</div>
+					</button>
+				);
+			})}
+		</div>
+	);
 }
 
 // Phase 12 follow-up (slice B) -- template hint dropdown. Filters to

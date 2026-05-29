@@ -53,6 +53,12 @@ export const authorWorkflowProc = adminOrgProcedure
 			// embeds its structure in the user message as a "use this as a
 			// starting point; adapt based on the request" block.
 			templateHintId: z.string().min(1).nullish(),
+			// Phase 12 follow-up (slice C) -- how strongly the model should
+			// lean on the template. `reference` (default) is the slice-B
+			// behavior; `adapt` tells the model to keep the template intact
+			// except for explicit prompt-driven changes. Refuses `adapt`
+			// without a templateHintId.
+			templateMode: z.enum(["reference", "adapt"]).nullish(),
 		}),
 	)
 	.handler(async ({ context, input }) => {
@@ -86,6 +92,15 @@ export const authorWorkflowProc = adminOrgProcedure
 		// dialog can render an actionable inline error rather than a generic
 		// failure message.
 		const templateHintId = input.templateHintId ?? null;
+		const templateMode = input.templateMode ?? null;
+		// Slice C -- `adapt` requires a template; "adapt nothing" is nonsense.
+		// Reject before paying for the model call.
+		if (templateMode === "adapt" && !templateHintId) {
+			throw new ORPCError("BAD_REQUEST", {
+				message: "templateMode 'adapt' requires a templateHintId.",
+				data: { code: "AI_AUTHORING_TEMPLATE_MODE_REQUIRES_HINT" },
+			});
+		}
 		if (templateHintId) {
 			const wf = await getWorkflowForOrg(
 				context.organization.id,
@@ -113,6 +128,7 @@ export const authorWorkflowProc = adminOrgProcedure
 					sourceText: input.sourceText ?? null,
 					entitySetHints: hints,
 					templateHintId,
+					templateMode,
 				},
 			),
 		);

@@ -617,3 +617,95 @@ describe("authorWorkflow -- templateHintId (structural reference)", () => {
 		expect(userMessage).not.toContain("Structural reference");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Phase 12 follow-up (slice C) -- templateMode (reference vs. adapt)
+// ---------------------------------------------------------------------------
+
+describe("authorWorkflow -- templateMode", () => {
+	function stubTemplateResolution() {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue({
+			id: "wf_template",
+			title: "STR Turnover",
+			description: "Reference SOP",
+			type: "procedure",
+			isActive: true,
+			organizationId: "org_1",
+			aiAuthoringPromptId: null,
+		} as never);
+		vi.mocked(getLatestPublishedWorkflowVersion).mockResolvedValue({
+			id: "ver_template_v3",
+		} as never);
+		vi.mocked(getVersionEditBundle).mockResolvedValue({
+			version: { id: "ver_template_v3" } as unknown,
+			sections: [{ id: "sec_a", title: "Prep", position: 0 }] as never,
+			steps: [
+				{
+					id: "st_1",
+					title: "Clean kitchen",
+					description: null,
+					type: "task",
+					position: 0,
+					sectionId: "sec_a",
+					isRequired: true,
+					isStopTask: false,
+					dueType: "none",
+					dueOffsetDays: null,
+				},
+			] as never,
+			fields: [],
+			dependencies: [],
+		} as never);
+	}
+
+	it("defaults to reference mode when no templateMode is supplied", async () => {
+		stubTemplateResolution();
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{ prompt: "STR turnover", templateHintId: "wf_template" },
+		);
+
+		const userMessage = callClaude.mock.calls[0][0].userMessage;
+		expect(userMessage).toContain("Structural reference");
+		expect(userMessage).not.toContain("Base workflow");
+	});
+
+	it("switches the prompt wording when templateMode is 'adapt'", async () => {
+		stubTemplateResolution();
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{
+				prompt: "STR turnover, skip the kitchen check",
+				templateHintId: "wf_template",
+				templateMode: "adapt",
+			},
+		);
+
+		const userMessage = callClaude.mock.calls[0][0].userMessage;
+		expect(userMessage).toContain("Base workflow");
+		expect(userMessage).not.toContain("Structural reference");
+		expect(userMessage).toContain("keep the structure intact");
+	});
+
+	it("ignores templateMode when no template was resolved (soft-fail race)", async () => {
+		vi.mocked(getWorkflowForOrg).mockResolvedValue(null);
+		const callClaude = makeStubClaude(validAuthoredJson());
+
+		await authorWorkflow(
+			{ ...CTX, callClaude },
+			{
+				prompt: "STR turnover",
+				templateHintId: "wf_deleted",
+				templateMode: "adapt",
+			},
+		);
+
+		const userMessage = callClaude.mock.calls[0][0].userMessage;
+		expect(userMessage).not.toContain("Base workflow");
+		expect(userMessage).not.toContain("Structural reference");
+	});
+});
