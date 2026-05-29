@@ -57,6 +57,12 @@ interface LauncherFormProps {
 	 * fields. When false, the form only supports "human" mode (no picker; same shape
 	 * as pre-Phase-8 behavior). */
 	agentStepsEnabled: boolean;
+	/** Phase 10 / v1.5c R6 follow-up -- entity context the run is launched
+	 * against. When set, runs.launch stamps (entity_type, entity_id) onto the
+	 * new run so the Active Run card on the entity's detail page surfaces it.
+	 * Undefined means the launch isn't bound to any single entity (the default
+	 * /library row launch path). */
+	entityContext?: { entityType: "listing"; entityId: string };
 	/** Called on successful launch (after redirect) so the parent can close the
 	 * panel state. Optional -- if the container manages its own close-on-launch,
 	 * pass undefined. */
@@ -67,6 +73,7 @@ export function LauncherForm({
 	workflow,
 	organizationSlug,
 	agentStepsEnabled,
+	entityContext,
 	onLaunched,
 }: LauncherFormProps) {
 	const { user } = useSession();
@@ -203,6 +210,10 @@ export function LauncherForm({
 				// here keeps the wire payload self-describing for debugging.
 				mode: launchMode,
 				agentId: launchMode === "human" ? null : selectedAgentId,
+				// Phase 10 / v1.5c R6 follow-up -- forward the entity context when
+				// the launcher was opened from an entity-detail page. Stamped onto
+				// the new run so the entity's Active Run card surfaces it.
+				entityContext,
 			});
 			// Land in the Run view for the new run. Use window.location for a hard
 			// nav so the run's data loads fresh (avoids any stale TanStack cache).

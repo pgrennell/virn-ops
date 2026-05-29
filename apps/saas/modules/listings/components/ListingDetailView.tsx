@@ -26,25 +26,36 @@
 // - Entity-set membership chips. Coming with the v1.5a entity-set picker
 //   surface.
 
-import { Alert, AlertDescription } from "@virn/ui/components/alert";
 import { Button } from "@virn/ui/components/button";
 import { Spinner } from "@virn/ui/components/spinner";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Home, MapPin } from "lucide-react";
+import { ArrowLeft, Home, MapPin, Play } from "lucide-react";
+import { useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
 import { ActiveRunCard } from "./ActiveRunCard";
+import { LaunchOnEntityDialog } from "./LaunchOnEntityDialog";
 
 interface ListingDetailViewProps {
 	listingId: string;
 	organizationSlug: string;
+	/** Phase 8 step 3 -- gates the LaunchModePicker inside the LauncherForm.
+	 * Threaded from the server page via isEnabled(workflows.agent_steps). */
+	agentStepsEnabled: boolean;
+	/** Run-permission gate (UX_SPEC §2). Members without canRun see the page
+	 * but not the Launch button. Admin/owner-grade superset roles always have
+	 * it. Threaded from the server page via canSee(NAV_AREAS.runs). */
+	canRun: boolean;
 }
 
 export function ListingDetailView({
 	listingId,
 	organizationSlug,
+	agentStepsEnabled,
+	canRun,
 }: ListingDetailViewProps) {
+	const [launcherOpen, setLauncherOpen] = useState(false);
 	const query = useQuery(orpc.listings.get.queryOptions({ input: { id: listingId } }));
 
 	if (query.isLoading) {
@@ -86,27 +97,40 @@ export function ListingDetailView({
 				</a>
 			</nav>
 
-			<header className="flex flex-col gap-2">
-				<div className="flex items-center gap-2 flex-wrap">
-					<h1 className="text-2xl font-semibold">{listing.name}</h1>
-					{listing.propertyType && (
-						<span className="px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-300">
-							{listing.propertyType}
-						</span>
-					)}
-					{listing.externalListingId && (
-						<span
-							className="px-2 py-0.5 text-[10px] font-mono rounded bg-foreground/5 text-foreground/60"
-							title="External system identifier (Hospitable, Guesty, OwnerRez, etc.)"
-						>
-							ext: {listing.externalListingId}
-						</span>
+			<header className="flex items-start justify-between gap-3">
+				<div className="flex flex-col gap-2 flex-1 min-w-0">
+					<div className="flex items-center gap-2 flex-wrap">
+						<h1 className="text-2xl font-semibold">{listing.name}</h1>
+						{listing.propertyType && (
+							<span className="px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-300">
+								{listing.propertyType}
+							</span>
+						)}
+						{listing.externalListingId && (
+							<span
+								className="px-2 py-0.5 text-[10px] font-mono rounded bg-foreground/5 text-foreground/60"
+								title="External system identifier (Hospitable, Guesty, OwnerRez, etc.)"
+							>
+								ext: {listing.externalListingId}
+							</span>
+						)}
+					</div>
+					{listing.description && (
+						<p className="text-sm text-foreground/70 whitespace-pre-wrap">
+							{listing.description}
+						</p>
 					)}
 				</div>
-				{listing.description && (
-					<p className="text-sm text-foreground/70 whitespace-pre-wrap">
-						{listing.description}
-					</p>
+				{canRun && (
+					<Button
+						variant="primary"
+						size="sm"
+						onClick={() => setLauncherOpen(true)}
+						className="shrink-0"
+					>
+						<Play className="size-3.5 mr-1.5" />
+						Launch a workflow
+					</Button>
 				)}
 			</header>
 
@@ -122,16 +146,6 @@ export function ListingDetailView({
 							</address>
 						</section>
 					)}
-
-					<Alert>
-						<AlertDescription className="text-xs leading-relaxed">
-							Workflows launched against this listing with entity context will
-							appear on the right. Use <code>runs.launch</code> with
-							<code> entityContext: {`{ entityType: "listing", entityId: "${listing.id}" }`}</code>
-							{" "}to bind a new run to this listing (the in-product launcher
-							button is a follow-up slice).
-						</AlertDescription>
-					</Alert>
 
 					<section className="text-[10px] uppercase tracking-wide text-foreground/40 flex flex-col gap-0.5">
 						<span>
@@ -153,6 +167,16 @@ export function ListingDetailView({
 					/>
 				</aside>
 			</div>
+
+			<LaunchOnEntityDialog
+				open={launcherOpen}
+				onOpenChange={setLauncherOpen}
+				entityType="listing"
+				entityId={listing.id}
+				entityLabel={listing.name}
+				organizationSlug={organizationSlug}
+				agentStepsEnabled={agentStepsEnabled}
+			/>
 		</article>
 	);
 }

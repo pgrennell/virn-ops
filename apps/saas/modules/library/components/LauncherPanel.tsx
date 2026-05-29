@@ -25,6 +25,10 @@ interface LauncherPanelProps {
 	organizationSlug: string;
 	/** Phase 8 step 3 -- threaded down to LauncherForm to gate the mode selector. */
 	agentStepsEnabled: boolean;
+	/** Phase 10 / v1.5c R6 follow-up -- entity context pass-through. When set,
+	 * the resulting run is stamped with (entityType, entityId) and the
+	 * entity-detail page's Active Run card surfaces it. */
+	entityContext?: { entityType: "listing"; entityId: string };
 	onClose: () => void;
 }
 
@@ -33,6 +37,7 @@ export function LauncherPanel({
 	workflow,
 	organizationSlug,
 	agentStepsEnabled,
+	entityContext,
 	onClose,
 }: LauncherPanelProps) {
 	// ESC to dismiss. Same affordance the Builder config panel exposes.
@@ -71,6 +76,7 @@ export function LauncherPanel({
 						workflow={workflow}
 						organizationSlug={organizationSlug}
 						agentStepsEnabled={agentStepsEnabled}
+						entityContext={entityContext}
 						onLaunched={onClose}
 					/>
 				) : null}
