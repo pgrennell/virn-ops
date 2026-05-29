@@ -187,6 +187,19 @@ export const organization = pgTable(
 		// Camel-case column name follows this table's Better-Auth-driven convention
 		// (matches createdAt / paymentsCustomerId).
 		requireConciergeReview: boolean("requireConciergeReview").notNull().default(false),
+		// Phase 9.6 (PRD_PLAYBOOKS.md §6.6) -- per-org UI-text label overrides.
+		// Default `{}` means "use the canonical defaults" (e.g. "Playbooks"); a
+		// CRE-leaning org may set `{"playbooks": "Lifecycles"}` to relabel the
+		// feature in nav / builder headings / button copy. Strictly UI text -- schema,
+		// API, URLs, audit log entity_type values, and integration payloads all stay
+		// canonical. The forward-compatible jsonb shape supports future feature
+		// renames ("workflows" → "procedures" for compliance verticals) without a
+		// schema change; v1 only the `playbooks` key is consulted. Camel-case to
+		// match this table's Better-Auth-driven convention.
+		labelOverrides: jsonb("labelOverrides")
+			.$type<Record<string, string>>()
+			.notNull()
+			.default({}),
 	},
 	(table) => [uniqueIndex("organization_slug_uidx").on(table.slug)],
 );

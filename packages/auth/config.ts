@@ -36,6 +36,12 @@ export const config = {
 			"new-organization",
 			"onboarding",
 			"organization-invitation",
+			// Phase 9.6 reservation -- the Playbooks builder + read-view detail page
+			// will live at /playbooks/* (per PRD_PLAYBOOKS §6.5 + Phase 18a). Reserved
+			// now so the schema seam + the eventual route land together without an
+			// org-slug collision risk. See INTENTIONALLY_RESERVED_SLUGS in
+			// config.invariants.test.ts.
+			"playbooks",
 			"reset-password",
 			"run-guest",
 			"settings",

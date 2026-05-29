@@ -11,6 +11,7 @@ export * from "./organizations";
 export * from "./outbound-webhook-credentials";
 export * from "./packs";
 export * from "./participant-tokens";
+export * from "./playbooks";
 export * from "./purchases";
 export * from "./runs";
 export * from "./users";

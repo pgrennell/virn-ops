@@ -281,6 +281,7 @@ describe("auth config snapshot (docs/AUTH_CONTRACT.md §6)", () => {
 			        "new-organization",
 			        "onboarding",
 			        "organization-invitation",
+			        "playbooks",
 			        "reset-password",
 			        "run-guest",
 			        "settings",

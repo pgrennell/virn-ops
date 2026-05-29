@@ -80,6 +80,15 @@ export const entityType = pgEnum("entity_type", [
   // Phase 11a step 3(c) -- cross-product integration credential. Admin-action
   // audit rows (create / rotate secret / delete) attribute to the credential id.
   "outbound_webhook_credential",
+  // Phase 9.6 -- Playbooks schema seam (PRD_PLAYBOOKS.md §8.1). The four
+  // playbook-related discriminator values land here together so polymorphic
+  // cross-cutting tables (audit_log, activity_event, comment, attachment) can
+  // attribute writes to a playbook authoring change, a published version
+  // snapshot, a runtime orchestration, or a specific step execution row.
+  "playbook",
+  "playbook_version",
+  "playbook_run",
+  "playbook_run_step",
 ]);
 
 // Content-type discriminator (ARCHITECTURE.md §5). Lives here rather than in workflows.ts

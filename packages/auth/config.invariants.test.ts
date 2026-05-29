@@ -29,6 +29,12 @@ const INTENTIONALLY_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	// Held for the future AI-demo route surface; safe-listed so the reverse
 	// invariant check below doesn't fail until the route lands.
 	"ai-demo",
+	// Phase 9.6 reservation -- Playbooks schema seam lands ahead of the
+	// /playbooks/* route surface (Phase 18a). Reserved here so the slug is
+	// claimed at schema-seam time and orgs can't grab it in the interim;
+	// invariant check stays green until the route directory lands under
+	// apps/saas/app/.
+	"playbooks",
 ]);
 
 /**
