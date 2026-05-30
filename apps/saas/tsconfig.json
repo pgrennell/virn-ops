@@ -21,7 +21,8 @@
 			"@library/*": ["./modules/library/*"],
 			"@listings/*": ["./modules/listings/*"],
 			"@entitysets/*": ["./modules/entitysets/*"],
-			"@compliance/*": ["./modules/compliance/*"]
+			"@compliance/*": ["./modules/compliance/*"],
+			"@playbooks/*": ["./modules/playbooks/*"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.mjs", ".next/types/**/*.ts"],

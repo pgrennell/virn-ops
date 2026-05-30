@@ -21,11 +21,12 @@
 //     the Inngest dispatcher reads on every trigger fire (PRD §6.4), so giving the
 //     toggle its own helper keeps the call sites explicit.
 
-import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db, type DbExecutor } from "../client";
 import {
 	playbook,
+	playbookRun,
 	playbookStep,
 	playbookVersion,
 } from "../schema/postgres";
@@ -360,6 +361,112 @@ export async function countStepsInPlaybookVersion(
 }
 
 // ---------------------------------------------------------------------------
+// Publish dance helpers (Phase 18a) -- mirror queries/workflows.ts's
+// publishVersionRow + getLatestPublishedWorkflowVersion + nextVersionNumber.
+// Snapshot-immutable on publish per D-018 (the Playbooks adaptation): the
+// publish UPDATE matches publishedAt IS NULL so two concurrent publishers
+// can't both "succeed" -- the second observes the race and returns false.
+// ---------------------------------------------------------------------------
+
+/** Promote a playbook draft to published. Idempotent against the race: returns
+ * false if another writer already published this version. */
+export async function publishPlaybookVersionRow(
+	input: { versionId: string; publishedByUserId: string },
+	executor: DbExecutor = db,
+): Promise<boolean> {
+	const result = await executor
+		.update(playbookVersion)
+		.set({
+			publishedAt: new Date(),
+			publishedBy: input.publishedByUserId,
+		})
+		.where(
+			and(
+				eq(playbookVersion.id, input.versionId),
+				isNull(playbookVersion.publishedAt),
+			),
+		)
+		.returning({ id: playbookVersion.id });
+	return result.length > 0;
+}
+
+/** Most-recently-published version of a playbook. Returns null when the
+ * playbook has no published version yet (a fresh draft that's never shipped). */
+export async function getLatestPublishedPlaybookVersion(
+	playbookId: string,
+	executor: DbExecutor = db,
+): Promise<PlaybookVersionRow | null> {
+	const [row] = await executor
+		.select()
+		.from(playbookVersion)
+		.where(
+			and(
+				eq(playbookVersion.playbookId, playbookId),
+				sql`${playbookVersion.publishedAt} IS NOT NULL`,
+			),
+		)
+		.orderBy(sql`${playbookVersion.versionNumber} desc`)
+		.limit(1);
+	return row ? rowToPlaybookVersion(row) : null;
+}
+
+/** Next available version_number for a playbook. Used by editPublished's fork
+ * path to create a new draft above the latest existing version (whether
+ * published or draft -- the cap is the MAX, not just the published one). */
+export async function nextPlaybookVersionNumber(
+	playbookId: string,
+	executor: DbExecutor = db,
+): Promise<number> {
+	const [row] = await executor
+		.select({ value: sql<number>`COALESCE(MAX(${playbookVersion.versionNumber}), 0)` })
+		.from(playbookVersion)
+		.where(eq(playbookVersion.playbookId, playbookId));
+	return Number(row?.value ?? 0) + 1;
+}
+
+/** Insert a fresh draft version for an EXISTING playbook (fork path of
+ * editPublished). The version's trigger config is copied from the source
+ * published version so the new draft starts as an editable copy.
+ * Step deep-copy happens separately (the caller orchestrates the
+ * transaction). */
+export async function insertPlaybookDraftVersionFrom(
+	input: {
+		playbookId: string;
+		versionNumber: number;
+		source: Pick<
+			PlaybookVersionRow,
+			"triggerType" | "triggerEvent" | "triggerConfig" | "dedupWindowHours"
+		>;
+	},
+	executor: DbExecutor = db,
+): Promise<{ id: string }> {
+	const [row] = await executor
+		.insert(playbookVersion)
+		.values({
+			playbookId: input.playbookId,
+			versionNumber: input.versionNumber,
+			triggerType: input.source.triggerType,
+			triggerEvent: input.source.triggerEvent,
+			triggerConfig: input.source.triggerConfig,
+			dedupWindowHours: input.source.dedupWindowHours,
+		})
+		.returning({ id: playbookVersion.id });
+	return row;
+}
+
+/** Delete a specific playbook version. Cascades to playbook_step rows (the
+ * FK has ON DELETE CASCADE). Refuses (caller-side, via the version status
+ * check) on published versions -- only drafts are discardable. */
+export async function deletePlaybookVersion(
+	input: { versionId: string },
+	executor: DbExecutor = db,
+): Promise<void> {
+	await executor
+		.delete(playbookVersion)
+		.where(eq(playbookVersion.id, input.versionId));
+}
+
+// ---------------------------------------------------------------------------
 // Playbook step CRUD (operates on a specific playbook_version_id; the caller
 // is responsible for resolving the right version via the version-lookup
 // helpers above). Mirrors workflow step CRUD (queries/workflows.ts) -- the
@@ -560,4 +667,168 @@ export async function getPlaybookStepsForOrg(input: {
 	const map = new Map<string, PlaybookStepRow>();
 	for (const row of rows) map.set(row.s.id, rowToPlaybookStep(row.s));
 	return map;
+}
+
+// ---------------------------------------------------------------------------
+// playbookRun reads (Phase 18a -- the read surface for Phase 18b's execution
+// pipeline). Today these procedures back the "0 runs yet" empty state on the
+// Builder + Read views; once the Inngest dispatcher lights up, the same
+// procedures surface real run rows.
+// ---------------------------------------------------------------------------
+
+export type PlaybookRunStatus =
+	| "pending"
+	| "active"
+	| "waiting"
+	| "completed"
+	| "failed"
+	| "cancelled";
+
+export interface PlaybookRunRow {
+	id: string;
+	organizationId: string;
+	playbookId: string;
+	playbookName: string;
+	playbookVersionId: string;
+	playbookVersionNumber: number;
+	status: PlaybookRunStatus;
+	triggerEntityType: string | null;
+	triggerEntityId: string | null;
+	currentStepId: string | null;
+	nextWakeAt: Date | null;
+	startedAt: Date | null;
+	completedAt: Date | null;
+	cancelledAt: Date | null;
+	cancelledByUserId: string | null;
+	crossProductOrigin: string | null;
+	createdAt: Date;
+}
+
+function rowToPlaybookRun(row: {
+	id: string;
+	organizationId: string;
+	playbookId: string;
+	playbookName: string;
+	playbookVersionId: string;
+	playbookVersionNumber: number;
+	status: PlaybookRunStatus;
+	triggerEntityType: string | null;
+	triggerEntityId: string | null;
+	currentStepId: string | null;
+	nextWakeAt: Date | null;
+	startedAt: Date | null;
+	completedAt: Date | null;
+	cancelledAt: Date | null;
+	cancelledByUserId: string | null;
+	crossProductOrigin: string | null;
+	createdAt: Date;
+}): PlaybookRunRow {
+	return { ...row };
+}
+
+export interface ListPlaybookRunsForOrgInput {
+	organizationId: string;
+	playbookId?: string;
+	status?: PlaybookRunStatus;
+	limit?: number;
+	offset?: number;
+}
+
+/** Page through playbook_runs in an org, newest first. Joins the parent
+ * playbook + version so the row can render "playbook name v3" without an
+ * N+1. Filters out runs whose parent playbook is soft-deleted (matches the
+ * dispatcher's "skip archived playbooks" posture). */
+export async function listPlaybookRunsForOrg(
+	input: ListPlaybookRunsForOrgInput,
+): Promise<{ rows: PlaybookRunRow[]; totalCount: number }> {
+	const limit = input.limit ?? 50;
+	const offset = input.offset ?? 0;
+
+	const conds = [
+		eq(playbookRun.organizationId, input.organizationId),
+		isNull(playbook.deletedAt),
+	];
+	if (input.playbookId) conds.push(eq(playbook.id, input.playbookId));
+	if (input.status) conds.push(eq(playbookRun.status, input.status));
+	const where = and(...conds);
+
+	const [rows, totalRow] = await Promise.all([
+		db
+			.select({
+				id: playbookRun.id,
+				organizationId: playbookRun.organizationId,
+				playbookId: playbook.id,
+				playbookName: playbook.name,
+				playbookVersionId: playbookVersion.id,
+				playbookVersionNumber: playbookVersion.versionNumber,
+				status: playbookRun.status,
+				triggerEntityType: playbookRun.triggerEntityType,
+				triggerEntityId: playbookRun.triggerEntityId,
+				currentStepId: playbookRun.currentStepId,
+				nextWakeAt: playbookRun.nextWakeAt,
+				startedAt: playbookRun.startedAt,
+				completedAt: playbookRun.completedAt,
+				cancelledAt: playbookRun.cancelledAt,
+				cancelledByUserId: playbookRun.cancelledByUserId,
+				crossProductOrigin: playbookRun.crossProductOrigin,
+				createdAt: playbookRun.createdAt,
+			})
+			.from(playbookRun)
+			.innerJoin(playbookVersion, eq(playbookVersion.id, playbookRun.playbookVersionId))
+			.innerJoin(playbook, eq(playbook.id, playbookVersion.playbookId))
+			.where(where)
+			.orderBy(desc(playbookRun.createdAt))
+			.limit(limit)
+			.offset(offset),
+		db
+			.select({ value: count() })
+			.from(playbookRun)
+			.innerJoin(playbookVersion, eq(playbookVersion.id, playbookRun.playbookVersionId))
+			.innerJoin(playbook, eq(playbook.id, playbookVersion.playbookId))
+			.where(where)
+			.then((r) => r[0] ?? { value: 0 }),
+	]);
+
+	return {
+		rows: rows.map(rowToPlaybookRun),
+		totalCount: Number(totalRow.value),
+	};
+}
+
+/** Single-row fetch for /playbooks/[id]/runs/[runId]. Cross-org returns null
+ * (the procedure surface translates to NOT_FOUND). */
+export async function getPlaybookRunForOrg(input: {
+	organizationId: string;
+	runId: string;
+}): Promise<PlaybookRunRow | null> {
+	const [row] = await db
+		.select({
+			id: playbookRun.id,
+			organizationId: playbookRun.organizationId,
+			playbookId: playbook.id,
+			playbookName: playbook.name,
+			playbookVersionId: playbookVersion.id,
+			playbookVersionNumber: playbookVersion.versionNumber,
+			status: playbookRun.status,
+			triggerEntityType: playbookRun.triggerEntityType,
+			triggerEntityId: playbookRun.triggerEntityId,
+			currentStepId: playbookRun.currentStepId,
+			nextWakeAt: playbookRun.nextWakeAt,
+			startedAt: playbookRun.startedAt,
+			completedAt: playbookRun.completedAt,
+			cancelledAt: playbookRun.cancelledAt,
+			cancelledByUserId: playbookRun.cancelledByUserId,
+			crossProductOrigin: playbookRun.crossProductOrigin,
+			createdAt: playbookRun.createdAt,
+		})
+		.from(playbookRun)
+		.innerJoin(playbookVersion, eq(playbookVersion.id, playbookRun.playbookVersionId))
+		.innerJoin(playbook, eq(playbook.id, playbookVersion.playbookId))
+		.where(
+			and(
+				eq(playbookRun.id, input.runId),
+				eq(playbookRun.organizationId, input.organizationId),
+			),
+		);
+	return row ? rowToPlaybookRun(row) : null;
 }

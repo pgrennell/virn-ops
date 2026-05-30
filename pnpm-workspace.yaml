@@ -9,6 +9,7 @@ allowBuilds:
   "@parcel/watcher": true
   "@swc/core": true
   esbuild: true
+  protobufjs: true
   sharp: true
 
 catalog:
@@ -58,6 +59,7 @@ catalog:
   drizzle-zod: 0.8.3
   es-toolkit: ^1.46.1
   hono: ^4.12.18
+  inngest: ^3.45.6
   input-otp: ^1.4.2
   js-cookie: ^3.0.5
   lucide-react: ^1.14.0

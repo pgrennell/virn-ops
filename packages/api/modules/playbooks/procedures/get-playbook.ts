@@ -1,11 +1,11 @@
-// Read a single playbook with its current draft version + draft step list. Used by
-// the Phase 18a builder detail page. Versions/steps for published versions are not
-// returned -- that's a separate Read-view query that lands when v1.5c three-views
-// surface for Playbooks ships (currently the Playbook read view is described in
-// PRD_PLAYBOOKS §6.5 but not yet implemented).
+// Read a single playbook with both its current draft + latest published version
+// (and their step lists). Used by Phase 18a's Builder + Read views -- the
+// Builder reads draft + draftSteps, the Read view reads latestPublished +
+// publishedSteps. One procedure feeds both.
 
 import {
 	getCurrentDraftPlaybookVersion,
+	getLatestPublishedPlaybookVersion,
 	getPlaybookForOrg,
 	listPlaybookStepsForVersion,
 } from "@virn/database";
@@ -19,7 +19,7 @@ export const getPlaybookProc = protectedOrgProcedure
 		method: "GET",
 		path: "/playbooks/{playbookId}",
 		tags: ["Playbooks"],
-		summary: "Get a playbook with its current draft version + draft step list",
+		summary: "Get a playbook + current draft + latest published (with both step lists)",
 	})
 	.input(z.object({ playbookId: z.string().min(1) }))
 	.handler(async ({ input, context }) => {
@@ -34,12 +34,20 @@ export const getPlaybookProc = protectedOrgProcedure
 			});
 		}
 
-		const draft = await getCurrentDraftPlaybookVersion(pb.id);
-		const draftSteps = draft ? await listPlaybookStepsForVersion(draft.id) : [];
+		const [draft, latestPublished] = await Promise.all([
+			getCurrentDraftPlaybookVersion(pb.id),
+			getLatestPublishedPlaybookVersion(pb.id),
+		]);
+		const [draftSteps, publishedSteps] = await Promise.all([
+			draft ? listPlaybookStepsForVersion(draft.id) : Promise.resolve([]),
+			latestPublished ? listPlaybookStepsForVersion(latestPublished.id) : Promise.resolve([]),
+		]);
 
 		return {
 			playbook: pb,
 			currentDraft: draft,
 			draftSteps,
+			latestPublished,
+			publishedSteps,
 		};
 	});

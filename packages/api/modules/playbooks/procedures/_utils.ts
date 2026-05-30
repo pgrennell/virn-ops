@@ -30,6 +30,9 @@ const CODE_MAP: Record<
 	STEP_CONFIG_INVALID: "BAD_REQUEST",
 	REORDER_STEPS_VERSION_MISMATCH: "BAD_REQUEST",
 	REORDER_STEPS_INCOMPLETE: "BAD_REQUEST",
+	// Phase 18a -- publish dance
+	VERSION_HAS_NO_STEPS: "BAD_REQUEST",
+	PUBLISH_RACE: "CONFLICT",
 };
 
 /** Wraps a lib helper call so any PlaybookEngineError becomes an ORPCError with a

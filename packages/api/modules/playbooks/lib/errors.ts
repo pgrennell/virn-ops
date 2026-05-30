@@ -20,7 +20,10 @@ export type PlaybookEngineErrorCode =
 	| "STEP_PARENT_NOT_BRANCH"
 	| "STEP_CONFIG_INVALID"
 	| "REORDER_STEPS_VERSION_MISMATCH"
-	| "REORDER_STEPS_INCOMPLETE";
+	| "REORDER_STEPS_INCOMPLETE"
+	// Phase 18a -- publish dance
+	| "VERSION_HAS_NO_STEPS"
+	| "PUBLISH_RACE";
 
 export class PlaybookEngineError extends Error {
 	readonly code: PlaybookEngineErrorCode;

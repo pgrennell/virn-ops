@@ -17,6 +17,12 @@ export const NAV_AREAS = {
 	library: "library",
 	templates: "templates",
 	automations: "automations",
+	// Phase 18a -- Playbooks (lifecycle-sequence content object, sibling to
+	// Workflows). Org-scoped at /[organizationSlug]/playbooks. Distinct from
+	// library because Playbooks are their own primitive in the data model
+	// (separate schemas, separate lifecycle events); the surface mirrors the
+	// library shape but with playbook-specific triggers + step types.
+	playbooks: "playbooks",
 	// Read (Phase 10 / v1.5c -- reader-facing SOP surface, PRD §6.4).
 	// Distinct from `library` because:
 	//   - `library` is the authoring index: it lists drafts + in-review + all
@@ -174,6 +180,15 @@ export const NAV_AREA_DEFINITIONS: Record<NavArea, NavAreaDefinition> = {
 		capability: CAPABILITIES.automationRules,
 		phase: "now",
 	},
+	// Phase 18a -- Playbooks authoring surface. Author-grade roles only (the
+	// reader-KB integration that lets operators browse published playbooks via
+	// /sop ships in a follow-up alongside the three-views unification for
+	// Playbooks).
+	[NAV_AREAS.playbooks]: {
+		area: NAV_AREAS.playbooks,
+		allowedRoles: [ROLES.builder, ROLES.admin, ROLES.owner],
+		phase: "now",
+	},
 	// Phase 10 / v1.5c (PRD §6.4) -- reader-facing SOP surface. All org members
 	// can browse + read published SOPs; operators are the primary audience.
 	// Authoring is still gated through `library`, which excludes operators.
@@ -303,6 +318,15 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 				segment: "automations",
 				icon: "Zap",
 				label: "Automations",
+			},
+			// Phase 18a -- Playbooks. Icon `Repeat` signals "cadence / lifecycle
+			// sequence" -- the core concept that differentiates Playbooks from
+			// Workflows (one-shot decision procedures).
+			{
+				area: NAV_AREAS.playbooks,
+				segment: "playbooks",
+				icon: "Repeat",
+				label: "Playbooks",
 			},
 		],
 	},

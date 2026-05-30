@@ -5,6 +5,7 @@
 	"exports": {
 		".": "./index.ts",
 		"./modules/workflows/lib": "./modules/workflows/lib/index.ts",
+		"./inngest": "./inngest/index.ts",
 		"./*": "./*.ts",
 		"./*.ts": "./*.ts"
 	},
@@ -32,6 +33,7 @@
 		"@virn/utils": "workspace:*",
 		"@sindresorhus/slugify": "catalog:",
 		"hono": "catalog:",
+		"inngest": "catalog:",
 		"nanoid": "catalog:",
 		"zod": "catalog:"
 	},

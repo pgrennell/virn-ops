@@ -16,6 +16,7 @@ import { notificationsRouter } from "../modules/notifications/router";
 import { organizationsRouter } from "../modules/organizations/router";
 import { packsRouter } from "../modules/packs/router";
 import { paymentsRouter } from "../modules/payments/router";
+import { playbookRunsRouter } from "../modules/playbook-runs/router";
 import { playbooksRouter } from "../modules/playbooks/router";
 import { runsRouter } from "../modules/runs/router";
 import { suggestionsRouter } from "../modules/suggestions/router";
@@ -47,6 +48,7 @@ export const router = publicProcedure.router({
 	integrations: integrationsRouter,
 	workflows: workflowsRouter,
 	playbooks: playbooksRouter,
+	playbookRuns: playbookRunsRouter,
 });
 
 export type ApiRouterClient = RouterClient<typeof router>;
