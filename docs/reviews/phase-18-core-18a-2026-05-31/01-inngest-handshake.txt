@@ -1,0 +1,1 @@
+{"extra":{"is_mode_explicit":false},"has_event_key":false,"has_signing_key":false,"function_count":1,"mode":"dev","schema_version":"2024-05-24"}
