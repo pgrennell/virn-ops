@@ -24,7 +24,7 @@
 // Step references: `step.dueAnchorStepId` points at another step for `offset_from_step`
 // due-rules (deferred). Step deletion enumerates referencers via the same pattern.
 
-import { and, asc, count, desc, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, lte, max, ne, sql } from "drizzle-orm";
 
 import { db, type DbExecutor } from "../client";
 import {
@@ -658,6 +658,13 @@ export async function updateWorkflow(
 		 * applies to any entity); non-empty narrows to runs launched from an entity whose
 		 * set memberships intersect this list. Pass `undefined` to leave unchanged. */
 		entitySetIds?: string[];
+		/** Phase 16 -- re-attestation cadence. `null` clears the cadence (no
+		 * scheduled re-review). `nextReviewAt` is typically derived from
+		 * `reviewIntervalDays` at the lib layer (now + interval) so the cron
+		 * sweep has a concrete date to compare against, but the column is
+		 * settable directly when the caller wants explicit control. */
+		reviewIntervalDays?: number | null;
+		nextReviewAt?: Date | null;
 	},
 	executor: DbExecutor = db,
 ): Promise<void> {
@@ -667,6 +674,8 @@ export async function updateWorkflow(
 	if (input.type !== undefined) patch.type = input.type;
 	if (input.isActive !== undefined) patch.isActive = input.isActive;
 	if (input.entitySetIds !== undefined) patch.entitySetIds = input.entitySetIds;
+	if (input.reviewIntervalDays !== undefined) patch.reviewIntervalDays = input.reviewIntervalDays;
+	if (input.nextReviewAt !== undefined) patch.nextReviewAt = input.nextReviewAt;
 	if (Object.keys(patch).length === 0) return;
 
 	await executor
@@ -675,6 +684,92 @@ export async function updateWorkflow(
 		.where(
 			and(eq(workflow.id, input.workflowId), eq(workflow.organizationId, input.organizationId)),
 		);
+}
+
+// ---------------------------------------------------------------------------
+// Re-attestation sweep (Phase 16 -- governance flows, Slice D)
+//
+// Mirrors the SLA-sweep pattern in queries/runs.ts: a Vercel Cron endpoint
+// drains "workflows whose review_interval_days is set AND whose next_review_at
+// is <= now" each tick. The sweep is the single place that BOTH emits the
+// notification AND advances `next_review_at` by the interval so the next
+// sweep doesn't re-fire on the same row. Idempotency comes from the
+// monotonic advance: once the date moves past `now`, the row drops out of
+// the candidate set until the next cycle.
+// ---------------------------------------------------------------------------
+
+export interface ReattestationDueRow {
+	id: string;
+	organizationId: string;
+	title: string;
+	reviewIntervalDays: number;
+	nextReviewAt: Date;
+}
+
+/** Find workflows due for re-attestation. Org-scoped (Invariant #1) or
+ * platform-wide when organizationId is null. Filters out archived workflows
+ * (deleted_at IS NOT NULL) since those don't need reminders. */
+export async function findWorkflowsDueForReattestation(
+	organizationId: string | null,
+	now: Date = new Date(),
+): Promise<ReattestationDueRow[]> {
+	const conds = [
+		isNull(workflow.deletedAt),
+		sql`${workflow.reviewIntervalDays} IS NOT NULL`,
+		sql`${workflow.nextReviewAt} IS NOT NULL`,
+		lte(workflow.nextReviewAt, now),
+	];
+	if (organizationId) {
+		conds.push(eq(workflow.organizationId, organizationId));
+	}
+	const rows = await db
+		.select({
+			id: workflow.id,
+			organizationId: workflow.organizationId,
+			title: workflow.title,
+			reviewIntervalDays: workflow.reviewIntervalDays,
+			nextReviewAt: workflow.nextReviewAt,
+		})
+		.from(workflow)
+		.where(and(...conds))
+		.orderBy(workflow.nextReviewAt);
+	return rows
+		.filter(
+			(r): r is ReattestationDueRow =>
+				r.reviewIntervalDays !== null && r.nextReviewAt !== null,
+		)
+		.map((r) => ({
+			id: r.id,
+			organizationId: r.organizationId,
+			title: r.title,
+			reviewIntervalDays: r.reviewIntervalDays,
+			nextReviewAt: r.nextReviewAt,
+		}));
+}
+
+/** Advance `next_review_at` forward by `review_interval_days` from the
+ * current value. Idempotent in the sense that the WHERE clause matches
+ * only the specific row + the unchanged previous value -- two concurrent
+ * sweeps can't double-advance. Returns true iff the row was advanced. */
+export async function advanceWorkflowNextReviewAt(
+	input: {
+		workflowId: string;
+		previousNextReviewAt: Date;
+		newNextReviewAt: Date;
+	},
+	executor: DbExecutor = db,
+): Promise<boolean> {
+	const result = await executor
+		.update(workflow)
+		.set({ nextReviewAt: input.newNextReviewAt })
+		.where(
+			and(
+				eq(workflow.id, input.workflowId),
+				eq(workflow.nextReviewAt, input.previousNextReviewAt),
+			),
+		)
+		.returning({ id: workflow.id });
+	return result.length > 0;
 }
 
 /** Soft-archive a workflow: sets `workflow.deletedAt`. This is the WORKFLOW-LEVEL archive

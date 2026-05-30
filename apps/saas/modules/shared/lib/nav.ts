@@ -102,6 +102,14 @@ export const CAPABILITIES = {
 	// enabled. The resolver fans these out via PROFILES in
 	// @virn/database/queries/config.ts.
 	governanceApprovals: "governance.approvals",
+	// Phase 16 -- acknowledge action surface gate. The Read view shows the
+	// "Acknowledge this version" button only when this capability is ON; the
+	// procedure layer also refuses with CAPABILITY_DISABLED for defense.
+	governanceAcknowledgments: "governance.acknowledgments",
+	// Phase 16 -- suggestions submission + triage gate. The Read view's
+	// "Suggest improvement" button + the /compliance/suggestions triage
+	// surface both gate on this.
+	governanceSuggestions: "governance.suggestions",
 	guestParticipants: "workflows.guest_participants",
 	fieldsCustomDefinitions: "fields.custom_definitions",
 	// Lifts step.type=ai from reserved to live (Phase 8 step 4). Default ON across

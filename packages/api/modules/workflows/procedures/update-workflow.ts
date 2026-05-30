@@ -25,6 +25,12 @@ export const updateWorkflowProc = adminOrgProcedure
 			// narrows the launcher's set-intersection filter. Cap at 50 entries -- a
 			// workflow scoped to more than that should probably be unscoped instead.
 			entitySetIds: z.array(z.string().min(1)).max(50).optional(),
+			// Phase 16 -- re-attestation cadence. Positive integer sets the
+			// review interval; null clears it. The lib derives nextReviewAt
+			// from this so the cron sweep has a concrete date. Cap at 3650
+			// days (~10 years) to keep accidental "I'll never review this"
+			// settings from silently never firing.
+			reviewIntervalDays: z.number().int().min(1).max(3650).nullable().optional(),
 		}),
 	)
 	.handler(async ({ input, context }) => {

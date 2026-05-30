@@ -4,6 +4,7 @@ import { acknowledgmentsRouter } from "../modules/acknowledgments/router";
 import { adminRouter } from "../modules/admin/router";
 import { agentsRouter } from "../modules/agents/router";
 import { aiRouter } from "../modules/ai/router";
+import { approvalsRouter } from "../modules/approvals/router";
 import { auditRouter } from "../modules/audit/router";
 import { configRouter } from "../modules/config/router";
 import { datasetsRouter } from "../modules/datasets/router";
@@ -17,6 +18,7 @@ import { packsRouter } from "../modules/packs/router";
 import { paymentsRouter } from "../modules/payments/router";
 import { playbooksRouter } from "../modules/playbooks/router";
 import { runsRouter } from "../modules/runs/router";
+import { suggestionsRouter } from "../modules/suggestions/router";
 import { usersRouter } from "../modules/users/router";
 import { vendorsRouter } from "../modules/vendors/router";
 import { workflowsRouter } from "../modules/workflows/router";
@@ -26,6 +28,7 @@ export const router = publicProcedure.router({
 	acknowledgments: acknowledgmentsRouter,
 	admin: adminRouter,
 	agents: agentsRouter,
+	approvals: approvalsRouter,
 	audit: auditRouter,
 	organizations: organizationsRouter,
 	users: usersRouter,
@@ -34,6 +37,7 @@ export const router = publicProcedure.router({
 	notifications: notificationsRouter,
 	config: configRouter,
 	runs: runsRouter,
+	suggestions: suggestionsRouter,
 	vendors: vendorsRouter,
 	listings: listingsRouter,
 	packs: packsRouter,

@@ -23,9 +23,9 @@
 //     handled client-side via the `isAdminOrOwner` prop below.
 
 import { ReadView } from "@builder/components/ReadView";
-import { canSee } from "@shared/lib/gating";
+import { canSee, isEnabled } from "@shared/lib/gating";
 import { assertCanSee } from "@shared/lib/gating-server";
-import { NAV_AREAS } from "@shared/lib/nav";
+import { CAPABILITIES, NAV_AREAS } from "@shared/lib/nav";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Workflow (Read)" };
@@ -56,6 +56,14 @@ export default async function WorkflowReadPage({
 				runId={runId}
 				canSeeRuns={canSee(NAV_AREAS.runs, snapshot)}
 				canSeeCompliance={canSee(NAV_AREAS.compliance, snapshot)}
+				acknowledgmentsEnabled={isEnabled(
+					CAPABILITIES.governanceAcknowledgments,
+					snapshot,
+				)}
+				suggestionsEnabled={isEnabled(
+					CAPABILITIES.governanceSuggestions,
+					snapshot,
+				)}
 			/>
 		</div>
 	);

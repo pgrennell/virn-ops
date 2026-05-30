@@ -12,7 +12,7 @@
 
 import { assertCanSee } from "@shared/lib/gating-server";
 import { NAV_AREAS } from "@shared/lib/nav";
-import { FileSearch, ShieldCheck, UserCheck } from "lucide-react";
+import { ClipboardCheck, FileSearch, Lightbulb, ShieldCheck, UserCheck } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -40,10 +40,22 @@ export default async function CompliancePage({
 				</header>
 				<div className="p-4 gap-3 flex flex-col">
 					<ComplianceLink
+						href={`/${organizationSlug}/compliance/approvals`}
+						icon={<ClipboardCheck className="size-4" />}
+						title="Pending approvals"
+						subtitle="Decide on workflow-version approval requests. Off until governance.approvals is enabled."
+					/>
+					<ComplianceLink
 						href={`/${organizationSlug}/compliance/acknowledgments`}
 						icon={<UserCheck className="size-4" />}
 						title="Acknowledgments"
 						subtitle="Read-only evidence of who acknowledged which workflow version, when."
+					/>
+					<ComplianceLink
+						href={`/${organizationSlug}/compliance/suggestions`}
+						icon={<Lightbulb className="size-4" />}
+						title="Suggestions"
+						subtitle="Triage improvement feedback from operators. Off until governance.suggestions is enabled."
 					/>
 					<ComplianceLink
 						href={`/${organizationSlug}/library`}

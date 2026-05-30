@@ -8,6 +8,10 @@
 		{
 			"path": "/api/cron/cross-product-deliver",
 			"schedule": "* * * * *"
+		},
+		{
+			"path": "/api/cron/reattestation-sweep",
+			"schedule": "0 6 * * *"
 		}
 	]
 }

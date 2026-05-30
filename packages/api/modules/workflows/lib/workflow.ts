@@ -84,6 +84,11 @@ export interface UpdateWorkflowInput {
 	 * surfaces this workflow only when the target entity's memberships overlap. Pass
 	 * `undefined` to leave unchanged. */
 	entitySetIds?: string[];
+	/** Phase 16 -- re-attestation cadence. When set to a positive integer,
+	 * also rolls `nextReviewAt` to `now + reviewIntervalDays` so the cron
+	 * sweep has a concrete date to compare against. Set to `null` to clear
+	 * the cadence entirely. */
+	reviewIntervalDays?: number | null;
 }
 
 export async function updateWorkflowMeta(
@@ -124,6 +129,27 @@ export async function updateWorkflowMeta(
 			changes.entitySetIds = { from: wf.entitySetIds ?? [], to: input.entitySetIds };
 		}
 	}
+
+	// Phase 16 -- re-attestation cadence. When the interval changes (or is
+	// cleared), derive the next_review_at accordingly so the cron has a
+	// concrete date. A null interval clears next_review_at; a positive
+	// integer sets it to `now + intervalDays`.
+	let nextReviewAtPatch: Date | null | undefined = undefined;
+	if (input.reviewIntervalDays !== undefined && input.reviewIntervalDays !== wf.reviewIntervalDays) {
+		changes.reviewIntervalDays = {
+			from: wf.reviewIntervalDays,
+			to: input.reviewIntervalDays,
+		};
+		if (input.reviewIntervalDays === null) {
+			nextReviewAtPatch = null;
+		} else {
+			const next = new Date();
+			next.setDate(next.getDate() + input.reviewIntervalDays);
+			nextReviewAtPatch = next;
+		}
+		changes.nextReviewAt = { from: wf.nextReviewAt, to: nextReviewAtPatch };
+	}
+
 	if (Object.keys(changes).length === 0) return; // No-op.
 
 	await updateWorkflowQuery({
@@ -134,6 +160,8 @@ export async function updateWorkflowMeta(
 		type: input.type,
 		isActive: input.isActive,
 		entitySetIds: input.entitySetIds,
+		reviewIntervalDays: input.reviewIntervalDays,
+		nextReviewAt: nextReviewAtPatch,
 	});
 
 	await writeAuditAndActivity({

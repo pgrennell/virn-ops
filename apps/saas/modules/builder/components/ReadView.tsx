@@ -32,13 +32,14 @@ import { Button } from "@virn/ui/components/button";
 import { Spinner } from "@virn/ui/components/spinner";
 import { cn } from "@virn/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, CheckCircle2, Eye, Pencil, Sparkles } from "lucide-react";
+import { BookOpen, CheckCircle2, Eye, Lightbulb, Pencil, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
 import { AuthoringPromptDialog } from "./AuthoringPromptDialog";
 import { RunTimeline } from "./RunTimeline";
+import { SuggestImprovementDialog } from "./SuggestImprovementDialog";
 import {
 	WorkflowFlowchart,
 	type FlowchartSection,
@@ -67,6 +68,15 @@ interface ReadViewProps {
 	 * (compliance / evidence reader). Composes capability=compliance.pack
 	 * + role in {reviewer, admin, owner}. */
 	canSeeCompliance: boolean;
+	/** Phase 16 -- when true, the page surfaces the "Acknowledge this version"
+	 * button (and the green "Acknowledged" badge once the user has done so).
+	 * Off when governance.acknowledgments is off; the procedure layer also
+	 * refuses with CAPABILITY_DISABLED for defense. */
+	acknowledgmentsEnabled: boolean;
+	/** Phase 16 -- when true, the footer surfaces a "Suggest improvement"
+	 * button that opens a textarea dialog. Off when governance.suggestions is
+	 * off; the procedure layer also refuses with CAPABILITY_DISABLED. */
+	suggestionsEnabled: boolean;
 }
 
 export function ReadView({
@@ -76,6 +86,8 @@ export function ReadView({
 	runId,
 	canSeeRuns,
 	canSeeCompliance,
+	acknowledgmentsEnabled,
+	suggestionsEnabled,
 }: ReadViewProps) {
 	const workflowQuery = useQuery(
 		orpc.workflows.get.queryOptions({ input: { workflowId } }),
@@ -132,6 +144,8 @@ export function ReadView({
 			runId={runId ?? null}
 			canSeeRuns={canSeeRuns}
 			canSeeCompliance={canSeeCompliance}
+			acknowledgmentsEnabled={acknowledgmentsEnabled}
+			suggestionsEnabled={suggestionsEnabled}
 		/>
 	);
 }
@@ -153,6 +167,8 @@ function ReadInner({
 	runId,
 	canSeeRuns,
 	canSeeCompliance,
+	acknowledgmentsEnabled,
+	suggestionsEnabled,
 }: {
 	workflow: WorkflowReadHeader;
 	workflowVersionId: string;
@@ -161,6 +177,8 @@ function ReadInner({
 	runId: string | null;
 	canSeeRuns: boolean;
 	canSeeCompliance: boolean;
+	acknowledgmentsEnabled: boolean;
+	suggestionsEnabled: boolean;
 }) {
 	const queryClient = useQueryClient();
 
@@ -200,6 +218,30 @@ function ReadInner({
 			}
 		},
 	});
+
+	// Phase 16 -- acknowledgment status + write mutation. Only loaded when the
+	// capability is on; turning it off mid-session collapses the UI back to the
+	// passive read signal without a refetch.
+	const ackStatusQuery = useQuery({
+		...orpc.acknowledgments.getMyStatus.queryOptions({
+			input: { workflowVersionId },
+		}),
+		enabled: acknowledgmentsEnabled,
+	});
+	const acknowledgeMut = useMutation({
+		...orpc.acknowledgments.acknowledge.mutationOptions(),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({
+				queryKey: orpc.acknowledgments.getMyStatus.queryKey({
+					input: { workflowVersionId },
+				}),
+			});
+		},
+	});
+
+	// Phase 16 -- suggest improvement dialog state. Dialog component handles
+	// the textarea + the submit mutation; the page only owns open/closed.
+	const [suggestOpen, setSuggestOpen] = useState(false);
 
 	if (bundleQuery.isLoading) {
 		return <CenteredSpinner label="Loading SOP…" />;
@@ -296,6 +338,21 @@ function ReadInner({
 									title={`Marked read at ${new Date(readAt).toLocaleString()}`}
 								>
 									<CheckCircle2 className="size-3" /> Read
+								</span>
+							)}
+							{/* Phase 16 -- acknowledged badge. The check is "active compliance
+							    sign-off" distinct from the passive read signal above.
+							    Same emerald palette but the ShieldCheck icon distinguishes. */}
+							{acknowledgmentsEnabled && ackStatusQuery.data?.hasAcknowledged && (
+								<span
+									className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] uppercase tracking-wide font-medium rounded bg-indigo-100 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-300"
+									title={
+										ackStatusQuery.data.acknowledgedAt
+											? `Acknowledged at ${new Date(ackStatusQuery.data.acknowledgedAt).toLocaleString()}`
+											: "Acknowledged"
+									}
+								>
+									<ShieldCheck className="size-3" /> Acknowledged
 								</span>
 							)}
 							{isAdminOrOwner && receiptsQuery.data && (
@@ -403,32 +460,79 @@ function ReadInner({
 				</aside>
 			</div>
 
-			<footer className="border-t border-border pt-4 flex items-center justify-between">
-				{hasRead && readAt ? (
-					<span className="text-xs text-foreground/60">
-						Marked read on {new Date(readAt).toLocaleDateString()}.
-					</span>
-				) : (
-					<Button
-						size="sm"
-						variant="primary"
-						onClick={() => markAsRead.mutate({ workflowVersionId })}
-						disabled={markAsRead.isPending}
-					>
-						<CheckCircle2 className="size-3.5 mr-1.5" />
-						{markAsRead.isPending ? "Marking…" : "Mark as read"}
-					</Button>
-				)}
-				{markAsRead.isError && (
+			<footer className="border-t border-border pt-4 flex items-center justify-between gap-3 flex-wrap">
+				<div className="flex items-center gap-2 flex-wrap">
+					{hasRead && readAt ? (
+						<span className="text-xs text-foreground/60">
+							Marked read on {new Date(readAt).toLocaleDateString()}.
+						</span>
+					) : (
+						<Button
+							size="sm"
+							variant="primary"
+							onClick={() => markAsRead.mutate({ workflowVersionId })}
+							disabled={markAsRead.isPending}
+						>
+							<CheckCircle2 className="size-3.5 mr-1.5" />
+							{markAsRead.isPending ? "Marking…" : "Mark as read"}
+						</Button>
+					)}
+					{/* Phase 16 -- Acknowledge action surface. Distinct from the
+					    passive read button above: this is the active compliance
+					    sign-off. Both can coexist on the same workflow_version. */}
+					{acknowledgmentsEnabled &&
+						(ackStatusQuery.data?.hasAcknowledged ? (
+							<span className="text-xs text-foreground/60">
+								Acknowledged on{" "}
+								{ackStatusQuery.data.acknowledgedAt
+									? new Date(ackStatusQuery.data.acknowledgedAt).toLocaleDateString()
+									: "—"}
+								.
+							</span>
+						) : (
+							<Button
+								size="sm"
+								variant="primary"
+								onClick={() => acknowledgeMut.mutate({ workflowVersionId })}
+								disabled={acknowledgeMut.isPending}
+							>
+								<ShieldCheck className="size-3.5 mr-1.5" />
+								{acknowledgeMut.isPending ? "Acknowledging…" : "Acknowledge"}
+							</Button>
+						))}
+					{/* Phase 16 -- suggest improvement. Always-available action
+					    when capability is on; the dialog handles submit + success. */}
+					{suggestionsEnabled && (
+						<Button
+							size="sm"
+							variant="ghost"
+							onClick={() => setSuggestOpen(true)}
+						>
+							<Lightbulb className="size-3.5 mr-1.5" />
+							Suggest improvement
+						</Button>
+					)}
+				</div>
+				{(markAsRead.isError || acknowledgeMut.isError) && (
 					<Alert variant="error" className="ml-3">
 						<AlertDescription className="text-xs">
-							{markAsRead.error instanceof Error
-								? markAsRead.error.message
-								: "Couldn't mark as read."}
+							{(markAsRead.error instanceof Error && markAsRead.error.message) ||
+								(acknowledgeMut.error instanceof Error && acknowledgeMut.error.message) ||
+								"Couldn't complete the action."}
 						</AlertDescription>
 					</Alert>
 				)}
 			</footer>
+			{/* Phase 16 -- suggest improvement dialog. Mounted once at the article
+			    root; visibility driven by suggestOpen state above. */}
+			{suggestionsEnabled && (
+				<SuggestImprovementDialog
+					workflowId={workflow.id}
+					workflowTitle={workflow.title}
+					open={suggestOpen}
+					onOpenChange={setSuggestOpen}
+				/>
+			)}
 		</article>
 	);
 }

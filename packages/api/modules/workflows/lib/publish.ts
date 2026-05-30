@@ -30,11 +30,13 @@ import {
 	getVersionLaunchBundle,
 	getWorkflowForOrg,
 	getWorkflowWithVersions,
+	hasApprovedApprovalForVersion,
 	insertDraftVersion,
 	insertField,
 	insertSection,
 	insertStep,
 	insertStepDependency,
+	isCapabilityEnabledForOrg,
 	nextVersionNumber,
 	publishVersionRow,
 	transitionWorkflowReviewState,
@@ -94,6 +96,25 @@ export async function publishVersion(
 			"Cannot publish a workflow with no steps. Add at least one step first.",
 			{ versionId: v.id },
 		);
+	}
+
+	// Phase 16 -- approvals gate. When governance.approvals is ON for the org,
+	// publishing requires an `approved` version_approval row for this version
+	// (admin override deliberately NOT supported: the whole point of the gate
+	// is that no one bypasses approvals -- relax later if customer pull asks).
+	const approvalsCapEnabled = await isCapabilityEnabledForOrg(
+		ctx.organizationId,
+		"governance.approvals",
+	);
+	if (approvalsCapEnabled) {
+		const isApproved = await hasApprovedApprovalForVersion(v.id);
+		if (!isApproved) {
+			throw new WorkflowEngineError(
+				"APPROVAL_REQUIRED",
+				"Approvals are required for this org and no approved request exists for this version. Request approval first.",
+				{ versionId: v.id, capability: "governance.approvals" },
+			);
+		}
 	}
 
 	// Atomic publish + audit pair. The publishVersionRow helper's WHERE-clause closes the

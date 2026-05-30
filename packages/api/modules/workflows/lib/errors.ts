@@ -45,7 +45,9 @@ export type WorkflowEngineErrorCode =
 	| "DUE_SOURCE_STEP_NOT_EARLIER"
 	| "FIELD_TYPE_CHANGE_LOCKED"
 	// Phase 13 slice B markdown import (PRD §11)
-	| "IMPORT_NO_RECOGNIZABLE_STRUCTURE";
+	| "IMPORT_NO_RECOGNIZABLE_STRUCTURE"
+	// Phase 16 -- approvals publish-gate (governance.approvals)
+	| "APPROVAL_REQUIRED";
 
 export class WorkflowEngineError extends Error {
 	readonly code: WorkflowEngineErrorCode;

@@ -461,7 +461,13 @@ vi.mock("@virn/database", () => {
 		deleteWorkflowRole: vi.fn(),
 		findLockedFieldIds: vi.fn(async () => new Set()),
 		getVersionEditBundle: vi.fn(),
+		// Phase 16 (Slice B) -- publish gate. Default: cap off so this
+		// acceptance test (which doesn't model approvals) behaves as it
+		// did pre-Phase-16. A focused test in approvals lib covers the
+		// gate semantics.
+		hasApprovedApprovalForVersion: vi.fn(async () => false),
 		insertWorkflowRole: vi.fn(),
+		isCapabilityEnabledForOrg: vi.fn(async () => false),
 		listWorkflowsForOrg: vi.fn(),
 		listWorkflowRolesForOrg: vi.fn(),
 		reorderSteps: vi.fn(),

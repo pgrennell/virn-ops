@@ -53,6 +53,8 @@ const CODE_MAP: Record<
 	FIELD_TYPE_CHANGE_LOCKED: "BAD_REQUEST",
 	// Phase 13 slice B markdown import
 	IMPORT_NO_RECOGNIZABLE_STRUCTURE: "BAD_REQUEST",
+	// Phase 16 -- approvals publish gate
+	APPROVAL_REQUIRED: "FORBIDDEN",
 };
 
 /** Wraps a lib helper call so any WorkflowEngineError becomes an ORPCError with a

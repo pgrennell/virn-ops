@@ -25,11 +25,15 @@ vi.mock("@virn/database", () => ({
 	getLatestPublishedWorkflowVersion: vi.fn(),
 	getVersionLaunchBundle: vi.fn(),
 	getWorkflowWithVersions: vi.fn(),
+	// Phase 16 (Slice B) -- publish gate. Default: cap off so the existing
+	// tests behave as they did pre-Phase-16 (no approval required).
+	hasApprovedApprovalForVersion: vi.fn().mockResolvedValue(false),
 	insertDraftVersion: vi.fn(),
 	insertField: vi.fn(),
 	insertSection: vi.fn(),
 	insertStep: vi.fn(),
 	insertStepDependency: vi.fn(),
+	isCapabilityEnabledForOrg: vi.fn().mockResolvedValue(false),
 	nextVersionNumber: vi.fn(),
 	publishVersionRow: vi.fn(),
 	updateStep: vi.fn(),
