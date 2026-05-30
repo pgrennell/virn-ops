@@ -67,7 +67,7 @@ test.describe("Virn Ops Phase 12.1 AI Authoring Dogfood Walkthrough", () => {
 		// ==========================================
 		console.log("--- Section 1 — Library Page and Create Menu ---");
 		await page.goto(`/${orgSlug}/library`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Open "+ Create" menu in the Library header specifically
 		const createBtn = page.locator("header").filter({ hasText: "Library" }).getByRole("button", { name: "Create" }).first();
@@ -98,7 +98,7 @@ test.describe("Virn Ops Phase 12.1 AI Authoring Dogfood Walkthrough", () => {
 		await expect(submitBtn).toBeDisabled();
 
 		// Open collapsible section
-		const detailsSummary = page.locator("summary", { hasText: "Paste an existing SOP, doc, or transcript" }).first();
+		const detailsSummary = page.locator("summary").filter({ hasText: /Paste an/i }).first();
 		await expect(detailsSummary).toBeVisible();
 		await detailsSummary.click();
 
@@ -172,7 +172,7 @@ test.describe("Virn Ops Phase 12.1 AI Authoring Dogfood Walkthrough", () => {
 		}
 
 		// Wait for canvas to load and spinner to disappear
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(3000); // extra breathing room for React queries to complete hydration
 
 		// Verify workflow title matches our request

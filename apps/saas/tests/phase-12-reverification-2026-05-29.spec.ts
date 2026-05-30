@@ -39,7 +39,7 @@ async function loginAsEmail(page: Page, email: string, callbackURLPath: string =
 
 	const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${token}&callbackURL=http://localhost:3000${callbackURLPath}`;
 	await page.goto(callbackUrl);
-	await page.waitForLoadState("networkidle");
+	await page.waitForLoadState("load");
 	console.log(`Helper: Logged in as ${email} successfully!`);
 }
 
@@ -230,7 +230,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// 9. Navigate back to the review surface
 		await page.goto(`/virn/library/workflows/${wfId}/builder?aiAuthored=1`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(2000);
 
 		// 10. Click "Regenerate" on a different step (e.g. index 2 or index 1 if it's not accepted)
@@ -295,7 +295,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 12. Test stale link empty state: create a hand-authored workflow
 		console.log("Creating hand-authored workflow for stale-link check...");
 		await page.goto("/virn/library");
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		
 		await page.locator("header").filter({ hasText: "Library" }).getByRole("button", { name: "Create" }).first().click();
 		await page.getByRole("menuitem", { name: "New workflow" }).click();
@@ -308,12 +308,12 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		const handTitle = `E2E Reverification Hand Auth ${Date.now()}`;
 		await db.update(workflow).set({ title: handTitle }).where(eq(workflow.id, handWfId));
 		await page.reload();
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Navigate directly to `?aiAuthored=1`
 		console.log("Visiting ?aiAuthored=1 on hand-authored workflow...");
 		await page.goto(`/virn/library/workflows/${handWfId}/builder?aiAuthored=1`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(2000);
 
 		// Verify empty state renders with an "Open in Builder" CTA
@@ -347,7 +347,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 1. Builder surface: go to normal Builder
 		console.log("Navigating to AI workflow Builder...");
 		await page.goto(`/virn/library/workflows/${aiWfId}/builder`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(5000);
 
 		// Find "AI-authored" chip in header and click
@@ -389,7 +389,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 2. Read view surface: go to read view
 		console.log("Navigating to Read view...");
 		await page.goto(`/virn/library/workflows/${aiWfId}/read`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(5000);
 
 		// Find AI chip in read header and click
@@ -410,7 +410,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 3. Library row surface
 		console.log("Navigating to Library...");
 		await page.goto("/virn/library");
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(5000);
 
 		// Find Library row AI chip and click
@@ -439,7 +439,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 4. SOP index chip is non-clickable
 		console.log("Navigating to SOP index (/sop)...");
 		await page.goto("/virn/sop");
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(2000);
 
 		// Find the SOP row AI chip (it exists but is decorative)
@@ -524,17 +524,23 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// Update title in DB to make sure Library search by text finds it deterministically
 		await db.update(workflow).set({ title: "E2E Reverification D" }).where(eq(workflow.id, wfId));
 
-		// Check the Configure panel or check Library row's entity-set chips (Library row has them visible)
-		await page.goto("/virn/library");
-		await page.waitForLoadState("networkidle");
+		// Check the Configure panel inside the Builder UI to verify E2E Rev Set A is indeed selected
+		await page.goto(`/virn/library/workflows/${wfId}/builder`);
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(2000);
 
-		const wfRow = page.locator("li").filter({ hasText: "E2E Reverification D" }).first();
-		await expect(wfRow).toBeVisible();
-		
-		// Expect the entity set chip "E2E Rev Set A" to be rendered on the row
-		const setBadge = wfRow.locator("span", { hasText: "E2E Rev Set A" }).first();
-		await expect(setBadge).toBeVisible();
+		// Click the Workflow settings button in the top right to open the configuration panel
+		await page.getByRole("button", { name: "Workflow settings" }).first().click();
+		await page.waitForTimeout(1000);
+
+		// Assert that the config panel is open by verifying "Workflow settings" header text is visible
+		await expect(page.locator("p", { hasText: "Workflow settings" }).first()).toBeVisible();
+
+		// Expect the entity set button "E2E Rev Set A" to be highlighted/selected
+		const setButton = page.locator("button", { hasText: "E2E Rev Set A" }).first();
+		await expect(setButton).toBeVisible();
+		// Assert that it has the class 'bg-primary' which denotes selected state
+		await expect(setButton).toHaveClass(/bg-primary/);
 
 		// Capture `15-workflow-entity-sets-applied.png`.
 		await page.screenshot({ path: path.join(tempDir, "15-workflow-entity-sets-applied.png") });
@@ -543,7 +549,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 7. API guard validation: bogus hints
 		console.log("Testing API guard for bogus entitySetHints...");
 		const bogusRes = await page.evaluate(async () => {
-			const res = await fetch("/api/rpc/agents/authoring/workflow", {
+			const res = await fetch("/api/agents/authoring/workflow", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -562,7 +568,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		// 8. API guard validation: foreign-org entity sets
 		console.log("Testing API guard for foreign entitySetHints...");
 		const foreignSetRes = await page.evaluate(async () => {
-			const res = await fetch("/api/rpc/agents/authoring/workflow", {
+			const res = await fetch("/api/agents/authoring/workflow", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -586,12 +592,12 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// Pre-req: We need a published workflow.
 		// Let's publish the scoped workflow created in Scenario D.
-		const scopedWfId = createdWorkflowIds[1];
+		const scopedWfId = createdWorkflowIds[2];
 		expect(scopedWfId).toBeDefined();
 
 		console.log("Publishing Scenario D workflow as template pre-req...");
 		await page.goto(`/virn/library/workflows/${scopedWfId}/builder`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(2000);
 		
 		const publishBtn = page.getByRole("button", { name: "Publish", exact: true }).first();
@@ -602,7 +608,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// 1. Library → Create → Author with AI...
 		await page.goto("/virn/library");
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.locator("header").filter({ hasText: "Library" }).getByRole("button", { name: "Create" }).first().click();
 		await page.getByRole("menuitem", { name: "Author with AI…" }).click();
 
@@ -658,7 +664,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// 4. Test Adapt Mode: Repeat dialog
 		await page.goto("/virn/library");
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.locator("header").filter({ hasText: "Library" }).getByRole("button", { name: "Create" }).first().click();
 		await page.getByRole("menuitem", { name: "Author with AI…" }).click();
 
@@ -690,7 +696,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		
 		// Guard 1: Foreign-org template
 		const guard1 = await page.evaluate(async () => {
-			const res = await fetch("/api/rpc/agents/authoring/workflow", {
+			const res = await fetch("/api/agents/authoring/workflow", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -705,10 +711,10 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 		expect(guard1.json?.data?.code).toBe("AI_AUTHORING_TEMPLATE_HINT_NOT_FOUND");
 
 		// Guard 2: Draft workflow with no published version
-		// Let's find a draft workflow in this org (e.g. the first workflow from Scenario B which is finished review but draft)
-		const draftWfId = createdWorkflowIds[0];
+		// Let's find a draft workflow in this org (e.g. the hand-authored workflow from Scenario B which is finished review but draft)
+		const draftWfId = createdWorkflowIds[1];
 		const guard2 = await page.evaluate(async (wfId) => {
-			const res = await fetch("/api/rpc/agents/authoring/workflow", {
+			const res = await fetch("/api/agents/authoring/workflow", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -724,7 +730,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// Guard 3: Adapt without templateHintId
 		const guard3 = await page.evaluate(async () => {
-			const res = await fetch("/api/rpc/agents/authoring/workflow", {
+			const res = await fetch("/api/agents/authoring/workflow", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -744,7 +750,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// Consolidate and capture one payload sample for the report
 		const errorRes = await page.evaluate(async () => {
-			const res = await fetch("/api/rpc/agents/authoring/workflow", {
+			const res = await fetch("/api/agents/authoring/workflow", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -762,7 +768,7 @@ test.describe.serial("Phase 12 E2E Reverification Walkthrough", () => {
 
 		// Navigate to home to capture devtools-like output in network or browser
 		await page.goto("/virn/library");
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		
 		// Capture `20-error-payload-sample.png`.
 		await page.screenshot({ path: path.join(tempDir, "20-error-payload-sample.png") });

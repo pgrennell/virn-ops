@@ -73,7 +73,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// ==========================================
 		console.log("--- P0 — A: AI Authoring ---");
 		await page.goto(`/${orgSlug}/library`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Open "+ Create" menu in the page header specifically
 		const createBtn = page.locator("header").filter({ hasText: "Library" }).getByRole("button", { name: "Create" }).first();
@@ -150,7 +150,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// ==========================================
 		console.log("--- P0 — B: Builder due-rule configuration ---");
 		await page.goto(`/${orgSlug}/library`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Click Create -> Workflow
 		const headerCreateBtn = page.locator("header").filter({ hasText: "Library" }).getByRole("button", { name: "Create" }).first();
@@ -164,11 +164,11 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		handWorkflowId = handUrl.match(/\/workflows\/([a-zA-Z0-9_-]+)\/builder/)![1];
 		console.log("Created hand-authored workflow:", handWorkflowId);
 
-		// Rename workflow via Drizzle so it doesn't pollute title search
+		// Rename workflow directly in DB
 		const handWfTitle = `E2E Hand-Auth dueType ${Date.now()}`;
 		await db.update(workflow).set({ title: handWfTitle }).where(eq(workflow.id, handWorkflowId));
 		await page.reload();
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await expect(page.locator("h1", { hasText: handWfTitle }).first()).toBeVisible({ timeout: 15000 });
 
 		// Add section and steps
@@ -210,23 +210,25 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Open kickoff field config and set type to Date
 		await page.getByRole("button", { name: "Configure kickoff field arrival_date" }).click();
-		await page.waitForTimeout(1000);
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
-		await page.getByText("Date", { exact: true }).first().click();
+		await page.waitForTimeout(2000);
+		await page.locator("p", { hasText: /^Type$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Date", exact: false }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		// Configure Step B: offset_from_step, anchor=Step A, offset=2
 		await page.locator("aside button").filter({ hasText: "Step B" }).first().click();
+		await page.waitForTimeout(1000);
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
+		await page.waitForTimeout(2000);
 
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "Days after another step completes" }).first().click();
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Days after another step completes", exact: false }).first().click();
 
 		// Capture screenshot 02-step-b-anchor-picker.png
 		await page.screenshot({ path: path.join(artifactsDir, "02-step-b-anchor-picker.png") });
 		console.log("Saved: 02-step-b-anchor-picker.png");
 
-		await page.getByRole("button", { name: "Pick an anchor step…" }).first().click();
+		await page.getByRole("combobox", { name: /Pick an anchor step/i }).first().click();
 
 		// Coverage gap follow-up: verify the picker filters to EARLIER steps only.
 		// Step B's anchor picker should show Step A (earlier) but NOT Step C (later)
@@ -250,16 +252,18 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Configure Step C: from_date_field, source=arrival_date, offset=-1
 		await page.locator("aside button").filter({ hasText: "Step C" }).first().click();
+		await page.waitForTimeout(1000);
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
+		await page.waitForTimeout(2000);
 
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "From a date field's value" }).first().click();
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "From a date field's value", exact: false }).first().click();
 
 		// Capture screenshot 03-step-c-source-picker.png
 		await page.screenshot({ path: path.join(artifactsDir, "03-step-c-source-picker.png") });
 		console.log("Saved: 03-step-c-source-picker.png");
 
-		await page.getByRole("button", { name: "Pick a date field…" }).first().click();
+		await page.getByRole("combobox", { name: /Pick a date field/i }).first().click();
 
 		// Coverage gap follow-up: verify the picker filters to allowable sources.
 		// Step C's source picker should show arrival_date (kickoff) but not any
@@ -296,17 +300,17 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
 
 		// 8. On Step B, switch dueType to "Days after the run starts"
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "Days after the run starts" }).first().click();
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Days after the run starts", exact: false }).first().click();
 		await expect(stepBChip).toHaveText("due 2d after launch");
 
 		// 9. Switch back to offset_from_step. Verify anchor selection is CLEARED (normalize-duePatch)
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "Days after another step completes" }).first().click();
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Days after another step completes", exact: false }).first().click();
 		await expect(stepBChip).toHaveText("due rule incomplete");
 
 		// Re-pick Step A anchor
-		await page.getByRole("button", { name: "Pick an anchor step…" }).first().click();
+		await page.getByRole("combobox", { name: /Pick an anchor step/i }).first().click();
 		await page.getByRole("option", { name: "Step A" }).first().click();
 
 		// 10. Try to clear offset input. Verify it lands on 0 (empty-string-to-zero)
@@ -358,18 +362,18 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		await page.getByRole("button", { name: "Configure field lease_start" }).first().click();
 		await page.waitForTimeout(1000);
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
-		await page.getByText("Date", { exact: true }).first().click();
+		await page.locator("p", { hasText: /^Type$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Date", exact: true }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		// Configure Bar's due rule: dueType=from_date_field, source=lease_start
 		await page.locator("aside button").filter({ hasText: "Bar" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
 
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "From a date field's value" }).first().click();
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "From a date field's value", exact: false }).first().click();
 
-		await page.getByRole("button", { name: "Pick a date field…" }).first().click();
+		await page.getByRole("combobox", { name: /Pick a date field/i }).first().click();
 		await page.getByRole("option", { name: /lease_start/ }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
@@ -382,6 +386,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// Open Bar's config and capture stale/unavailable picker
 		await page.locator("aside button").filter({ hasText: "Bar" }).first().click();
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
+		await page.waitForTimeout(2000);
 
 		// Capture screenshot 05-position-reorder-stale-state.png
 		await page.screenshot({ path: path.join(artifactsDir, "05-position-reorder-stale-state.png") });
@@ -420,7 +425,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		console.log("Cleaning up Foo/Bar steps from DB to keep published version clean...");
 		await db.delete(step).where(or(eq(step.id, fooStep.id), eq(step.id, barStep.id)));
 		await page.reload();
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// ==========================================
 		// P0 — D: Field-type change guard (FIELD_TYPE_CHANGE_LOCKED)
@@ -429,11 +434,11 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// Open arrival_date's config
 		await page.getByRole("button", { name: "Kickoff form" }).click();
 		await page.getByRole("button", { name: "Configure kickoff field arrival_date" }).click();
-		await page.waitForTimeout(1000);
+		await page.waitForTimeout(2000);
 
 		// Try to change type to text
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
-		await page.getByText("Short text", { exact: true }).first().click();
+		await page.locator("p", { hasText: /^Type$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Short text", exact: false }).first().click();
 
 		// Verify Alert: "Type change refused -- clear these references first: step due-rule"
 		const alert = page.locator("div[role='alert']");
@@ -446,31 +451,35 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Open Step C settings and set dueType to none
 		await page.locator("aside button").filter({ hasText: "Step C" }).first().click();
+		await page.waitForTimeout(1000);
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "No due rule" }).first().click();
+		await page.waitForTimeout(2000);
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "No due rule", exact: false }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		// Re-open arrival_date config and successfully change to text
 		await page.getByRole("button", { name: "Kickoff form" }).click();
 		await page.getByRole("button", { name: "Configure kickoff field arrival_date" }).click();
-		await page.waitForTimeout(1000);
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
-		await page.getByText("Short text", { exact: true }).first().click();
+		await page.waitForTimeout(2000);
+		await page.locator("p", { hasText: /^Type$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Short text", exact: false }).first().click();
 		await expect(alert).toBeHidden();
 		console.log("Field type successfully changed to Text after clearing reference!");
 
 		// Restore baseline: change type back to Date, re-configure Step C due rule to -1 arrival_date
-		await page.waitForTimeout(1000);
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Type" }) }).locator("button").first().click();
-		await page.getByText("Date", { exact: true }).first().click();
+		await page.waitForTimeout(2000);
+		await page.locator("p", { hasText: /^Type$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "Date", exact: false }).first().click();
 		await page.getByRole("button", { name: "Close settings" }).click();
 
 		await page.locator("aside button").filter({ hasText: "Step C" }).first().click();
+		await page.waitForTimeout(1000);
 		await page.locator("section").getByRole("button", { name: "Configure step" }).click();
-		await page.locator("div").filter({ has: page.locator("p", { hasText: "Due rule" }) }).locator("button").first().click();
-		await page.getByRole("option", { name: "From a date field's value" }).first().click();
-		await page.getByRole("button", { name: "Pick a date field…" }).first().click();
+		await page.waitForTimeout(2000);
+		await page.locator("p", { hasText: /^Due rule$/ }).locator("xpath=..").getByRole("combobox").first().click();
+		await page.getByRole("option", { name: "From a date field's value", exact: false }).first().click();
+		await page.getByRole("combobox", { name: /Pick a date field/i }).first().click();
 		await page.getByRole("option", { name: /arrival_date/ }).first().click();
 		await page.locator("input[type='number']").first().fill("-1");
 		await page.locator("input[type='number']").first().blur();
@@ -487,7 +496,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Go to Library
 		await page.goto(`/${orgSlug}/library`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Find our workflow row and click Run...
 		const wfRow = page.locator("li").filter({ hasText: handWfTitle }).first();
@@ -533,7 +542,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Reload run view to let recompute hook sync
 		await page.reload();
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Click Step B. Verify it has due date: May 30 (today + 2 days)
 		await page.locator("nav[aria-label='Run steps'] button").filter({ hasText: "Step B" }).first().click();
@@ -569,7 +578,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 
 		// Reload page and check Step C's due date updates to June 17
 		await page.reload();
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		await page.locator("nav[aria-label='Run steps'] button").filter({ hasText: "Step C" }).first().click();
 		await expect(stepCMetaSpan).toBeVisible();
@@ -610,7 +619,7 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		console.log("--- P1 — H: AI chip rendering ---");
 		// Visit Library `/virn/library`
 		await page.goto(`/${orgSlug}/library`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 
 		// Verify AI workflow title from Scenario A has the AI sparkles chip next to its row
 		const aiWorkflow = await db.query.workflow.findFirst({
@@ -663,11 +672,11 @@ test.describe("Virn Ops Phase 12.2 Full-Stack E2E Dogfood Walkthrough", () => {
 		// against. This makes the error-path coverage independent of the cleanup
 		// drama in P0-C.
 		await page.goto(`/${orgSlug}/library/workflows/${handWorkflowId}/builder`);
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		const editBtn = page.getByRole("button", { name: "Edit" }).first();
 		await expect(editBtn).toBeVisible({ timeout: 10000 });
 		await editBtn.click();
-		await page.waitForLoadState("networkidle");
+		await page.waitForLoadState("load");
 		await page.waitForTimeout(2000); // fork is one DB round-trip; let it land
 
 		const allVersions = await db
