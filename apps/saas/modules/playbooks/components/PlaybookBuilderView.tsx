@@ -180,7 +180,7 @@ export function PlaybookBuilderView({
 								aria-label="Enable playbook"
 							/>
 							<span className="uppercase tracking-wide font-medium">
-								{playbook.isActive ? "Enabled" : "Disabled"}
+								{playbook.isActive ? "Active" : "Disabled"}
 							</span>
 						</label>
 					)}

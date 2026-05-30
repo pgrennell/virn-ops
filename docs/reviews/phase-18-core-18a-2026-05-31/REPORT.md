@@ -16,7 +16,7 @@ load-bearing publish dance.
 | C — Builder publish dance | P0 | **PASS** (load-bearing) | add → publish → fork(deep-copy) → discard, all clean |
 | D — Read view timeline + empty state | P0 | **PASS** | timeline + "manual launch" + empty-state copy |
 | E — Active toggle + persistence | P1 | **PASS** | toggle persists across refresh + reflects on list row |
-| F — Non-admin posture | P2 | **DEFERRED** | see below — briefing sanctions skip |
+| F — Non-admin posture | P2 | **DEFERRED** (browser) → **COVERED** (contract) | UI skip; gate asserted in `playbooks-authz.test.ts` |
 
 ---
 
@@ -87,10 +87,13 @@ load-bearing publish dance.
   Establishing an activated org session for a seeded non-admin is out of scope for this slice.
 - **Coverage is not lost:** the write-gate is enforced **server-side** — every mutating
   playbook procedure is an `adminOrgProcedure`
-  (`create` / `publishVersion` / `editPublished` / `discardDraft` / `setActive`), and the
+  (`create` / `publishVersion` / `editPublished` / `discardDraft` / `setActive` / `createStep`), and the
   page itself is gated by `assertCanSee(NAV_AREAS.playbooks)`. The UI affordances key off the
-  same `snapshot.isAdminSuperset` value. A future contract/integration test against the oRPC
-  procedures is the right home for the negative authz assertion.
+  same `snapshot.isAdminSuperset` value.
+- **Now covered by a contract test** (added as a follow-up):
+  [`packages/api/modules/playbooks/procedures/playbooks-authz.test.ts`](../../../packages/api/modules/playbooks/procedures/playbooks-authz.test.ts)
+  — asserts UNAUTHORIZED with no session, FORBIDDEN for a `member` role across all six
+  mutating procedures, and read access (`list`) for members. 8 tests, green.
 
 ---
 
@@ -101,7 +104,7 @@ None observed beyond benign dev noise (React DevTools hint, Fast Refresh / HMR l
 1. **Briefing (Scenario C):** change "click Publish → error toast" to "Publish button is
    **disabled** until ≥1 step" — matches the implementation.
 2. **Briefing (Scenario C):** note Discard has **no confirm dialog**.
-3. **UI (cosmetic):** reconcile **"Enabled/Disabled"** (toggle) vs **"Active/Disabled"**
-   (badge) wording for the same `is_active` flag.
-4. **Briefing (Scenario F):** non-admin UI posture is better covered by a server-side authz
-   contract test than a browser walkthrough, given the seeded-session limitation.
+3. **UI (cosmetic) — DONE:** the Builder toggle label now reads **"Active/Disabled"** to
+   match the status badges (was "Enabled/Disabled").
+4. **Briefing (Scenario F) — DONE:** non-admin posture is now covered by the server-side
+   authz contract test `playbooks-authz.test.ts` instead of a browser walkthrough.

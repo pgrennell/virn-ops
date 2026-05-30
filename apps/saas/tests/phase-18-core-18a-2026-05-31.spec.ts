@@ -62,6 +62,9 @@ test.describe.serial("Phase 18 core + 18a E2E Browser-Driven Walkthrough", () =>
 	let mainPlaybookId: string;
 
 	test.beforeAll(async () => {
+		// Generous hook timeout: the first Neon round-trip can be cold (the pooled
+		// connection spins up), and 30s occasionally isn't enough under load.
+		test.setTimeout(60000);
 		fs.mkdirSync(tempDir, { recursive: true });
 
 		console.log("Database baseline setup for Phase 18...");
@@ -305,15 +308,18 @@ test.describe.serial("Phase 18 core + 18a E2E Browser-Driven Walkthrough", () =>
 		const toggle = page.getByRole("switch", { name: "Enable playbook" });
 		await expect(toggle).toBeVisible({ timeout: 15000 });
 		await toggle.click();
-		// Header Active/Disabled badge flips to Active.
-		await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 10000 });
+		// Badge + toggle label both read "Active" once enabled, so assert the
+		// switch STATE here to stay unambiguous (avoids a 2-match getByText).
+		await expect(toggle).toBeChecked({ timeout: 10000 });
 		await page.screenshot({ path: path.join(tempDir, "15-active-toggled.png") });
 		console.log("Saved: 15-active-toggled.png");
 
 		// Persists across hard refresh.
 		await page.reload();
 		await page.waitForLoadState("networkidle");
-		await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 15000 });
+		await expect(page.getByRole("switch", { name: "Enable playbook" })).toBeChecked({
+			timeout: 15000,
+		});
 		await page.screenshot({ path: path.join(tempDir, "16-active-after-refresh.png") });
 		console.log("Saved: 16-active-after-refresh.png");
 
