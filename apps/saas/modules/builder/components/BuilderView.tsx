@@ -60,6 +60,7 @@ import { BuilderConfigPanel } from "./BuilderConfigPanel";
 import { BuilderTopBar } from "./BuilderTopBar";
 import { WorkflowViewToggle } from "./WorkflowViewToggle";
 import { WorkflowRunsTabLink } from "./WorkflowRunsTabLink";
+import { WorkflowAuditTabLink } from "./WorkflowAuditTabLink";
 import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
 import { KickoffPanel } from "./KickoffPanel";
 import { KickoffRailEntry } from "./KickoffRailEntry";
@@ -97,6 +98,11 @@ interface BuilderViewProps {
 	 * canSee(NAV_AREAS.runs, snapshot) -- operators get the link too, so the
 	 * link isn't gated on isAdminOrOwner. */
 	canSeeRuns: boolean;
+	/** Phase 15 -- when true, the workflow detail header surfaces an "Audit"
+	 * tab link. Computed server-side via canSee(NAV_AREAS.compliance, snapshot)
+	 * which composes capability=compliance.pack + role in {reviewer, admin,
+	 * owner}. Off for orgs that haven't flipped the compliance pack on. */
+	canSeeCompliance: boolean;
 }
 
 export function BuilderView({
@@ -107,6 +113,7 @@ export function BuilderView({
 	enabledCapabilityKeys,
 	requireConciergeReview,
 	canSeeRuns,
+	canSeeCompliance,
 }: BuilderViewProps) {
 	const queryClient = useQueryClient();
 	const workflowQuery = useQuery(orpc.workflows.get.queryOptions({ input: { workflowId } }));
@@ -332,6 +339,7 @@ export function BuilderView({
 			toggleActivePending={toggleActiveMutation.isPending}
 			onToggleActive={handleToggleActive}
 			canSeeRuns={canSeeRuns}
+			canSeeCompliance={canSeeCompliance}
 		/>
 	);
 }
@@ -383,6 +391,8 @@ interface BuilderInnerProps {
 	onToggleActive: (next: boolean) => void;
 	// Phase 14 -- pass-through to the top bar's Runs tab link slot.
 	canSeeRuns: boolean;
+	// Phase 15 -- pass-through to the top bar's Audit tab link slot.
+	canSeeCompliance: boolean;
 }
 
 function BuilderInner({
@@ -417,6 +427,7 @@ function BuilderInner({
 	toggleActivePending,
 	onToggleActive,
 	canSeeRuns,
+	canSeeCompliance,
 }: BuilderInnerProps) {
 	// Mutation hooks (mount unconditionally; they no-op if not invoked).
 	const mutArgs = { versionId: bundle.version.id };
@@ -517,6 +528,7 @@ function BuilderInner({
 				onDiscard={onDiscard}
 				aiAuthoring={aiAuthoring}
 				canSeeRuns={canSeeRuns}
+				canSeeCompliance={canSeeCompliance}
 				topLevelError={topLevelError}
 			>
 				<PreviewBody
@@ -563,6 +575,7 @@ function BuilderInner({
 				onDiscard={onDiscard}
 				aiAuthoring={aiAuthoring}
 				canSeeRuns={canSeeRuns}
+				canSeeCompliance={canSeeCompliance}
 				topLevelError={topLevelError}
 			>
 				<ViewBody
@@ -622,6 +635,7 @@ function BuilderInner({
 			onToggleActive={onToggleActive}
 			entitySetIdsCount={workflowEntitySetIds.length}
 			canSeeRuns={canSeeRuns}
+			canSeeCompliance={canSeeCompliance}
 			topLevelError={topLevelError}
 		>
 			<div className="flex flex-1 min-h-0">
@@ -921,6 +935,9 @@ interface BuilderShellProps {
 	/** Phase 14 -- pass-through so the Runs tab link can render adjacent to the
 	 * view-switcher in the top bar. */
 	canSeeRuns: boolean;
+	/** Phase 15 -- pass-through so the Audit tab link can render adjacent to the
+	 * view-switcher in the top bar. */
+	canSeeCompliance: boolean;
 	topLevelError: string | null;
 	children: React.ReactNode;
 }
@@ -960,6 +977,7 @@ function BuilderShell({
 	onToggleActive,
 	entitySetIdsCount,
 	canSeeRuns,
+	canSeeCompliance,
 	topLevelError,
 	children,
 }: BuilderShellProps) {
@@ -973,7 +991,7 @@ function BuilderShell({
 				previewAvailable={previewAvailable}
 				previewActive={previewActive}
 				viewSwitcher={
-					!previewActive && (isAdminOrOwner || canSeeRuns) ? (
+					!previewActive && (isAdminOrOwner || canSeeRuns || canSeeCompliance) ? (
 						<div className="flex items-center gap-2">
 							{isAdminOrOwner && (
 								<WorkflowViewToggle
@@ -984,6 +1002,13 @@ function BuilderShell({
 							)}
 							{canSeeRuns && (
 								<WorkflowRunsTabLink
+									organizationSlug={organizationSlug}
+									workflowId={workflowId}
+									active={false}
+								/>
+							)}
+							{canSeeCompliance && (
+								<WorkflowAuditTabLink
 									organizationSlug={organizationSlug}
 									workflowId={workflowId}
 									active={false}

@@ -94,6 +94,20 @@ const CAPABILITIES: CapabilitySeed[] = [
 		defaultEnabled: false,
 		sortOrder: 100,
 	},
+	// Phase 15 -- thin compliance / evidence surface (S-10). When ON, the org
+	// gains the /compliance area (audit + evidence reader). The flag also
+	// gates the per-workflow Audit tab and -- once Phase 16 ships -- mandatory
+	// sign-off, scheduled re-attestation, evidence retention enforcement.
+	// Independent of the three enablement profiles (checklist/sop/automation);
+	// org-level opt-in via /settings/general only.
+	{
+		key: "compliance.pack",
+		name: "Compliance pack",
+		description:
+			"Org-level audit and evidence reader surface. When on, exposes /compliance + the per-workflow Audit tab; readies the org for mandatory sign-off, scheduled re-attestation, and evidence retention (Phase 16). Off by default.",
+		defaultEnabled: false,
+		sortOrder: 110,
+	},
 	// Phase 11a step 4 -- per-agent action-surface gates. These are NOT feature
 	// flags in the org-settings sense (admins don't toggle them in the UI);
 	// they're capability slugs that compose the agent_capability check.

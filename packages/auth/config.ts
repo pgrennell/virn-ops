@@ -30,6 +30,11 @@ export const config = {
 			"chatbot",
 			"checkout-return",
 			"choose-plan",
+			// Phase 15 -- compliance / evidence reader ships as the org-scoped
+			// /[organizationSlug]/compliance route. Slug reserved defensively
+			// (matches the `sop` precedent) so future evolution of a top-level
+			// compliance surface can claim the path without collision.
+			"compliance",
 			"forgot-password",
 			"image-proxy",
 			"login",

@@ -42,6 +42,13 @@ const INTENTIONALLY_RESERVED_SLUGS: ReadonlySet<string> = new Set([
 	// collision risk. Move out of INTENTIONALLY_RESERVED_SLUGS if/when
 	// apps/saas/app/sop/ lands.
 	"sop",
+	// Phase 15 (S-10) -- compliance / evidence reader ships as the org-scoped
+	// /[organizationSlug]/compliance route, not a top-level /compliance.
+	// Reserved defensively (same pattern as `sop`) so a future top-level
+	// compliance surface can claim the path without an org-slug collision.
+	// Move out of INTENTIONALLY_RESERVED_SLUGS if/when apps/saas/app/compliance/
+	// lands.
+	"compliance",
 ]);
 
 /**

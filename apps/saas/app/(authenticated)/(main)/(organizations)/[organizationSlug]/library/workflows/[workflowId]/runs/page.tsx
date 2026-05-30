@@ -11,6 +11,7 @@
 // landing here has at least that. The page also calls notFound() when the
 // workflow doesn't exist in the current org.
 
+import { WorkflowAuditTabLink } from "@builder/components/WorkflowAuditTabLink";
 import { WorkflowRunsTabLink } from "@builder/components/WorkflowRunsTabLink";
 import { WorkflowViewToggle } from "@builder/components/WorkflowViewToggle";
 import { RunsMonitorView } from "@runs/components/RunsMonitorView";
@@ -93,6 +94,13 @@ export default async function WorkflowRunsPage({
 							organizationSlug={organizationSlug}
 							workflowId={workflowId}
 							active={true}
+						/>
+					)}
+					{canSee(NAV_AREAS.compliance, snapshot) && (
+						<WorkflowAuditTabLink
+							organizationSlug={organizationSlug}
+							workflowId={workflowId}
+							active={false}
 						/>
 					)}
 				</div>

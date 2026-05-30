@@ -275,6 +275,7 @@ describe("auth config snapshot (docs/AUTH_CONTRACT.md §6)", () => {
 			        "chatbot",
 			        "checkout-return",
 			        "choose-plan",
+			        "compliance",
 			        "forgot-password",
 			        "image-proxy",
 			        "login",

@@ -78,6 +78,7 @@ export default async function WorkflowBuilderPage({
 				enabledCapabilityKeys={enabledCapabilityKeys}
 				requireConciergeReview={requireConciergeReview}
 				canSeeRuns={canSee(NAV_AREAS.runs, snapshot)}
+				canSeeCompliance={canSee(NAV_AREAS.compliance, snapshot)}
 			/>
 		</div>
 	);

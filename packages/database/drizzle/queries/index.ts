@@ -1,6 +1,7 @@
 export * from "./agent-credentials";
 export * from "./agents";
 export * from "./ai-authoring";
+export * from "./audit";
 export * from "./config";
 export * from "./cross-product-events";
 export * from "./datasets";

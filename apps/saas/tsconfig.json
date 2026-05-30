@@ -20,7 +20,8 @@
 			"@builder/*": ["./modules/builder/*"],
 			"@library/*": ["./modules/library/*"],
 			"@listings/*": ["./modules/listings/*"],
-			"@entitysets/*": ["./modules/entitysets/*"]
+			"@entitysets/*": ["./modules/entitysets/*"],
+			"@compliance/*": ["./modules/compliance/*"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.mjs", ".next/types/**/*.ts"],

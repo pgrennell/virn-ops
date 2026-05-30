@@ -55,6 +55,7 @@ export default async function WorkflowReadPage({
 				isAdminOrOwner={snapshot.isAdminSuperset}
 				runId={runId}
 				canSeeRuns={canSee(NAV_AREAS.runs, snapshot)}
+				canSeeCompliance={canSee(NAV_AREAS.compliance, snapshot)}
 			/>
 		</div>
 	);

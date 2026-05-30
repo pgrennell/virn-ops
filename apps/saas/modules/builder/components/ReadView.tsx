@@ -46,6 +46,7 @@ import {
 } from "./WorkflowFlowchart";
 import { WorkflowViewToggle } from "./WorkflowViewToggle";
 import { WorkflowRunsTabLink } from "./WorkflowRunsTabLink";
+import { WorkflowAuditTabLink } from "./WorkflowAuditTabLink";
 
 interface ReadViewProps {
 	workflowId: string;
@@ -62,6 +63,10 @@ interface ReadViewProps {
 	 * to the Author|Read view-switcher. Operators get it too (not gated on
 	 * isAdminOrOwner). */
 	canSeeRuns: boolean;
+	/** Phase 15 -- when true, the header surfaces an Audit tab link
+	 * (compliance / evidence reader). Composes capability=compliance.pack
+	 * + role in {reviewer, admin, owner}. */
+	canSeeCompliance: boolean;
 }
 
 export function ReadView({
@@ -70,6 +75,7 @@ export function ReadView({
 	isAdminOrOwner,
 	runId,
 	canSeeRuns,
+	canSeeCompliance,
 }: ReadViewProps) {
 	const workflowQuery = useQuery(
 		orpc.workflows.get.queryOptions({ input: { workflowId } }),
@@ -125,6 +131,7 @@ export function ReadView({
 			isAdminOrOwner={isAdminOrOwner}
 			runId={runId ?? null}
 			canSeeRuns={canSeeRuns}
+			canSeeCompliance={canSeeCompliance}
 		/>
 	);
 }
@@ -145,6 +152,7 @@ function ReadInner({
 	isAdminOrOwner,
 	runId,
 	canSeeRuns,
+	canSeeCompliance,
 }: {
 	workflow: WorkflowReadHeader;
 	workflowVersionId: string;
@@ -152,6 +160,7 @@ function ReadInner({
 	isAdminOrOwner: boolean;
 	runId: string | null;
 	canSeeRuns: boolean;
+	canSeeCompliance: boolean;
 }) {
 	const queryClient = useQueryClient();
 
@@ -297,7 +306,7 @@ function ReadInner({
 							)}
 						</div>
 					</div>
-					{(isAdminOrOwner || canSeeRuns) && (
+					{(isAdminOrOwner || canSeeRuns || canSeeCompliance) && (
 						<div className="shrink-0 flex items-center gap-2">
 							{isAdminOrOwner && (
 								<WorkflowViewToggle
@@ -308,6 +317,13 @@ function ReadInner({
 							)}
 							{canSeeRuns && (
 								<WorkflowRunsTabLink
+									organizationSlug={organizationSlug}
+									workflowId={workflow.id}
+									active={false}
+								/>
+							)}
+							{canSeeCompliance && (
+								<WorkflowAuditTabLink
 									organizationSlug={organizationSlug}
 									workflowId={workflow.id}
 									active={false}

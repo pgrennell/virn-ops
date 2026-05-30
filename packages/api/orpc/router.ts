@@ -1,8 +1,10 @@
 import type { RouterClient } from "@orpc/server";
 
+import { acknowledgmentsRouter } from "../modules/acknowledgments/router";
 import { adminRouter } from "../modules/admin/router";
 import { agentsRouter } from "../modules/agents/router";
 import { aiRouter } from "../modules/ai/router";
+import { auditRouter } from "../modules/audit/router";
 import { configRouter } from "../modules/config/router";
 import { datasetsRouter } from "../modules/datasets/router";
 import { entitiesRouter } from "../modules/entities/router";
@@ -21,8 +23,10 @@ import { workflowsRouter } from "../modules/workflows/router";
 import { publicProcedure } from "./procedures";
 
 export const router = publicProcedure.router({
+	acknowledgments: acknowledgmentsRouter,
 	admin: adminRouter,
 	agents: agentsRouter,
+	audit: auditRouter,
 	organizations: organizationsRouter,
 	users: usersRouter,
 	payments: paymentsRouter,

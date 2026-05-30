@@ -15,7 +15,13 @@
 import { and, count, desc, eq } from "drizzle-orm";
 
 import { db, type DbExecutor } from "../client";
-import { sopReadReceipt } from "../schema/postgres";
+import {
+	acknowledgment,
+	sopReadReceipt,
+	user,
+	workflow,
+	workflowVersion,
+} from "../schema/postgres";
 
 // ---------------------------------------------------------------------------
 // Writes
@@ -133,4 +139,152 @@ export async function listVersionIdsReadByUserForWorkflow(input: {
 			),
 		);
 	return rows.map((r) => r.workflowVersionId);
+}
+
+// ---------------------------------------------------------------------------
+// Acknowledgment reads (Phase 15 -- compliance / evidence surface)
+//
+// Surface what the data already supports: a list view + a single receipt view
+// over `acknowledgment` rows joined with workflow + version + user. WRITE path
+// (the "Acknowledge" action) is Phase 16's governance flows; Phase 15 is
+// read-only evidence.
+// ---------------------------------------------------------------------------
+
+export interface AcknowledgmentListRow {
+	id: string;
+	acknowledgedAt: Date;
+	workflowId: string;
+	workflowTitle: string;
+	workflowVersionId: string;
+	workflowVersionNumber: number;
+	userId: string;
+	userName: string | null;
+	userEmail: string;
+}
+
+export interface AcknowledgmentListResult {
+	rows: AcknowledgmentListRow[];
+	totalCount: number;
+}
+
+/** Page through every acknowledgment in an org, newest first. Joins workflow +
+ * workflowVersion + user inline so the compliance index doesn't N+1. Parallel
+ * COUNT for pagination. */
+export async function listAcknowledgmentsForOrg(input: {
+	organizationId: string;
+	limit?: number;
+	offset?: number;
+}): Promise<AcknowledgmentListResult> {
+	const limit = input.limit ?? 25;
+	const offset = input.offset ?? 0;
+	const where = eq(acknowledgment.organizationId, input.organizationId);
+
+	const [rows, totalRow] = await Promise.all([
+		db
+			.select({
+				id: acknowledgment.id,
+				acknowledgedAt: acknowledgment.acknowledgedAt,
+				workflowId: workflow.id,
+				workflowTitle: workflow.title,
+				workflowVersionId: workflowVersion.id,
+				workflowVersionNumber: workflowVersion.versionNumber,
+				userId: user.id,
+				userName: user.name,
+				userEmail: user.email,
+			})
+			.from(acknowledgment)
+			.innerJoin(workflowVersion, eq(workflowVersion.id, acknowledgment.workflowVersionId))
+			.innerJoin(workflow, eq(workflow.id, workflowVersion.workflowId))
+			.innerJoin(user, eq(user.id, acknowledgment.userId))
+			.where(where)
+			.orderBy(desc(acknowledgment.acknowledgedAt))
+			.limit(limit)
+			.offset(offset),
+		db
+			.select({ value: count() })
+			.from(acknowledgment)
+			.where(where)
+			.then((r) => r[0] ?? { value: 0 }),
+	]);
+
+	return {
+		rows: rows.map((r) => ({
+			id: r.id,
+			acknowledgedAt: r.acknowledgedAt,
+			workflowId: r.workflowId,
+			workflowTitle: r.workflowTitle,
+			workflowVersionId: r.workflowVersionId,
+			workflowVersionNumber: r.workflowVersionNumber,
+			userId: r.userId,
+			userName: r.userName,
+			userEmail: r.userEmail,
+		})),
+		totalCount: Number(totalRow.value),
+	};
+}
+
+export interface AcknowledgmentReceipt extends AcknowledgmentListRow {
+	organizationName: string;
+	workflowDescription: string | null;
+	workflowType: "procedure" | "document" | "policy" | "form";
+}
+
+/** Single-receipt fetch for /compliance/acknowledgments/[id]. Org-scoped:
+ * returns null when the ack belongs to another org so the procedure can refuse
+ * with NOT_FOUND rather than leaking presence. */
+export async function getAcknowledgmentForOrg(input: {
+	organizationId: string;
+	acknowledgmentId: string;
+}): Promise<AcknowledgmentReceipt | null> {
+	const rows = await db
+		.select({
+			id: acknowledgment.id,
+			acknowledgedAt: acknowledgment.acknowledgedAt,
+			workflowId: workflow.id,
+			workflowTitle: workflow.title,
+			workflowDescription: workflow.description,
+			workflowType: workflow.type,
+			workflowVersionId: workflowVersion.id,
+			workflowVersionNumber: workflowVersion.versionNumber,
+			userId: user.id,
+			userName: user.name,
+			userEmail: user.email,
+			organizationName: workflow.organizationId, // overwritten below via a second fetch
+		})
+		.from(acknowledgment)
+		.innerJoin(workflowVersion, eq(workflowVersion.id, acknowledgment.workflowVersionId))
+		.innerJoin(workflow, eq(workflow.id, workflowVersion.workflowId))
+		.innerJoin(user, eq(user.id, acknowledgment.userId))
+		.where(
+			and(
+				eq(acknowledgment.id, input.acknowledgmentId),
+				eq(acknowledgment.organizationId, input.organizationId),
+			),
+		)
+		.limit(1);
+	const r = rows[0];
+	if (!r) return null;
+
+	// Organization name lookup -- the join above returned the FK; we want the
+	// display name for the receipt header. Cheap second fetch keeps the primary
+	// query narrow (no extra LEFT JOIN cost when most callers just need the ack).
+	const orgRow = await db.query.organization.findFirst({
+		where: (o, { eq: e }) => e(o.id, input.organizationId),
+		columns: { name: true },
+	});
+
+	return {
+		id: r.id,
+		acknowledgedAt: r.acknowledgedAt,
+		workflowId: r.workflowId,
+		workflowTitle: r.workflowTitle,
+		workflowDescription: r.workflowDescription,
+		workflowType: r.workflowType,
+		workflowVersionId: r.workflowVersionId,
+		workflowVersionNumber: r.workflowVersionNumber,
+		userId: r.userId,
+		userName: r.userName,
+		userEmail: r.userEmail,
+		organizationName: orgRow?.name ?? "Unknown organization",
+	};
 }

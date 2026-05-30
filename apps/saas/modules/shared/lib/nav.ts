@@ -29,6 +29,12 @@ export const NAV_AREAS = {
 	sop: "sop",
 	// Understand
 	reports: "reports",
+	// Phase 15 -- thin compliance / evidence surface (S-10). Org-scoped at
+	// /[organizationSlug]/compliance. Gated on capability=compliance.pack
+	// (off by default) AND role in {reviewer, admin, owner}. Surfaces the
+	// audit/evidence reader. Active governance flows (acknowledge, approve,
+	// re-attestation) land in Phase 16.
+	compliance: "compliance",
 	// Admin
 	configuration: "configuration",
 	membersAndRoles: "members",
@@ -102,7 +108,13 @@ export const CAPABILITIES = {
 	// all profiles per the 2026-05-26 pivot — AI is v1, not a deferred power-user
 	// feature.
 	agentSteps: "workflows.agent_steps",
-} as const satisfies Record<string, ProfileCapabilityKey>;
+	// Phase 15 -- compliance pack flag. NOT profile-managed (none of the three
+	// enablement profiles touch it); org-level opt-in via /settings/general.
+	// The satisfies clause is widened with the literal to keep the rename-safe
+	// pin for profile-managed keys without requiring this one to live in a
+	// PROFILES entry it doesn't belong in.
+	compliancePack: "compliance.pack",
+} as const satisfies Record<string, ProfileCapabilityKey | "compliance.pack">;
 
 export type CapabilityKey = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
 
@@ -173,6 +185,15 @@ export const NAV_AREA_DEFINITIONS: Record<NavArea, NavAreaDefinition> = {
 		area: NAV_AREAS.reports,
 		allowedRoles: [ROLES.builder, ROLES.admin, ROLES.owner],
 		phase: "defer-design",
+	},
+	// Phase 15 -- compliance / evidence reader (S-10). Reviewer role is the
+	// primary audience; admin/owner superset gets it. Capability-gated so
+	// orgs that don't opt in keep the surface hidden.
+	[NAV_AREAS.compliance]: {
+		area: NAV_AREAS.compliance,
+		allowedRoles: [ROLES.reviewer, ROLES.admin, ROLES.owner],
+		capability: CAPABILITIES.compliancePack,
+		phase: "now",
 	},
 	// Admin
 	[NAV_AREAS.configuration]: {
@@ -282,6 +303,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 		label: "Understand",
 		items: [
 			{ area: NAV_AREAS.reports, segment: "reports", icon: "BarChart3", label: "Reports" },
+			// Phase 15 -- compliance / evidence reader. Hidden until the org flips
+			// CAPABILITIES.compliancePack on; gated to reviewer/admin/owner.
+			{ area: NAV_AREAS.compliance, segment: "compliance", icon: "ShieldCheck", label: "Compliance" },
 		],
 	},
 	{
