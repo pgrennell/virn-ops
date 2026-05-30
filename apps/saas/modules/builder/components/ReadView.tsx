@@ -45,6 +45,7 @@ import {
 	type FlowchartStep,
 } from "./WorkflowFlowchart";
 import { WorkflowViewToggle } from "./WorkflowViewToggle";
+import { WorkflowRunsTabLink } from "./WorkflowRunsTabLink";
 
 interface ReadViewProps {
 	workflowId: string;
@@ -57,6 +58,10 @@ interface ReadViewProps {
 	 * `?runId=` search param on the page (typically linked from an Active
 	 * Run card). `null` means no run context; show the flowchart. */
 	runId?: string | null;
+	/** Phase 14 -- when true, the header surfaces a Runs tab link adjacent
+	 * to the Author|Read view-switcher. Operators get it too (not gated on
+	 * isAdminOrOwner). */
+	canSeeRuns: boolean;
 }
 
 export function ReadView({
@@ -64,6 +69,7 @@ export function ReadView({
 	organizationSlug,
 	isAdminOrOwner,
 	runId,
+	canSeeRuns,
 }: ReadViewProps) {
 	const workflowQuery = useQuery(
 		orpc.workflows.get.queryOptions({ input: { workflowId } }),
@@ -118,6 +124,7 @@ export function ReadView({
 			organizationSlug={organizationSlug}
 			isAdminOrOwner={isAdminOrOwner}
 			runId={runId ?? null}
+			canSeeRuns={canSeeRuns}
 		/>
 	);
 }
@@ -137,12 +144,14 @@ function ReadInner({
 	organizationSlug,
 	isAdminOrOwner,
 	runId,
+	canSeeRuns,
 }: {
 	workflow: WorkflowReadHeader;
 	workflowVersionId: string;
 	organizationSlug: string;
 	isAdminOrOwner: boolean;
 	runId: string | null;
+	canSeeRuns: boolean;
 }) {
 	const queryClient = useQueryClient();
 
@@ -288,13 +297,22 @@ function ReadInner({
 							)}
 						</div>
 					</div>
-					{isAdminOrOwner && (
-						<div className="shrink-0">
-							<WorkflowViewToggle
-								organizationSlug={organizationSlug}
-								workflowId={workflow.id}
-								active="read"
-							/>
+					{(isAdminOrOwner || canSeeRuns) && (
+						<div className="shrink-0 flex items-center gap-2">
+							{isAdminOrOwner && (
+								<WorkflowViewToggle
+									organizationSlug={organizationSlug}
+									workflowId={workflow.id}
+									active="read"
+								/>
+							)}
+							{canSeeRuns && (
+								<WorkflowRunsTabLink
+									organizationSlug={organizationSlug}
+									workflowId={workflow.id}
+									active={false}
+								/>
+							)}
 						</div>
 					)}
 				</div>

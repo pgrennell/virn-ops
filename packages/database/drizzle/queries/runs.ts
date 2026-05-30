@@ -9,7 +9,7 @@
 // in-flight runs. Fields are NOT re-copied per-run; field_value.fieldId FKs the pinned
 // version's field rows, which are immutable post-publish by convention.
 
-import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db, type DbExecutor } from "../client";
@@ -1475,6 +1475,207 @@ export async function listActiveRunsWithProgress(input: {
 		totalSteps: r.totalSteps,
 		completedSteps: r.completedSteps,
 	}));
+}
+
+// ---------------------------------------------------------------------------
+// Generalized runs index (Phase 14 -- the lightweight monitor)
+//
+// listActiveRunsWithProgress above is pinned to status='active' and powers the
+// Home dashboard's right-rail card. Phase 14 adds an org-level /runs page that
+// needs to slice by status, by workflow, by overdue/needs-attention, and to
+// page through completed runs -- so we lift the same GROUP BY shape into a
+// generalized reader with filter + sort + total count, and keep the active-only
+// helper as a thin shim for back-compat.
+// ---------------------------------------------------------------------------
+
+export type RunStatus = "active" | "completed" | "archived";
+export type RunSort =
+	| "started_desc"
+	| "started_asc"
+	| "due_asc"
+	| "due_desc"
+	| "completed_desc";
+
+export interface RunWithProgressRow {
+	id: string;
+	title: string;
+	status: RunStatus;
+	startedAt: Date;
+	dueAt: Date | null;
+	completedAt: Date | null;
+	workflowId: string;
+	workflowTitle: string;
+	workflowType: "procedure" | "document" | "policy" | "form";
+	totalSteps: number;
+	completedSteps: number;
+	/** True iff status='active' AND dueAt < now. Computed in SQL so the
+	 * needsAttention filter and the row badge agree. */
+	isOverdue: boolean;
+	/** True iff the run has any non-completed runStep whose definition step has
+	 * a step_dependency on another runStep of the same run that is itself not
+	 * completed. Same blocked semantics the My Work tasks list uses, lifted to
+	 * the run aggregate level via an EXISTS subquery. */
+	hasBlockedStep: boolean;
+	entityType: "listing" | null;
+	entityId: string | null;
+}
+
+export interface ListRunsInput {
+	organizationId: string;
+	workflowId?: string;
+	statuses?: RunStatus[];
+	/** When true, restricts to active runs that are either overdue or have at
+	 * least one pending step blocked by an incomplete stop-task dependency.
+	 * Defined as the "needs attention" bucket on the org-level monitor. */
+	needsAttention?: boolean;
+	/** When set, restricts to runs with a stamped entity context. Both fields
+	 * required together (the run-launch path enforces the same coupling). */
+	entityType?: "listing";
+	entityId?: string;
+	sort?: RunSort;
+	limit?: number;
+	offset?: number;
+	/** Injectable clock for tests + the overdue computation. Defaults to the
+	 * server's `new Date()` at call time. */
+	now?: Date;
+}
+
+export interface ListRunsResult {
+	rows: RunWithProgressRow[];
+	totalCount: number;
+}
+
+/** Page through runs in an org with optional workflow / status / needs-attention
+ * filters, configurable sort, and a parallel COUNT for pagination. Powers the
+ * Phase 14 monitor pages (/runs + per-workflow /library/workflows/[id]/runs).
+ *
+ * Aggregation strategy: single GROUP BY query that joins run -> workflow ->
+ * run_step (left, for the per-run progress counts), with two boolean SQL
+ * expressions surfaced as columns:
+ *   - `isOverdue`     : run.status='active' AND run.dueAt < :now
+ *   - `hasBlockedStep`: EXISTS (...) over step_dependency + run_step status
+ * The blocked subquery is intentionally inlined (not a JS follow-up) so the
+ * needsAttention filter can apply it in the WHERE clause without two-pass
+ * pagination drift.
+ *
+ * Per-row entityType + entityId are passed through so the monitor can show
+ * "scoped to Listing X" badges without an extra fetch. */
+export async function listRunsWithProgress(
+	input: ListRunsInput,
+): Promise<ListRunsResult> {
+	const limit = input.limit ?? 20;
+	const offset = input.offset ?? 0;
+	const now = input.now ?? new Date();
+
+	// SQL fragments shared by data + count queries.
+	const isOverdueExpr = sql<boolean>`(${run.status} = 'active' AND ${run.dueAt} IS NOT NULL AND ${run.dueAt} < ${now})`;
+	const hasBlockedStepExpr = sql<boolean>`EXISTS (
+		SELECT 1
+		FROM run_step rs_b
+		INNER JOIN step_dependency sd ON sd.step_id = rs_b.step_id
+		INNER JOIN run_step rs_dep
+			ON rs_dep.run_id = rs_b.run_id
+		   AND rs_dep.step_id = sd.depends_on_step_id
+		WHERE rs_b.run_id = ${run.id}
+		  AND rs_b.status != 'completed'
+		  AND rs_dep.status != 'completed'
+	)`;
+
+	const conds = [eq(run.organizationId, input.organizationId)];
+	if (input.workflowId) conds.push(eq(run.workflowId, input.workflowId));
+	if (input.statuses && input.statuses.length > 0) {
+		conds.push(inArray(run.status, input.statuses));
+	}
+	if (input.entityType && input.entityId) {
+		conds.push(eq(run.entityType, input.entityType));
+		conds.push(eq(run.entityId, input.entityId));
+	}
+	if (input.needsAttention) {
+		// Active AND (overdue OR has a blocked step). The status restriction
+		// lives here (not as a `statuses` requirement) so a caller that passes
+		// only `needsAttention=true` still gets the intended bucket without
+		// also having to spell out `statuses=['active']`.
+		conds.push(eq(run.status, "active"));
+		conds.push(sql`(${run.dueAt} IS NOT NULL AND ${run.dueAt} < ${now}) OR ${hasBlockedStepExpr}`);
+	}
+	const where = and(...conds);
+
+	// Sort -- map enum to (column, direction). NULLS LAST on due so unset
+	// deadlines sink to the bottom rather than mixing with imminent ones.
+	const orderBy = (() => {
+		switch (input.sort ?? "started_desc") {
+			case "started_desc":
+				return [desc(run.startedAt)];
+			case "started_asc":
+				return [asc(run.startedAt)];
+			case "due_asc":
+				return [sql`${run.dueAt} ASC NULLS LAST`, desc(run.startedAt)];
+			case "due_desc":
+				return [sql`${run.dueAt} DESC NULLS LAST`, desc(run.startedAt)];
+			case "completed_desc":
+				return [sql`${run.completedAt} DESC NULLS LAST`, desc(run.startedAt)];
+		}
+	})();
+
+	const [rows, totalRow] = await Promise.all([
+		db
+			.select({
+				id: run.id,
+				title: run.title,
+				status: run.status,
+				startedAt: run.startedAt,
+				dueAt: run.dueAt,
+				completedAt: run.completedAt,
+				workflowId: workflow.id,
+				workflowTitle: workflow.title,
+				workflowType: workflow.type,
+				totalSteps: sql<number>`count(${runStep.id})::int`.as("total_steps"),
+				completedSteps:
+					sql<number>`count(${runStep.id}) filter (where ${runStep.status} = 'completed')::int`.as(
+						"completed_steps",
+					),
+				isOverdue: isOverdueExpr.as("is_overdue"),
+				hasBlockedStep: hasBlockedStepExpr.as("has_blocked_step"),
+				entityType: run.entityType,
+				entityId: run.entityId,
+			})
+			.from(run)
+			.innerJoin(workflow, eq(workflow.id, run.workflowId))
+			.leftJoin(runStep, eq(runStep.runId, run.id))
+			.where(where)
+			.groupBy(run.id, workflow.id)
+			.orderBy(...orderBy)
+			.limit(limit)
+			.offset(offset),
+		db
+			.select({ value: count() })
+			.from(run)
+			.where(where)
+			.then((r) => r[0] ?? { value: 0 }),
+	]);
+
+	return {
+		rows: rows.map((r) => ({
+			id: r.id,
+			title: r.title,
+			status: r.status,
+			startedAt: r.startedAt,
+			dueAt: r.dueAt,
+			completedAt: r.completedAt,
+			workflowId: r.workflowId,
+			workflowTitle: r.workflowTitle,
+			workflowType: r.workflowType,
+			totalSteps: r.totalSteps,
+			completedSteps: r.completedSteps,
+			isOverdue: r.isOverdue === true,
+			hasBlockedStep: r.hasBlockedStep === true,
+			// run.entityType shares the wide entity_type enum, but `runs.launch`
+			// only ever stamps it as 'listing' (D-043). Narrow at the boundary.
+			entityType: (r.entityType === "listing" ? "listing" : null),
+			entityId: r.entityId,
+		})),
+		totalCount: Number(totalRow.value),
+	};
 }
 
 /** Counts for the home dashboard, scoped to the active org + user. */

@@ -59,6 +59,7 @@ import type { VersionEditBundleResponse } from "../lib/types";
 import { BuilderConfigPanel } from "./BuilderConfigPanel";
 import { BuilderTopBar } from "./BuilderTopBar";
 import { WorkflowViewToggle } from "./WorkflowViewToggle";
+import { WorkflowRunsTabLink } from "./WorkflowRunsTabLink";
 import { FieldConfigForm, type FieldReferencer } from "./FieldConfigForm";
 import { KickoffPanel } from "./KickoffPanel";
 import { KickoffRailEntry } from "./KickoffRailEntry";
@@ -91,6 +92,11 @@ interface BuilderViewProps {
 	 * server-side from the org row (Better Auth's ActiveOrganization doesn't include
 	 * custom columns). */
 	requireConciergeReview: boolean;
+	/** Phase 14 -- when true, the workflow detail header surfaces a "Runs" tab
+	 * link adjacent to the Author|Read view-switcher. Computed server-side via
+	 * canSee(NAV_AREAS.runs, snapshot) -- operators get the link too, so the
+	 * link isn't gated on isAdminOrOwner. */
+	canSeeRuns: boolean;
 }
 
 export function BuilderView({
@@ -100,6 +106,7 @@ export function BuilderView({
 	role,
 	enabledCapabilityKeys,
 	requireConciergeReview,
+	canSeeRuns,
 }: BuilderViewProps) {
 	const queryClient = useQueryClient();
 	const workflowQuery = useQuery(orpc.workflows.get.queryOptions({ input: { workflowId } }));
@@ -324,6 +331,7 @@ export function BuilderView({
 			onSendBackToDraft={handleSendBackToDraft}
 			toggleActivePending={toggleActiveMutation.isPending}
 			onToggleActive={handleToggleActive}
+			canSeeRuns={canSeeRuns}
 		/>
 	);
 }
@@ -373,6 +381,8 @@ interface BuilderInnerProps {
 	// Phase 9.5 R2 -- Enabled/Disabled toggle on the top bar.
 	toggleActivePending: boolean;
 	onToggleActive: (next: boolean) => void;
+	// Phase 14 -- pass-through to the top bar's Runs tab link slot.
+	canSeeRuns: boolean;
 }
 
 function BuilderInner({
@@ -406,6 +416,7 @@ function BuilderInner({
 	onSendBackToDraft,
 	toggleActivePending,
 	onToggleActive,
+	canSeeRuns,
 }: BuilderInnerProps) {
 	// Mutation hooks (mount unconditionally; they no-op if not invoked).
 	const mutArgs = { versionId: bundle.version.id };
@@ -505,6 +516,7 @@ function BuilderInner({
 				discardPending={discardPending}
 				onDiscard={onDiscard}
 				aiAuthoring={aiAuthoring}
+				canSeeRuns={canSeeRuns}
 				topLevelError={topLevelError}
 			>
 				<PreviewBody
@@ -550,6 +562,7 @@ function BuilderInner({
 				discardPending={discardPending}
 				onDiscard={onDiscard}
 				aiAuthoring={aiAuthoring}
+				canSeeRuns={canSeeRuns}
 				topLevelError={topLevelError}
 			>
 				<ViewBody
@@ -608,6 +621,7 @@ function BuilderInner({
 			toggleActivePending={toggleActivePending}
 			onToggleActive={onToggleActive}
 			entitySetIdsCount={workflowEntitySetIds.length}
+			canSeeRuns={canSeeRuns}
 			topLevelError={topLevelError}
 		>
 			<div className="flex flex-1 min-h-0">
@@ -904,6 +918,9 @@ interface BuilderShellProps {
 	toggleActivePending?: boolean;
 	onToggleActive?: (next: boolean) => void;
 	entitySetIdsCount?: number;
+	/** Phase 14 -- pass-through so the Runs tab link can render adjacent to the
+	 * view-switcher in the top bar. */
+	canSeeRuns: boolean;
 	topLevelError: string | null;
 	children: React.ReactNode;
 }
@@ -942,6 +959,7 @@ function BuilderShell({
 	toggleActivePending,
 	onToggleActive,
 	entitySetIdsCount,
+	canSeeRuns,
 	topLevelError,
 	children,
 }: BuilderShellProps) {
@@ -955,12 +973,23 @@ function BuilderShell({
 				previewAvailable={previewAvailable}
 				previewActive={previewActive}
 				viewSwitcher={
-					isAdminOrOwner && !previewActive ? (
-						<WorkflowViewToggle
-							organizationSlug={organizationSlug}
-							workflowId={workflowId}
-							active="author"
-						/>
+					!previewActive && (isAdminOrOwner || canSeeRuns) ? (
+						<div className="flex items-center gap-2">
+							{isAdminOrOwner && (
+								<WorkflowViewToggle
+									organizationSlug={organizationSlug}
+									workflowId={workflowId}
+									active="author"
+								/>
+							)}
+							{canSeeRuns && (
+								<WorkflowRunsTabLink
+									organizationSlug={organizationSlug}
+									workflowId={workflowId}
+									active={false}
+								/>
+							)}
+						</div>
 					) : null
 				}
 				onTogglePreview={onTogglePreview}

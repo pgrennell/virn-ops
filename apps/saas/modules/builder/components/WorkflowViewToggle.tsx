@@ -18,7 +18,10 @@ import { BookOpen, Pencil } from "lucide-react";
 interface WorkflowViewToggleProps {
 	organizationSlug: string;
 	workflowId: string;
-	active: "author" | "read";
+	/** Which segment is highlighted. `"other"` (Phase 14) is used when the
+	 * toggle is rendered on a sibling route like /runs -- neither segment
+	 * highlights, but the user can still bounce back to either view. */
+	active: "author" | "read" | "other";
 }
 
 export function WorkflowViewToggle({

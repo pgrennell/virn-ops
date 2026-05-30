@@ -9,6 +9,7 @@ import { listActivityProc } from "./procedures/list-activity";
 import { listActiveRunsProc } from "./procedures/list-active-runs";
 import { listForEntityProc } from "./procedures/list-for-entity";
 import { listMyTasksProc } from "./procedures/list-my-tasks";
+import { listRunsProc } from "./procedures/list-runs";
 import { revokeParticipantTokenProc } from "./procedures/revoke-participant-token";
 import { runSlaSweepNow } from "./procedures/run-sla-sweep-now";
 import { setFieldValueProc } from "./procedures/set-field-value";
@@ -23,6 +24,10 @@ export const runsRouter = {
 	completeStep: completeStepProc,
 	listMyTasks: listMyTasksProc,
 	listActiveRuns: listActiveRunsProc,
+	// Phase 14 -- the org-level Lightweight Monitor reader. Generalizes
+	// listActiveRuns with status / workflow / needs-attention filters + sort
+	// + total count; powers the /runs page and the per-workflow Runs tab.
+	list: listRunsProc,
 	// Phase 10 / v1.5c (PRD §6.4 / R5 cont.) -- per-run activity timeline
 	// rendered in the Read view's right column when opened with ?runId=.
 	listActivity: listActivityProc,

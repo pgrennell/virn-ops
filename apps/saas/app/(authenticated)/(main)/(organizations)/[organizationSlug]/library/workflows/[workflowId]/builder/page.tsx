@@ -17,6 +17,7 @@
 
 import { AiReviewView } from "@builder/components/AiReviewView";
 import { BuilderView } from "@builder/components/BuilderView";
+import { canSee } from "@shared/lib/gating";
 import { assertCanSee } from "@shared/lib/gating-server";
 import { NAV_AREAS } from "@shared/lib/nav";
 import { getOrganizationById } from "@virn/database";
@@ -76,6 +77,7 @@ export default async function WorkflowBuilderPage({
 				role={snapshot.role}
 				enabledCapabilityKeys={enabledCapabilityKeys}
 				requireConciergeReview={requireConciergeReview}
+				canSeeRuns={canSee(NAV_AREAS.runs, snapshot)}
 			/>
 		</div>
 	);
