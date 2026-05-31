@@ -27,6 +27,7 @@ import { db, type DbExecutor } from "../client";
 import {
 	playbook,
 	playbookRun,
+	playbookRunStep,
 	playbookStep,
 	playbookVersion,
 } from "../schema/postgres";
@@ -831,4 +832,280 @@ export async function getPlaybookRunForOrg(input: {
 			),
 		);
 	return row ? rowToPlaybookRun(row) : null;
+}
+
+// ---------------------------------------------------------------------------
+// playbookRun + playbookRunStep MUTATIONS (Phase 18b -- execution pipeline).
+// The Inngest dispatcher + orchestrator drive these; launchManual seeds a run
+// directly. Raw-column "Core" shapes (no join) keep the orchestrator hot path
+// cheap -- the joined PlaybookRunRow above stays the read/display surface.
+// ---------------------------------------------------------------------------
+
+export type PlaybookRunStepStatus =
+	| "pending"
+	| "active"
+	| "waiting"
+	| "completed"
+	| "skipped"
+	| "failed"
+	| "cancelled";
+
+export interface PlaybookRunCore {
+	id: string;
+	organizationId: string;
+	playbookVersionId: string;
+	status: PlaybookRunStatus;
+	triggerEntityType: string | null;
+	triggerEntityId: string | null;
+	triggerPayload: unknown;
+	triggerFingerprint: string;
+	currentStepId: string | null;
+	nextWakeAt: Date | null;
+	startedAt: Date | null;
+	completedAt: Date | null;
+	cancelledAt: Date | null;
+	cancelledByUserId: string | null;
+	crossProductOrigin: string | null;
+}
+
+function rowToPlaybookRunCore(
+	row: typeof playbookRun.$inferSelect,
+): PlaybookRunCore {
+	return {
+		id: row.id,
+		organizationId: row.organizationId,
+		playbookVersionId: row.playbookVersionId,
+		status: row.status,
+		triggerEntityType: row.triggerEntityType,
+		triggerEntityId: row.triggerEntityId,
+		triggerPayload: row.triggerPayload,
+		triggerFingerprint: row.triggerFingerprint,
+		currentStepId: row.currentStepId,
+		nextWakeAt: row.nextWakeAt,
+		startedAt: row.startedAt,
+		completedAt: row.completedAt,
+		cancelledAt: row.cancelledAt,
+		cancelledByUserId: row.cancelledByUserId,
+		crossProductOrigin: row.crossProductOrigin,
+	};
+}
+
+export interface PlaybookRunStepCore {
+	id: string;
+	playbookRunId: string;
+	playbookStepId: string;
+	status: PlaybookRunStepStatus;
+	resultPayload: unknown;
+	launchedRunId: string | null;
+	startedAt: Date | null;
+	completedAt: Date | null;
+}
+
+function rowToPlaybookRunStepCore(
+	row: typeof playbookRunStep.$inferSelect,
+): PlaybookRunStepCore {
+	return {
+		id: row.id,
+		playbookRunId: row.playbookRunId,
+		playbookStepId: row.playbookStepId,
+		status: row.status,
+		resultPayload: row.resultPayload,
+		launchedRunId: row.launchedRunId,
+		startedAt: row.startedAt,
+		completedAt: row.completedAt,
+	};
+}
+
+export interface InsertPlaybookRunInput {
+	organizationId: string;
+	playbookVersionId: string;
+	triggerEntityType: string | null;
+	triggerEntityId: string | null;
+	triggerPayload: unknown;
+	triggerFingerprint: string;
+	crossProductOrigin?: string | null;
+}
+
+/** Idempotent run insert. Collides on uq_playbook_run_dedup (version, entity,
+ * fingerprint) -> returns the EXISTING run with created=false so the dispatcher
+ * never double-fires on a duplicate trigger event. Manual launches pass a unique
+ * fingerprint (and usually a null entity, which never collides under Postgres
+ * NULL semantics) so every click yields a fresh run. */
+export async function insertPlaybookRun(
+	input: InsertPlaybookRunInput,
+	executor: DbExecutor = db,
+): Promise<{ run: PlaybookRunCore; created: boolean }> {
+	const [inserted] = await executor
+		.insert(playbookRun)
+		.values({
+			organizationId: input.organizationId,
+			playbookVersionId: input.playbookVersionId,
+			status: "pending",
+			triggerEntityType: input.triggerEntityType,
+			triggerEntityId: input.triggerEntityId,
+			triggerPayload: input.triggerPayload as Record<string, unknown>,
+			triggerFingerprint: input.triggerFingerprint,
+			crossProductOrigin: input.crossProductOrigin ?? null,
+		})
+		.onConflictDoNothing({
+			target: [
+				playbookRun.playbookVersionId,
+				playbookRun.triggerEntityId,
+				playbookRun.triggerFingerprint,
+			],
+		})
+		.returning();
+	if (inserted) return { run: rowToPlaybookRunCore(inserted), created: true };
+
+	// Conflict -> fetch the existing run for this dedup tuple.
+	const [existing] = await executor
+		.select()
+		.from(playbookRun)
+		.where(
+			and(
+				eq(playbookRun.playbookVersionId, input.playbookVersionId),
+				input.triggerEntityId === null
+					? isNull(playbookRun.triggerEntityId)
+					: eq(playbookRun.triggerEntityId, input.triggerEntityId),
+				eq(playbookRun.triggerFingerprint, input.triggerFingerprint),
+			),
+		);
+	return { run: rowToPlaybookRunCore(existing), created: false };
+}
+
+/** Raw single-run fetch (no join) for the orchestrator hot path. */
+export async function getPlaybookRunCore(
+	runId: string,
+	executor: DbExecutor = db,
+): Promise<PlaybookRunCore | null> {
+	const [row] = await executor
+		.select()
+		.from(playbookRun)
+		.where(eq(playbookRun.id, runId));
+	return row ? rowToPlaybookRunCore(row) : null;
+}
+
+/** Patch only the provided fields of a playbook_run (status / pointer / wake /
+ * lifecycle timestamps). Never blanket-overwrites. */
+export async function updatePlaybookRunState(
+	input: {
+		runId: string;
+		status?: PlaybookRunStatus;
+		currentStepId?: string | null;
+		nextWakeAt?: Date | null;
+		startedAt?: Date | null;
+		completedAt?: Date | null;
+	},
+	executor: DbExecutor = db,
+): Promise<void> {
+	const patch: Record<string, unknown> = { updatedAt: new Date() };
+	if (input.status !== undefined) patch.status = input.status;
+	if (input.currentStepId !== undefined) patch.currentStepId = input.currentStepId;
+	if (input.nextWakeAt !== undefined) patch.nextWakeAt = input.nextWakeAt;
+	if (input.startedAt !== undefined) patch.startedAt = input.startedAt;
+	if (input.completedAt !== undefined) patch.completedAt = input.completedAt;
+	await executor
+		.update(playbookRun)
+		.set(patch)
+		.where(eq(playbookRun.id, input.runId));
+}
+
+/** Cancel a run -- only from a live state (pending/active/waiting). Returns false
+ * when the run is already terminal (the procedure maps that to a refusal). */
+export async function cancelPlaybookRun(
+	input: {
+		runId: string;
+		organizationId: string;
+		cancelledByUserId: string | null;
+	},
+	executor: DbExecutor = db,
+): Promise<boolean> {
+	const rows = await executor
+		.update(playbookRun)
+		.set({
+			status: "cancelled",
+			cancelledAt: new Date(),
+			cancelledByUserId: input.cancelledByUserId,
+			currentStepId: null,
+			nextWakeAt: null,
+			updatedAt: new Date(),
+		})
+		.where(
+			and(
+				eq(playbookRun.id, input.runId),
+				eq(playbookRun.organizationId, input.organizationId),
+				inArray(playbookRun.status, ["pending", "active", "waiting"]),
+			),
+		)
+		.returning({ id: playbookRun.id });
+	return rows.length > 0;
+}
+
+export async function insertPlaybookRunStep(
+	input: {
+		playbookRunId: string;
+		playbookStepId: string;
+		status?: PlaybookRunStepStatus;
+		startedAt?: Date | null;
+	},
+	executor: DbExecutor = db,
+): Promise<PlaybookRunStepCore> {
+	const [row] = await executor
+		.insert(playbookRunStep)
+		.values({
+			playbookRunId: input.playbookRunId,
+			playbookStepId: input.playbookStepId,
+			status: input.status ?? "pending",
+			startedAt: input.startedAt ?? null,
+		})
+		.returning();
+	return rowToPlaybookRunStepCore(row);
+}
+
+/** Patch only the provided fields of a playbook_run_step. */
+export async function updatePlaybookRunStepState(
+	input: {
+		runStepId: string;
+		status?: PlaybookRunStepStatus;
+		resultPayload?: unknown;
+		launchedRunId?: string | null;
+		startedAt?: Date | null;
+		completedAt?: Date | null;
+	},
+	executor: DbExecutor = db,
+): Promise<void> {
+	const patch: Record<string, unknown> = { updatedAt: new Date() };
+	if (input.status !== undefined) patch.status = input.status;
+	if (input.resultPayload !== undefined) patch.resultPayload = input.resultPayload;
+	if (input.launchedRunId !== undefined) patch.launchedRunId = input.launchedRunId;
+	if (input.startedAt !== undefined) patch.startedAt = input.startedAt;
+	if (input.completedAt !== undefined) patch.completedAt = input.completedAt;
+	await executor
+		.update(playbookRunStep)
+		.set(patch)
+		.where(eq(playbookRunStep.id, input.runStepId));
+}
+
+/** Full orchestration bundle: the run + the published version's ordered step
+ * list + any playbook_run_step rows already materialized. The orchestrator
+ * loads this once per resume to decide the next action. */
+export async function getPlaybookRunWithSteps(
+	runId: string,
+	executor: DbExecutor = db,
+): Promise<
+	| {
+			run: PlaybookRunCore;
+			steps: PlaybookStepRow[];
+			runSteps: PlaybookRunStepCore[];
+	  }
+	| null
+> {
+	const run = await getPlaybookRunCore(runId, executor);
+	if (!run) return null;
+	const steps = await listPlaybookStepsForVersion(run.playbookVersionId, executor);
+	const rsRows = await executor
+		.select()
+		.from(playbookRunStep)
+		.where(eq(playbookRunStep.playbookRunId, runId));
+	return { run, steps, runSteps: rsRows.map(rowToPlaybookRunStepCore) };
 }

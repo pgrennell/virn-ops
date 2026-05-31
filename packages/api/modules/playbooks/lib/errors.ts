@@ -23,7 +23,11 @@ export type PlaybookEngineErrorCode =
 	| "REORDER_STEPS_INCOMPLETE"
 	// Phase 18a -- publish dance
 	| "VERSION_HAS_NO_STEPS"
-	| "PUBLISH_RACE";
+	| "PUBLISH_RACE"
+	// Phase 18b -- execution
+	| "PLAYBOOK_NOT_PUBLISHED"
+	| "PLAYBOOK_RUN_NOT_FOUND"
+	| "PLAYBOOK_RUN_NOT_CANCELLABLE";
 
 export class PlaybookEngineError extends Error {
 	readonly code: PlaybookEngineErrorCode;

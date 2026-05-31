@@ -33,6 +33,10 @@ const CODE_MAP: Record<
 	// Phase 18a -- publish dance
 	VERSION_HAS_NO_STEPS: "BAD_REQUEST",
 	PUBLISH_RACE: "CONFLICT",
+	// Phase 18b -- execution
+	PLAYBOOK_NOT_PUBLISHED: "BAD_REQUEST",
+	PLAYBOOK_RUN_NOT_FOUND: "NOT_FOUND",
+	PLAYBOOK_RUN_NOT_CANCELLABLE: "CONFLICT",
 };
 
 /** Wraps a lib helper call so any PlaybookEngineError becomes an ORPCError with a
