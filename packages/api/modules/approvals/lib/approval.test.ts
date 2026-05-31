@@ -25,10 +25,18 @@ import {
 	getVersionWithWorkflow,
 	insertVersionApproval,
 	isCapabilityEnabledForOrg,
+	listApprovalsForVersion,
+	listPendingApprovalsForOrg,
 	writeAuditAndActivity,
 } from "@virn/database";
 
-import { decideApproval, requestApproval } from "./approval";
+import {
+	decideApproval,
+	getLatestApprovalStatus,
+	listAllApprovalsForVersion,
+	listPending,
+	requestApproval,
+} from "./approval";
 
 const ctx = { organizationId: "org-1", userId: "user-1" };
 
@@ -260,6 +268,101 @@ describe("decideApproval -- refusal paths", () => {
 		).rejects.toMatchObject({
 			code: "CONFLICT",
 			data: { code: "APPROVAL_ALREADY_DECIDED" },
+		});
+	});
+
+	// Governance hardening: the capability gate on the decide path (after the
+	// pending check) was previously unverified.
+	it("refuses FORBIDDEN when the approvals capability is off (no decide, no audit)", async () => {
+		vi.mocked(getApprovalRowForOrg).mockResolvedValueOnce({
+			id: "appr_1",
+			workflowId: "wf_1",
+			workflowVersionId: "wv_1",
+			workflowVersionNumber: 2,
+			decision: "pending",
+		});
+		vi.mocked(isCapabilityEnabledForOrg).mockResolvedValueOnce(false);
+
+		await expect(
+			decideApproval(ctx, { approvalId: "appr_1", decision: "approved" }),
+		).rejects.toMatchObject({ code: "FORBIDDEN", data: { code: "CAPABILITY_DISABLED" } });
+		expect(decideVersionApprovalRow).not.toHaveBeenCalled();
+		expect(writeAuditAndActivity).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Governance hardening: approverId passthrough + the three read helpers that
+// had no coverage (getLatestApprovalStatus, listAllApprovalsForVersion, listPending).
+// ---------------------------------------------------------------------------
+
+describe("requestApproval -- approverId passthrough", () => {
+	it("forwards an explicit approverId to the insert", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(makeBundle() as never);
+		vi.mocked(insertVersionApproval).mockResolvedValueOnce({ id: "appr_2", createdAt: new Date() });
+
+		await requestApproval(ctx, { workflowVersionId: "wv_1", approverId: "reviewer-9" });
+
+		expect(insertVersionApproval).toHaveBeenCalledWith(
+			expect.objectContaining({ approverId: "reviewer-9" }),
+		);
+	});
+});
+
+describe("getLatestApprovalStatus", () => {
+	it("returns null for a missing or cross-org version (no enumeration)", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(null);
+		expect(await getLatestApprovalStatus(ctx, { workflowVersionId: "wv_x" })).toBeNull();
+
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(
+			makeBundle({ workflow: { id: "wf_1", organizationId: "other-org" } }) as never,
+		);
+		expect(await getLatestApprovalStatus(ctx, { workflowVersionId: "wv_1" })).toBeNull();
+		expect(getLatestApprovalForVersion).not.toHaveBeenCalled();
+	});
+
+	it("returns the latest approval row for an in-org version", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(makeBundle() as never);
+		vi.mocked(getLatestApprovalForVersion).mockResolvedValueOnce({
+			id: "appr_1",
+			decision: "approved",
+		} as never);
+		const res = await getLatestApprovalStatus(ctx, { workflowVersionId: "wv_1" });
+		expect(res).toMatchObject({ id: "appr_1", decision: "approved" });
+	});
+});
+
+describe("listAllApprovalsForVersion", () => {
+	it("returns [] for a missing or cross-org version", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(null);
+		expect(await listAllApprovalsForVersion(ctx, { workflowVersionId: "wv_x" })).toEqual([]);
+		expect(listApprovalsForVersion).not.toHaveBeenCalled();
+	});
+
+	it("returns the full version history for an in-org version", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(makeBundle() as never);
+		vi.mocked(listApprovalsForVersion).mockResolvedValueOnce([
+			{ id: "a1" },
+			{ id: "a2" },
+		] as never);
+		const res = await listAllApprovalsForVersion(ctx, { workflowVersionId: "wv_1" });
+		expect(res).toHaveLength(2);
+		expect(listApprovalsForVersion).toHaveBeenCalledWith({ workflowVersionId: "wv_1" });
+	});
+});
+
+describe("listPending", () => {
+	it("delegates to the org-scoped pending query with pagination", async () => {
+		vi.mocked(listPendingApprovalsForOrg).mockResolvedValueOnce({
+			rows: [{ id: "p1" }],
+			totalCount: 1,
+		} as never);
+		const res = await listPending(ctx, { limit: 10, offset: 5 });
+		expect(res).toEqual({ rows: [{ id: "p1" }], totalCount: 1 });
+		expect(listPendingApprovalsForOrg).toHaveBeenCalledWith({
+			organizationId: "org-1",
+			limit: 10,
+			offset: 5,
 		});
 	});
 });
