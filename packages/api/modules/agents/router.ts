@@ -1,3 +1,4 @@
+import { authorPlaybookProc } from "./procedures/author-playbook";
 import { authorWorkflowProc } from "./procedures/author-workflow";
 import { create } from "./procedures/create";
 import { get } from "./procedures/get";
@@ -16,6 +17,7 @@ export const agentsRouter = {
 	rotateCredential,
 	softDelete,
 	authorWorkflow: authorWorkflowProc,
+	authorPlaybook: authorPlaybookProc,
 	regenerateStep: regenerateStepProc,
 	// Phase 12 follow-up (PRD §8.4) -- read-side surface for the
 	// ai_authoring_prompt provenance row. Powers the "View originating
