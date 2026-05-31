@@ -2088,3 +2088,57 @@ calls trigger a billable LLM round-trip; `workflows.*` calls don't.
 - The `agents.*` namespace gains a small audit benefit: every `agents.*` procedure call
   corresponds to a paid LLM round-trip. Future cost dashboards can filter on the
   namespace prefix without per-procedure tagging.
+
+---
+
+### D-045 — Step instructions are plain text in v1; rich step content (gap #10) is deferred as a feature
+
+**Status:** Audited 2026-05-31 (Phase 18 hardening pass, item B1 / BUILD_PLAN Phase 19 "rich
+step content"). Deferred — not implemented in v1.
+
+**Finding.** Workflow and Playbook step instructions are **plain text end-to-end**:
+
+- **Data layer:** `step.description` is `text("description")` in
+  `packages/database/drizzle/schema/workflows.ts` (and the Playbook step equivalent). There
+  is no structured rich-content column (no jsonb ProseMirror/TipTap document, no separate
+  content-block table).
+- **Render layer:** both the Builder Read view
+  (`apps/saas/modules/builder/components/ReadView.tsx` — `<p className="… whitespace-pre-wrap">
+  {step.description}</p>`) and the Run view render the description as a plain string. There is
+  **no markdown or rich-text renderer** in the step-instruction path.
+
+**Consequence for gap #10.** Video, images, tables, and clickable links do **not** work in
+step instructions today. A pasted URL renders as literal text; markdown syntax renders as
+literal characters. BUILD_PLAN Phase 19's "confirm video/images/tables/links work in step
+instructions; fix if not" is therefore a **feature build**, not a serialization bug to patch.
+
+**Why deferred (not done in the Phase 18 hardening pass).** "Fixing" gap #10 requires one of
+two paths, and choosing between them is an unresolved content-model product decision:
+
+1. **Markdown-render the existing text column.** Smallest change (swap the plain `<p>` for a
+   sanitized markdown renderer in Read/Run views). But it introduces an **XSS surface** on
+   user-authored content that demands security review + browser verification, and it changes
+   user-facing rendering of every existing step.
+2. **Structured rich-content model.** A jsonb document column + an editor (TipTap/ProseMirror)
+   in the Builder + a renderer in Read/Run + a **schema migration** + a backfill of existing
+   plain-text descriptions.
+
+Both paths need a schema migration and/or browser-verified UI — out of scope for an automated
+backend test-hardening pass (no migrations, no browser, no irreversible product decision per
+the pass's guardrails). This entry records the audit so the work isn't silently assumed done.
+
+**Recommendation when picked up.** Decide the content model first (this is the load-bearing
+choice; see D-039/D-041 for the related step-list/canvas content-model decisions). If a
+sanitized markdown renderer is chosen as the v1.x interim, ship it behind security review with
+a content-sanitization test + a Playwright render check; if the structured model is chosen,
+slot it as its own numbered phase with the migration + editor + renderer + backfill.
+
+**Rationale.**
+
+1. **Honest scope.** Marking gap #10 "verified" without a content model would misrepresent v1
+   capability; recording the plain-text reality keeps the launch-readiness checklist truthful.
+2. **Reversibility.** Deferring costs nothing and loses no work; speculatively adding a markdown
+   renderer (XSS surface) or a migration unattended is the irreversible, riskier move.
+3. **No backend test vehicle.** The gap is purely data-model + UI rendering; there is nothing in
+   `@virn/api` to characterize with a unit test, so no test was added for B1 — the audit lives
+   here instead.
