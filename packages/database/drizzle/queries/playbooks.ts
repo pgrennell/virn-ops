@@ -1159,3 +1159,54 @@ export async function listActivePlaybookTriggers(
 	}
 	return out;
 }
+
+// ---------------------------------------------------------------------------
+// Active Run card widening (Phase 18b-3). Surfaces in-flight playbook_run rows
+// on an entity's detail page, alongside the workflow runs the card already
+// shows -- the operator sees both Workflow and Playbook activity for the entity.
+// ---------------------------------------------------------------------------
+
+export interface ActivePlaybookRunForEntityRow {
+	id: string;
+	playbookId: string;
+	playbookName: string;
+	status: PlaybookRunStatus;
+	currentStepId: string | null;
+	nextWakeAt: Date | null;
+	startedAt: Date | null;
+}
+
+/** In-flight (pending/active/waiting) playbook runs stamped against an entity
+ * (trigger_entity_type/_id). Newest first; joins the parent playbook for its
+ * name + id (the row click target is /playbooks/<id>/read?runId=<id>). */
+export async function listActivePlaybookRunsForEntity(
+	organizationId: string,
+	entityType: string,
+	entityId: string,
+	options?: { limit?: number },
+): Promise<ActivePlaybookRunForEntityRow[]> {
+	const rows = await db
+		.select({
+			id: playbookRun.id,
+			playbookId: playbook.id,
+			playbookName: playbook.name,
+			status: playbookRun.status,
+			currentStepId: playbookRun.currentStepId,
+			nextWakeAt: playbookRun.nextWakeAt,
+			startedAt: playbookRun.startedAt,
+		})
+		.from(playbookRun)
+		.innerJoin(playbookVersion, eq(playbookVersion.id, playbookRun.playbookVersionId))
+		.innerJoin(playbook, eq(playbook.id, playbookVersion.playbookId))
+		.where(
+			and(
+				eq(playbookRun.organizationId, organizationId),
+				eq(playbookRun.triggerEntityType, entityType),
+				eq(playbookRun.triggerEntityId, entityId),
+				inArray(playbookRun.status, ["pending", "active", "waiting"]),
+			),
+		)
+		.orderBy(desc(playbookRun.createdAt))
+		.limit(options?.limit ?? 20);
+	return rows;
+}

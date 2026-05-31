@@ -25,7 +25,7 @@
 import { Spinner } from "@virn/ui/components/spinner";
 import { cn } from "@virn/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, ChevronRight, Play } from "lucide-react";
+import { Activity, ChevronRight, Clock, Play, Repeat } from "lucide-react";
 
 import { orpc } from "@shared/lib/orpc-query-utils";
 
@@ -45,42 +45,52 @@ export function ActiveRunCard({
 			input: { entityType, entityId },
 		}),
 	);
+	// Phase 18b-3 -- playbook runs surface here too, with a type chip.
+	const playbookQuery = useQuery(
+		orpc.playbookRuns.listActiveForEntity.queryOptions({
+			input: { entityType, entityId },
+		}),
+	);
 
 	const runs = query.data?.runs ?? [];
+	const playbookRuns = playbookQuery.data?.playbookRuns ?? [];
+	const total = runs.length + playbookRuns.length;
+
+	const isLoading = query.isLoading || playbookQuery.isLoading;
+	const isError = query.isError || playbookQuery.isError;
+	const error = query.error ?? playbookQuery.error;
 
 	return (
 		<section className="rounded-lg border border-border bg-background overflow-hidden">
 			<header className="px-3 py-2 border-b border-border bg-muted/20 flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-foreground/60">
 				<Activity className="size-3.5" aria-hidden="true" />
 				Active Run
-				{runs.length > 0 && (
+				{total > 0 && (
 					<span className="ml-auto px-1.5 py-0.5 text-[10px] font-mono rounded bg-foreground/5 text-foreground/70">
-						{runs.length}
+						{total}
 					</span>
 				)}
 			</header>
 
-			{query.isLoading && (
+			{isLoading && (
 				<div className="flex items-center justify-center gap-2 py-6 text-xs text-foreground/60">
 					<Spinner className="size-4" /> Loading…
 				</div>
 			)}
 
-			{query.isError && (
+			{isError && (
 				<div className="px-3 py-3 text-xs text-destructive">
-					{query.error instanceof Error
-						? query.error.message
-						: "Couldn't load active runs."}
+					{error instanceof Error ? error.message : "Couldn't load active runs."}
 				</div>
 			)}
 
-			{!query.isLoading && !query.isError && runs.length === 0 && (
+			{!isLoading && !isError && total === 0 && (
 				<div className="px-3 py-4 text-xs text-foreground/50 leading-relaxed">
 					No active runs on this entity right now.
 				</div>
 			)}
 
-			{runs.length > 0 && (
+			{total > 0 && (
 				<ul className="flex flex-col">
 					{runs.map((run) => (
 						<li key={run.id}>
@@ -101,6 +111,44 @@ export function ActiveRunCard({
 										{run.workflowTitle} · started {formatRelativeShort(run.startedAt)}
 									</span>
 								</div>
+								<TypeChip kind="workflow" />
+								<ChevronRight
+									className="size-3.5 text-foreground/30 shrink-0"
+									aria-hidden="true"
+								/>
+							</a>
+						</li>
+					))}
+					{playbookRuns.map((pb) => (
+						<li key={pb.id}>
+							<a
+								href={`/${organizationSlug}/playbooks/${pb.playbookId}/read?runId=${pb.id}`}
+								className={cn(
+									"flex items-center gap-2 px-3 py-2.5 border-b border-border/40 last:border-b-0",
+									"hover:bg-muted/40 transition-colors",
+								)}
+							>
+								<Repeat
+									className="size-3.5 text-violet-600 dark:text-violet-400 shrink-0"
+									aria-hidden="true"
+								/>
+								<div className="flex-1 min-w-0 flex flex-col gap-0.5">
+									<span className="text-xs font-medium truncate">{pb.playbookName}</span>
+									<span className="text-[10px] text-foreground/50 truncate flex items-center gap-1">
+										{pb.status === "waiting" && pb.nextWakeAt ? (
+											<>
+												<Clock className="size-3" aria-hidden="true" />
+												wakes {formatRelativeShort(pb.nextWakeAt)}
+											</>
+										) : (
+											<>
+												{pb.status}
+												{pb.startedAt ? ` · started ${formatRelativeShort(pb.startedAt)}` : ""}
+											</>
+										)}
+									</span>
+								</div>
+								<TypeChip kind="playbook" />
 								<ChevronRight
 									className="size-3.5 text-foreground/30 shrink-0"
 									aria-hidden="true"
@@ -111,6 +159,22 @@ export function ActiveRunCard({
 				</ul>
 			)}
 		</section>
+	);
+}
+
+/** Workflow vs Playbook discriminator chip (PRD §6.5 R6 lift). */
+function TypeChip({ kind }: { kind: "workflow" | "playbook" }) {
+	return (
+		<span
+			className={cn(
+				"shrink-0 px-1.5 py-0.5 text-[9px] uppercase tracking-wide rounded font-semibold",
+				kind === "workflow"
+					? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+					: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+			)}
+		>
+			{kind === "workflow" ? "Workflow" : "Playbook"}
+		</span>
 	);
 }
 

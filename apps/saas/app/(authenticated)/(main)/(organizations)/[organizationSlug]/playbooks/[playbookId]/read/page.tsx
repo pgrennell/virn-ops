@@ -15,10 +15,13 @@ export const metadata = { title: "Playbook" };
 
 export default async function PlaybookReadPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ organizationSlug: string; playbookId: string }>;
+	searchParams: Promise<{ runId?: string }>;
 }) {
 	const { organizationSlug, playbookId } = await params;
+	const { runId } = await searchParams;
 	const { snapshot } = await assertCanSee(organizationSlug, NAV_AREAS.playbooks);
 
 	return (
@@ -27,6 +30,7 @@ export default async function PlaybookReadPage({
 				playbookId={playbookId}
 				organizationSlug={organizationSlug}
 				isAdminOrOwner={snapshot.isAdminSuperset}
+				runId={runId ?? null}
 			/>
 		</div>
 	);

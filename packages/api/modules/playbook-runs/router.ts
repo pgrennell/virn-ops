@@ -4,6 +4,7 @@
 import { cancelPlaybookRunProc } from "./procedures/cancel";
 import { getPlaybookRunProc } from "./procedures/get-run";
 import { launchPlaybookManualProc } from "./procedures/launch-manual";
+import { listActivePlaybookRunsForEntityProc } from "./procedures/list-active-for-entity";
 import { listPlaybookRunsProc } from "./procedures/list-runs";
 
 export const playbookRunsRouter = {
@@ -11,4 +12,5 @@ export const playbookRunsRouter = {
 	get: getPlaybookRunProc,
 	launchManual: launchPlaybookManualProc,
 	cancel: cancelPlaybookRunProc,
+	listActiveForEntity: listActivePlaybookRunsForEntityProc,
 };

@@ -6,7 +6,7 @@
 // the data shape (steps are inherently sequential with time-staged waits).
 
 import { orpc } from "@shared/lib/orpc-query-utils";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@virn/ui/components/alert";
 import { Badge } from "@virn/ui/components/badge";
 import { Button } from "@virn/ui/components/button";
@@ -15,11 +15,13 @@ import {
 	Clock,
 	GitBranch,
 	Pencil,
+	Play,
 	Save,
 	Send,
 	Zap,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const STEP_TYPE_LABELS: Record<string, string> = {
 	wait_for_duration: "Wait (duration)",
@@ -43,16 +45,50 @@ interface PlaybookReadViewProps {
 	playbookId: string;
 	organizationSlug: string;
 	isAdminOrOwner: boolean;
+	/** Phase 18b-3 -- when set, the Read view becomes the EXECUTE view: a banner
+	 * shows the live run's status + next-wake countdown, with a cancel control. */
+	runId?: string | null;
 }
 
 export function PlaybookReadView({
 	playbookId,
 	organizationSlug,
 	isAdminOrOwner,
+	runId = null,
 }: PlaybookReadViewProps) {
+	const queryClient = useQueryClient();
+	const router = useRouter();
 	const getQuery = useQuery(
 		orpc.playbooks.get.queryOptions({ input: { playbookId } }),
 	);
+
+	// Phase 18b-3 -- manual launch: seed a run + switch into the execute view.
+	const launchMut = useMutation({
+		...orpc.playbookRuns.launchManual.mutationOptions(),
+		onSuccess: (data) => {
+			router.push(
+				`/${organizationSlug}/playbooks/${playbookId}/read?runId=${data.playbookRunId}`,
+			);
+		},
+	});
+
+	const runQuery = useQuery({
+		...orpc.playbookRuns.get.queryOptions({ input: { runId: runId ?? "" } }),
+		enabled: !!runId,
+		// Refetch while the run is in flight so the countdown + status stay live.
+		refetchInterval: runId ? 15_000 : false,
+	});
+
+	const cancelMut = useMutation({
+		...orpc.playbookRuns.cancel.mutationOptions(),
+		onSuccess: () => {
+			if (runId) {
+				void queryClient.invalidateQueries({
+					queryKey: orpc.playbookRuns.get.queryKey({ input: { runId } }),
+				});
+			}
+		},
+	});
 
 	if (getQuery.isLoading) {
 		return <ReadSkeleton />;
@@ -110,19 +146,60 @@ export function PlaybookReadView({
 							)}
 						</div>
 					</div>
-					{isAdminOrOwner && (
-						<Link
-							href={`/${organizationSlug}/playbooks/${playbookId}/builder`}
-							className="shrink-0"
-						>
-							<Button variant="ghost" size="sm">
-								<Pencil className="size-3.5 mr-1" />
-								Open in Builder
+					<div className="shrink-0 flex items-center gap-2">
+						{latestPublished && !runId && (
+							<Button
+								variant="primary"
+								size="sm"
+								onClick={() => launchMut.mutate({ playbookId })}
+								disabled={launchMut.isPending}
+							>
+								<Play className="size-3.5 mr-1" />
+								{launchMut.isPending ? "Launching…" : "Run playbook"}
 							</Button>
-						</Link>
-					)}
+						)}
+						{isAdminOrOwner && (
+							<Link
+								href={`/${organizationSlug}/playbooks/${playbookId}/builder`}
+							>
+								<Button variant="ghost" size="sm">
+									<Pencil className="size-3.5 mr-1" />
+									Open in Builder
+								</Button>
+							</Link>
+						)}
+					</div>
 				</div>
 			</header>
+
+			{runId && runQuery.data && (
+				<div className="rounded-lg border border-border bg-muted/20 p-4 flex items-center justify-between gap-3 flex-wrap">
+					<div className="flex items-center gap-2 flex-wrap">
+						<span className="text-[10px] uppercase tracking-wide text-foreground/50">
+							Run
+						</span>
+						<Badge status={runStatusTone(runQuery.data.status)}>
+							{runQuery.data.status}
+						</Badge>
+						{runQuery.data.status === "waiting" && runQuery.data.nextWakeAt && (
+							<span className="text-[11px] text-foreground/60 flex items-center gap-1">
+								<Clock className="size-3" aria-hidden="true" />
+								next wake {formatWake(runQuery.data.nextWakeAt)}
+							</span>
+						)}
+					</div>
+					{["pending", "active", "waiting"].includes(runQuery.data.status) && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => cancelMut.mutate({ runId })}
+							disabled={cancelMut.isPending}
+						>
+							{cancelMut.isPending ? "Cancelling…" : "Cancel run"}
+						</Button>
+					)}
+				</div>
+			)}
 
 			{!latestPublished ? (
 				<div className="rounded-lg border border-border bg-background p-6 text-sm text-foreground/60 text-center">
@@ -208,4 +285,29 @@ function ReadSkeleton() {
 			<Skeleton className="h-40 w-full" />
 		</div>
 	);
+}
+
+function runStatusTone(status: string): "success" | "warning" | "info" | "error" {
+	switch (status) {
+		case "completed":
+			return "success";
+		case "failed":
+			return "error";
+		case "cancelled":
+			return "info";
+		default:
+			return "warning"; // pending / active / waiting
+	}
+}
+
+/** Relative future time for the next-wake countdown ("in 4h", "in 3d"). */
+function formatWake(value: Date | string, now: Date = new Date()): string {
+	const then = value instanceof Date ? value : new Date(value);
+	const diffMs = then.getTime() - now.getTime();
+	if (diffMs <= 0) return "imminently";
+	const mins = Math.round(diffMs / 60_000);
+	if (mins < 60) return `in ${mins}m`;
+	const hours = Math.round(mins / 60);
+	if (hours < 24) return `in ${hours}h`;
+	return `in ${Math.round(hours / 24)}d`;
 }
