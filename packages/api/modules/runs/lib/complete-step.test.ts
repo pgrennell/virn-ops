@@ -39,6 +39,12 @@ vi.mock("@virn/database", () => ({
 	validateFieldValue: vi.fn((_field, v) => v),
 }));
 
+// Phase 18b-2 -- complete-step now fans run-completion to the Playbook dispatcher
+// via Inngest on the cascade path. Stub the client so unit tests don't hit it.
+vi.mock("../../../inngest/client", () => ({
+	inngest: { send: vi.fn(async () => ({ ids: [] })) },
+}));
+
 import {
 	areAllRequiredRunStepsComplete,
 	enqueueCrossProductEventForRun,

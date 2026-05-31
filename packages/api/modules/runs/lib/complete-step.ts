@@ -30,6 +30,8 @@ import {
 	writeAuditAndActivity,
 } from "@virn/database";
 
+import { inngest } from "../../../inngest/client";
+import { PLAYBOOK_LIFECYCLE_EVENTS } from "../../../inngest/events";
 import { RunEngineError } from "./errors";
 import { recomputeDueAtAfterStepCompletion } from "./launch-run";
 
@@ -293,6 +295,29 @@ export async function completeRunStep(
 		);
 		return true;
 	});
+
+	// Phase 18b-2 -- fan the run-completion out to the Playbook dispatcher via
+	// Inngest. Post-commit + gated on the actual transition, so a rolled-back tx
+	// never emits and the event fires at most once per run. The run's subject
+	// entity (D-043) scopes entity-narrowed playbooks; resolved best-effort off
+	// the loaded run row (null -> only match-any playbooks fire).
+	if (runCompleted) {
+		const runEntity = rs.run as {
+			entityType?: string | null;
+			entityId?: string | null;
+		};
+		const lifecycleData = {
+			organizationId: ctx.organizationId,
+			entityType: runEntity.entityType ?? null,
+			entityId: runEntity.entityId ?? null,
+			crossProductOrigin: ctx.crossProductOrigin ?? null,
+			payload: { runId: rs.run.id, fromStatus: "active", toStatus: "completed" },
+		};
+		await inngest.send([
+			{ name: PLAYBOOK_LIFECYCLE_EVENTS.RUN_STATE_CHANGED, data: lifecycleData },
+			{ name: PLAYBOOK_LIFECYCLE_EVENTS.RUN_COMPLETED, data: lifecycleData },
+		]);
+	}
 
 	return { runStepId, runCompleted };
 }

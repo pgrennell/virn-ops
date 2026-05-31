@@ -1109,3 +1109,53 @@ export async function getPlaybookRunWithSteps(
 		.where(eq(playbookRunStep.playbookRunId, runId));
 	return { run, steps, runSteps: rsRows.map(rowToPlaybookRunStepCore) };
 }
+
+// ---------------------------------------------------------------------------
+// Dispatcher matching (Phase 18b-2). The Inngest dispatcher loads every active
+// playbook's latest published trigger and matches it against an inbound
+// lifecycle event. is_active=true is enforced HERE (PRD §6.4) -- disabled
+// playbooks never reach the dispatcher's match step.
+// ---------------------------------------------------------------------------
+
+export interface PlaybookTriggerRow {
+	playbookId: string;
+	playbookVersionId: string;
+	triggerType: "manual" | "lifecycle_event";
+	triggerEvent: string | null;
+	/** The playbook's entity-set scope. Empty array = applies to any entity. */
+	entitySetIds: string[];
+}
+
+/** The latest published trigger of every ACTIVE, non-archived playbook in the
+ * org. The dispatcher filters these by event + entity-set scope in JS (pure,
+ * unit-tested) before seeding runs. N+1 over the active set is fine: the active
+ * playbook count per org is small and the dispatcher fires per event, not per
+ * request. */
+export async function listActivePlaybookTriggers(
+	organizationId: string,
+): Promise<PlaybookTriggerRow[]> {
+	const actives = await db
+		.select({ id: playbook.id, entitySetIds: playbook.entitySetIds })
+		.from(playbook)
+		.where(
+			and(
+				eq(playbook.organizationId, organizationId),
+				eq(playbook.isActive, true),
+				isNull(playbook.deletedAt),
+			),
+		);
+
+	const out: PlaybookTriggerRow[] = [];
+	for (const p of actives) {
+		const version = await getLatestPublishedPlaybookVersion(p.id);
+		if (!version) continue;
+		out.push({
+			playbookId: p.id,
+			playbookVersionId: version.id,
+			triggerType: version.triggerType,
+			triggerEvent: version.triggerEvent,
+			entitySetIds: p.entitySetIds,
+		});
+	}
+	return out;
+}
