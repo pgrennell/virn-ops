@@ -20,6 +20,9 @@ import {
 	settingDataType,
 	settingDefinition,
 } from "../schema/postgres";
+// D-046: pure validator lives in a client-free module; imported for internal use +
+// re-exported below for back-compat.
+import { validateSettingValue } from "./_pure/setting-validation";
 
 // ---------------------------------------------------------------------------
 // Profiles
@@ -286,50 +289,14 @@ export async function getEffectiveSettingValue(orgId: string, key: string): Prom
 
 // ---------------------------------------------------------------------------
 // Validation
+//
+// D-046: the pure validator (+ its VALIDATION_BUILDERS) moved to
+// ./_pure/setting-validation.ts so it can be unit-tested without the drizzle client.
+// Imported above (used internally by setOrganizationSettingOverride) and re-exported
+// here for back-compat -- every existing import site is unchanged.
 // ---------------------------------------------------------------------------
 
-type ValidationSchemaShape = Record<string, unknown> | null;
-
-const VALIDATION_BUILDERS: Record<SettingDataType, (schema: ValidationSchemaShape) => z.ZodTypeAny> =
-	{
-		string: (s) => {
-			let z_ = z.string();
-			if (typeof s?.minLength === "number") z_ = z_.min(s.minLength);
-			if (typeof s?.maxLength === "number") z_ = z_.max(s.maxLength);
-			if (typeof s?.pattern === "string") z_ = z_.regex(new RegExp(s.pattern));
-			return z_;
-		},
-		number: (s) => {
-			let z_ = z.number();
-			if (typeof s?.min === "number") z_ = z_.min(s.min);
-			if (typeof s?.max === "number") z_ = z_.max(s.max);
-			if (s?.int === true) z_ = z_.int();
-			return z_;
-		},
-		boolean: () => z.boolean(),
-		json: () => z.unknown(),
-		select: (s) =>
-			Array.isArray(s?.options) && s.options.length > 0
-				? z.enum(s.options as [string, ...string[]])
-				: z.string(),
-		multiselect: (s) =>
-			Array.isArray(s?.options) && s.options.length > 0
-				? z.array(z.enum(s.options as [string, ...string[]]))
-				: z.array(z.string()),
-	};
-
-/** Validate a value against a setting definition. Returns the parsed value or throws
- * `ZodError`. */
-export function validateSettingValue(
-	definition: Pick<EffectiveSetting, "dataType" | "validationSchema">,
-	value: unknown,
-): unknown {
-	const builder = VALIDATION_BUILDERS[definition.dataType];
-	if (!builder) {
-		throw new Error(`Unknown setting dataType: ${definition.dataType}`);
-	}
-	return builder(definition.validationSchema).parse(value);
-}
+export { validateSettingValue };
 
 // ---------------------------------------------------------------------------
 // Seed helpers (called from tooling/scripts/src/seed-*.ts)
