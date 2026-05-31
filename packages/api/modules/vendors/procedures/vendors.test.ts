@@ -17,6 +17,7 @@ vi.mock("@virn/auth", () => ({
 vi.mock("@virn/database", () => ({
 	getOrganizationMembership: vi.fn(),
 	listVendorsForOrg: vi.fn(),
+	listVendorsForLauncher: vi.fn(),
 	getVendorForOrg: vi.fn(),
 	createVendor: vi.fn(),
 	updateVendor: vi.fn(),
@@ -38,6 +39,7 @@ import {
 	enqueueCrossProductEventForVendor,
 	getOrganizationMembership,
 	getVendorForOrg,
+	listVendorsForLauncher,
 	listVendorsForOrg,
 	softDeleteVendor,
 	updateVendor,
@@ -49,6 +51,7 @@ import { create } from "./create";
 import { createContact } from "./create-contact";
 import { get } from "./get";
 import { list } from "./list";
+import { listForLauncher } from "./list-for-launcher";
 import { softDelete } from "./soft-delete";
 import { update } from "./update";
 import { updateContact } from "./update-contact";
@@ -179,6 +182,26 @@ describe("vendors procedures -- auth gate", () => {
 		const row = makeVendorDetail();
 		vi.mocked(getVendorForOrg).mockResolvedValueOnce(row as never);
 		await expect(call(get, { id: "v-1" }, ctx)).resolves.toEqual(row);
+	});
+
+	// Data-primitive hardening: get's NOT_FOUND path (uniform cross-org / soft-deleted
+	// response) was untested.
+	it("get throws NOT_FOUND when the vendor is missing / cross-org / soft-deleted", async () => {
+		vi.mocked(getVendorForOrg).mockResolvedValueOnce(null as never);
+		await expect(call(get, { id: "missing" }, ctx)).rejects.toMatchObject({ code: "NOT_FOUND" });
+	});
+
+	// list-for-launcher (protectedOrgProcedure) had zero coverage.
+	it("listForLauncher works for plain members + forwards the org id", async () => {
+		vi.mocked(getOrganizationMembership).mockResolvedValueOnce(makeMembership("member") as never);
+		vi.mocked(listVendorsForLauncher).mockResolvedValueOnce([] as never);
+		await expect(call(listForLauncher, {}, ctx)).resolves.toEqual([]);
+		expect(listVendorsForLauncher).toHaveBeenCalledWith("org-1");
+	});
+
+	it("listForLauncher throws UNAUTHORIZED with no session", async () => {
+		vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
+		await expect(call(listForLauncher, {}, ctx)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 	});
 });
 
