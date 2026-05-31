@@ -15,47 +15,24 @@
 // Rotating PARTICIPANT_TOKEN_SECRET invalidates every outstanding link by design. Treat
 // it as a stable, long-lived signing key.
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-
 import { and, eq, isNull, lte, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { participant, participantToken } from "../schema/postgres";
+// D-046: pure token-crypto in a client-free module; imported for internal use, public
+// helpers re-exported below.
+import { generateTokenPlaintext, hashToken, safeEqual } from "./_pure/token-crypto";
 
 // ---------------------------------------------------------------------------
 // Token plaintext + hash
+//
+// D-046: the pure token-crypto (getSecret/generateTokenPlaintext/hashToken/safeEqual)
+// moved to ./_pure/token-crypto.ts so it can be unit-tested without the drizzle client.
+// generateTokenPlaintext + hashToken (the public helpers) are re-exported for back-compat;
+// safeEqual stays internal (used below in token verification).
 // ---------------------------------------------------------------------------
 
-/** Lazy env loader. Throws on first use if unset/too short. */
-function getSecret(): string {
-	const secret = process.env.PARTICIPANT_TOKEN_SECRET;
-	if (!secret || secret.length < 32) {
-		throw new Error(
-			"PARTICIPANT_TOKEN_SECRET is not set or shorter than 32 chars. " +
-				"Generate one with `openssl rand -hex 32` and put it in .env.local (dev) and Vercel " +
-				"env (prod). It must remain stable -- rotating invalidates every outstanding guest link.",
-		);
-	}
-	return secret;
-}
-
-/** 256 bits of URL-safe random; this is what we send in the URL fragment. ~43 chars. */
-export function generateTokenPlaintext(): string {
-	return randomBytes(32).toString("base64url");
-}
-
-/** Deterministic HMAC-SHA256 hex of the plaintext keyed by the server secret. The DB only
- * ever sees this hash. */
-export function hashToken(plaintext: string): string {
-	return createHmac("sha256", getSecret()).update(plaintext).digest("hex");
-}
-
-/** Constant-time string compare on hashes (defense against timing oracles even though we
- * fetch by the indexed hash directly -- belt + suspenders). */
-function safeEqual(a: string, b: string): boolean {
-	if (a.length !== b.length) return false;
-	return timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
+export { generateTokenPlaintext, hashToken };
 
 // ---------------------------------------------------------------------------
 // Participant lookup (for the admin issue procedure)
