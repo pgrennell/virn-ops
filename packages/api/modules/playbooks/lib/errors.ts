@@ -27,7 +27,11 @@ export type PlaybookEngineErrorCode =
 	// Phase 18b -- execution
 	| "PLAYBOOK_NOT_PUBLISHED"
 	| "PLAYBOOK_RUN_NOT_FOUND"
-	| "PLAYBOOK_RUN_NOT_CANCELLABLE";
+	| "PLAYBOOK_RUN_NOT_CANCELLABLE"
+	// Phase 18c -- AI authoring
+	| "AI_AUTHORING_INVALID_OUTPUT"
+	| "AI_AUTHORING_MODEL_ERROR"
+	| "STEP_NOT_AI_GENERATED";
 
 export class PlaybookEngineError extends Error {
 	readonly code: PlaybookEngineErrorCode;
