@@ -20,11 +20,12 @@ import {
 	getWorkflowForOrg,
 	insertSuggestion,
 	isCapabilityEnabledForOrg,
+	listSuggestionsForOrg,
 	updateSuggestionStatus,
 	writeAuditAndActivity,
 } from "@virn/database";
 
-import { decideSuggestion, submitSuggestion } from "./suggestion";
+import { decideSuggestion, listSuggestions, submitSuggestion } from "./suggestion";
 
 const ctx = { organizationId: "org-1", userId: "user-1" };
 
@@ -62,6 +63,7 @@ describe("submitSuggestion", () => {
 			expect.objectContaining({
 				action: "suggestion.created",
 				entityType: "suggestion",
+				activityData: { workflowId: "wf_1" },
 			}),
 		);
 	});
@@ -159,6 +161,75 @@ describe("decideSuggestion", () => {
 		).rejects.toMatchObject({
 			code: "CONFLICT",
 			data: { code: "SUGGESTION_ALREADY_RESOLVED" },
+		});
+	});
+
+	// Governance hardening: the capability gate on the decide path (after the
+	// open check) was previously unverified.
+	it("refuses FORBIDDEN when the suggestions capability is off (no update, no audit)", async () => {
+		vi.mocked(getSuggestionForOrg).mockResolvedValueOnce({
+			id: "sug_1",
+			workflowId: "wf_1",
+			status: "open",
+			body: "x",
+		});
+		vi.mocked(isCapabilityEnabledForOrg).mockResolvedValueOnce(false);
+
+		await expect(
+			decideSuggestion(ctx, { suggestionId: "sug_1", status: "accepted" }),
+		).rejects.toMatchObject({ code: "FORBIDDEN", data: { code: "CAPABILITY_DISABLED" } });
+		expect(updateSuggestionStatus).not.toHaveBeenCalled();
+		expect(writeAuditAndActivity).not.toHaveBeenCalled();
+	});
+
+	// The audit action + verb are built from the decision status -- pin rejected
+	// and merged too (only accepted was covered).
+	it.each(["rejected", "merged"] as const)(
+		"emits the suggestion.%s audit on a %s decision",
+		async (status) => {
+			vi.mocked(getSuggestionForOrg).mockResolvedValueOnce({
+				id: "sug_1",
+				workflowId: "wf_1",
+				status: "open",
+				body: "x",
+			});
+			vi.mocked(updateSuggestionStatus).mockResolvedValueOnce({ id: "sug_1", resolvedAt: new Date() });
+
+			const result = await decideSuggestion(ctx, { suggestionId: "sug_1", status });
+
+			expect(result.status).toBe(status);
+			expect(writeAuditAndActivity).toHaveBeenCalledWith(
+				expect.objectContaining({ action: `suggestion.${status}`, verb: status }),
+			);
+		},
+	);
+});
+
+// ---------------------------------------------------------------------------
+// listSuggestions (admin triage) -- previously uncovered
+// ---------------------------------------------------------------------------
+
+describe("listSuggestions", () => {
+	it("forwards org + filters + pagination to the org-scoped query", async () => {
+		vi.mocked(listSuggestionsForOrg).mockResolvedValueOnce({
+			rows: [{ id: "sug_1" }],
+			totalCount: 1,
+		} as never);
+
+		const res = await listSuggestions(ctx, {
+			workflowId: "wf_1",
+			status: "open",
+			limit: 20,
+			offset: 10,
+		});
+
+		expect(res).toEqual({ rows: [{ id: "sug_1" }], totalCount: 1 });
+		expect(listSuggestionsForOrg).toHaveBeenCalledWith({
+			organizationId: "org-1",
+			workflowId: "wf_1",
+			status: "open",
+			limit: 20,
+			offset: 10,
 		});
 	});
 });
