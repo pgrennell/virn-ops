@@ -85,6 +85,29 @@ describe("acknowledgeVersion -- happy path", () => {
 		expect(result.alreadyExisted).toBe(true);
 		expect(writeAuditAndActivity).not.toHaveBeenCalled();
 	});
+
+	// Governance hardening: pin the activity payload so the timeline links the
+	// acknowledgment back to the right workflow + version.
+	it("stamps workflow + version context onto the fresh-ack activity", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(makeBundle() as never);
+		vi.mocked(acknowledgeWorkflowVersion).mockResolvedValueOnce({
+			id: "ack_1",
+			acknowledgedAt: new Date(),
+			alreadyExisted: false,
+		});
+
+		await acknowledgeVersion(ctx, { workflowVersionId: "wv_1" });
+
+		expect(writeAuditAndActivity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				activityData: {
+					workflowId: "wf_1",
+					workflowVersionId: "wv_1",
+					workflowVersionNumber: 2,
+				},
+			}),
+		);
+	});
 });
 
 describe("acknowledgeVersion -- refusal paths", () => {
@@ -161,6 +184,13 @@ describe("getMyAcknowledgmentStatus", () => {
 		expect(result).toEqual({ hasAcknowledged: false, acknowledgedAt: null });
 		// Notably: hasUserAcknowledgedVersion is NOT called -- we short-circuit on
 		// the org-scope check.
+		expect(hasUserAcknowledgedVersion).not.toHaveBeenCalled();
+	});
+
+	it("returns hasAcknowledged=false for a missing (null) version", async () => {
+		vi.mocked(getVersionWithWorkflow).mockResolvedValueOnce(null);
+		const result = await getMyAcknowledgmentStatus(ctx, { workflowVersionId: "wv_missing" });
+		expect(result).toEqual({ hasAcknowledged: false, acknowledgedAt: null });
 		expect(hasUserAcknowledgedVersion).not.toHaveBeenCalled();
 	});
 
