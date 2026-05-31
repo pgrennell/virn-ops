@@ -2142,3 +2142,51 @@ slot it as its own numbered phase with the migration + editor + renderer + backf
 3. **No backend test vehicle.** The gap is purely data-model + UI rendering; there is nothing in
    `@virn/api` to characterize with a unit test, so no test was added for B1 — the audit lives
    here instead.
+
+---
+
+### D-046 — Package-level pure logic is not unit-testable without an infra/refactor change; deferred
+
+**Status:** Audited 2026-05-31 (overnight coverage sweep, items P1/P2). Deferred — recorded so the
+investigation isn't lost and the unblock path is explicit.
+
+**Finding.** `@virn/notifications` (6 src, 0 tests) and `@virn/database` (53 src, 0 tests) have no
+vitest runner of their own (no config, no test script, no vitest dep). The established pattern is to
+test a package's *pure* helpers from inside `@virn/api` via a DEEP import that bypasses the barrel —
+e.g. `agents-credentials.test.ts` imports `@virn/database/drizzle/queries/agent-credentials` (a
+client-free crypto file) and runs under the `@virn/api` suite. Auditing what is cleanly testable that
+way:
+
+- **`@virn/database`** — the ONLY client-free pure modules are `agent-credentials.ts` and
+  `outbound-webhook-credential-crypto.ts`, and BOTH are already tested. Every other pure helper
+  (`validateFieldValue` / `buildFieldZod` in `queries/config.ts`; `validateSettingValue`,
+  `hashToken` in `queries/participant-tokens.ts`; row mappers / fingerprint / LWW logic) lives in a
+  file that also does `import { db } from "../client"`, so a deep import triggers DB-client init
+  (needs `DATABASE_URL`, fails/hangs in a unit test). `drizzle/zod.ts` is generated drizzle-zod
+  schemas (not our logic). Net: no untested, cleanly-importable pure surface remains.
+- **`@virn/notifications`** — `catalog.ts` is pure config data (no logic); `resolve-link.ts`
+  (`resolveNotificationLink`, the one piece of real logic — URL absolutisation with null/empty/
+  already-absolute/invalid-URL branches) is genuinely valuable but the package `exports` map only
+  exposes `.` and `./catalog`, so it can't be deep-imported, and the `.` barrel re-exports from
+  `@virn/database` (pulls the client). `create-notification.ts` / `welcome.ts` write to the DB.
+
+**Why deferred (not done unattended).** Unblocking either requires a non-trivial change the overnight
+test pass should not make on its own:
+
+1. **Co-locate-then-extract** — split the pure helpers (`validateFieldValue`, `buildFieldZod`,
+   `validateSettingValue`, `hashToken`, any fingerprint/mapper) out of the client-importing query
+   files into client-free modules (e.g. `drizzle/queries/_pure/*.ts`), then deep-import + test them.
+   Touches the package's internal module layout.
+2. **Exports-map entries** — add `"./resolve-link"` (and similar) to the package `exports` maps so
+   the pure modules are importable without the barrel. Changes each package's public API surface.
+3. **Per-package vitest runner** — give `@virn/notifications` / `@virn/database` their own vitest
+   config + `test` script + turbo wiring. Most infra; lets tests live beside the source.
+
+Each is a build/architecture decision (touches package boundaries + turbo), not a test addition, so
+per the pass's guardrails (no infra changes unattended, most-reversible default) it is deferred to a
+supervised change. **Recommendation:** option 1 (extract pure helpers into client-free modules) is
+the cleanest — it makes the helpers testable AND reduces accidental DB-client coupling — and is worth
+doing the next time these query files are edited.
+
+**Consequence for this sweep.** P1/P2 produced no test commits; the night's budget rolled into P3
+(the `@virn/api` lib-layer gaps), which is cleanly testable (those libs already mock `@virn/database`).
