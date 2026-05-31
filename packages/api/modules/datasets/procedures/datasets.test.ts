@@ -134,6 +134,21 @@ describe("data sets -- auth gate", () => {
 		).rejects.toMatchObject({ code: "FORBIDDEN" });
 	});
 
+	// Data-primitive hardening: the two record-mutation procedures lacked gate coverage.
+	it("updateRecord throws FORBIDDEN for plain members", async () => {
+		vi.mocked(getOrganizationMembership).mockResolvedValueOnce(makeMembership("member") as never);
+		await expect(
+			call(updateRecord, { dataSetId: "ds_1", recordId: "rec_1", label: "x" }, ctx),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	});
+
+	it("deleteRecord throws FORBIDDEN for plain members", async () => {
+		vi.mocked(getOrganizationMembership).mockResolvedValueOnce(makeMembership("member") as never);
+		await expect(
+			call(deleteRecord, { dataSetId: "ds_1", recordId: "rec_1" }, ctx),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	});
+
 	it("list + get + getByKey work for plain members (read access)", async () => {
 		vi.mocked(getOrganizationMembership).mockResolvedValue(makeMembership("member") as never);
 		vi.mocked(listDataSetsForOrg).mockResolvedValueOnce([]);
@@ -273,6 +288,22 @@ describe("data sets -- happy paths", () => {
 		vi.mocked(deleteDataSetRecord).mockResolvedValueOnce({ deleted: false });
 		await expect(
 			call(deleteRecord, { dataSetId: "ds_1", recordId: "missing" }, ctx),
+		).rejects.toMatchObject({ code: "NOT_FOUND" });
+	});
+
+	// Data-primitive hardening: the updateRecord not-found path + the getByKey
+	// unresolved-key path were the two missing NOT_FOUND branches.
+	it("updateRecord throws NOT_FOUND when the record is missing", async () => {
+		vi.mocked(updateDataSetRecord).mockResolvedValueOnce(null);
+		await expect(
+			call(updateRecord, { dataSetId: "ds_1", recordId: "missing", label: "x" }, ctx),
+		).rejects.toMatchObject({ code: "NOT_FOUND" });
+	});
+
+	it("getByKey throws NOT_FOUND when the key doesn't resolve in this org", async () => {
+		vi.mocked(getDataSetByKey).mockResolvedValueOnce(null as never);
+		await expect(
+			call(getByKey, { key: "ghost-key" }, ctx),
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
 	});
 });
