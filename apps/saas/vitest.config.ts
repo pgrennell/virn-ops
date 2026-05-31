@@ -3,9 +3,19 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+	// Use the React 17+ automatic JSX runtime so component test files (.test.tsx) don't
+	// need to `import React` -- matches how Next.js compiles the app.
+	esbuild: { jsx: "automatic" },
 	test: {
 		globals: true,
+		// Default to the fast node env; component/hook tests opt into jsdom per-file via a
+		// `// @vitest-environment jsdom` docblock (keeps the pure-logic suite node-fast and
+		// leaves the existing tests untouched).
 		environment: "node",
+		// Registers @testing-library/jest-dom matchers (toBeInTheDocument, etc.). Safe to
+		// load in node-env tests -- it only extends `expect`; the matchers reach into the
+		// DOM only when called, which happens exclusively inside jsdom-env test files.
+		setupFiles: ["./vitest.setup.ts"],
 		exclude: ["**/node_modules/**", "**/tests/**", "**/.next/**"],
 	},
 	resolve: {
