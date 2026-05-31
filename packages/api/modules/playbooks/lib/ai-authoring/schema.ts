@@ -20,6 +20,19 @@
 
 import { z } from "zod";
 
+/** The six playbook_step types the orchestrator (18b) can execute. Same closed set
+ * the discriminated union gates on; exported so the prompt contract block lists the
+ * exact vocabulary the validator will accept. */
+export const AI_PLAYBOOK_STEP_TYPES = [
+	"wait_for_duration",
+	"wait_for_event",
+	"launch_workflow",
+	"send_notification",
+	"branch_on_data_set",
+	"write_to_data_set",
+] as const;
+export type AiPlaybookStepType = (typeof AI_PLAYBOOK_STEP_TYPES)[number];
+
 // ---------------------------------------------------------------------------
 // Per-type config shapes (match the orchestrator's executePlaybookStep readers)
 // ---------------------------------------------------------------------------
