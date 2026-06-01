@@ -2,7 +2,7 @@
 	"pricing": {
 		"choosePlan": "Choose plan",
 		"contactSales": "Contact sales",
-		"description": "Choose the plan that works best for you.",
+		"description": "One plan with everything you need to run property operations.",
 		"getStarted": "Get started",
 		"month": "{count, plural, one {month} other {{count} months}}",
 		"monthly": "Monthly",
@@ -16,10 +16,11 @@
 				"title": "Basic"
 			},
 			"enterprise": {
-				"description": "Custom plan tailored to your requirements",
+				"description": "Custom terms for large portfolios.",
 				"features": {
-					"enterpriseSupport": "Enterprise support",
-					"unlimitedProjects": "Unlimited projects"
+					"volumePricing": "Volume pricing across your portfolio",
+					"ssoSecurity": "SSO + advanced security",
+					"dedicatedSupport": "Dedicated support & onboarding"
 				},
 				"title": "Enterprise"
 			},
@@ -40,13 +41,18 @@
 				"title": "Lifetime"
 			},
 			"pro": {
-				"description": "Best for teams",
+				"description": "Run your property operations end to end.",
 				"features": {
-					"anotherFeature": "Another amazing feature",
-					"fiveMembers": "Up to 5 members",
-					"fullSupport": "Full support"
+					"workflows": "Unlimited workflows, SOPs & runs",
+					"aiAuthoring": "AI workflow authoring + improvement",
+					"starterPack": "Property-ops starter pack (vendors, roles, STR turnover template)",
+					"automation": "Automation & playbooks (event-triggered sequences)",
+					"agentApi": "Agent-safe action API + MCP",
+					"dataKb": "Data Sets + reader knowledge base",
+					"compliance": "Compliance: approvals, acknowledgments, full audit trail",
+					"vendors": "Vendor & listing management"
 				},
-				"title": "Pro"
+				"title": "Operations"
 			}
 		},
 		"purchase": "Purchase",
@@ -56,6 +62,6 @@
 		"trialPeriod": "{days} {days, plural, one {day} other {days}} free trial",
 		"year": "{count, plural, one {year} other {{count} years}}",
 		"yearly": "Yearly",
-		"perSeat": "seat"
+		"perSeat": "operator"
 	}
 }

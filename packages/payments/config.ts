@@ -11,29 +11,22 @@ export const config: PaymentsConfig = {
 					type: "subscription",
 					priceId: process.env.PRICE_ID_PRO_MONTHLY as string,
 					interval: "month",
-					amount: 29,
+					// v1 "Operations" plan, per-operator. `amount` is the DISPLAYED price only --
+					// the real charge comes from `priceId` (set in the payment provider + env).
+					amount: 39,
 					currency: "USD",
 					seatBased: true,
-					trialPeriodDays: 7,
+					trialPeriodDays: 14,
 				},
 				{
 					type: "subscription",
 					priceId: process.env.PRICE_ID_PRO_YEARLY as string,
 					interval: "year",
-					amount: 290,
+					// ~2 months free vs monthly. Displayed only; real price lives in the provider.
+					amount: 390,
 					currency: "USD",
 					seatBased: true,
-					trialPeriodDays: 7,
-				},
-			],
-		},
-		lifetime: {
-			prices: [
-				{
-					type: "one-time",
-					priceId: process.env.PRICE_ID_LIFETIME as string,
-					amount: 799,
-					currency: "USD",
+					trialPeriodDays: 14,
 				},
 			],
 		},
