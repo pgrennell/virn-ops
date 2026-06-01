@@ -39,7 +39,7 @@ export function OnboardingModePicker({ orgSlug }: { orgSlug: string }) {
 	return (
 		<div className="max-w-xl mx-auto w-full">
 			<div className="gap-3 flex items-center justify-between mb-6">
-				<h1 className="font-bold text-xl md:text-2xl">What will you use Virn Ops for?</h1>
+				<h1 className="font-bold text-xl md:text-2xl">How does your team run property operations?</h1>
 				<span className="text-xs shrink-0 text-foreground/60">Step 2 of 2</span>
 			</div>
 			<p className="mt-2 mb-6 text-foreground/60">

@@ -236,8 +236,8 @@
 				"success": "Your organization has been created. You can now invite members."
 			},
 			"submit": "Create organization",
-			"subtitle": "Enter a name for your organization to get started. You can change the name later in the organization settings.",
-			"title": "Create an organization"
+			"subtitle": "Name the team or portfolio you'll run operations for — turnovers, inspections, vendors. You can rename it anytime in settings.",
+			"title": "Set up your property-ops workspace"
 		},
 		"invitationAlert": {
 			"description": "You need to sign in or create an account to join the organization.",
