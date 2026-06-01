@@ -82,6 +82,8 @@ Next.js (App Router) · Better Auth (organization plugin) · Drizzle ORM on Post
 oRPC + Hono · Inngest · TanStack Query/Table · next-intl · Tailwind + shadcn/ui · Zod.
 Turborepo + pnpm monorepo. Workspace scope: `@virn/*`.
 
+Full inventory (monorepo layout, path aliases, env, tooling) → `docs/STACK.md`.
+
 ## Conventions (full detail in ARCHITECTURE.md §6)
 
 - cuid text PKs via the `id()` helper in `_shared.ts`; `timestamps`, `softDelete`, `orgId()`

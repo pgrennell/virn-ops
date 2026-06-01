@@ -505,6 +505,8 @@ Next.js (App Router) · React 19 · Better Auth (organization plugin) · Drizzle
 · oRPC + Hono · Inngest · TanStack Query/Table · next-intl · Tailwind + shadcn/ui · Zod · Sentry.
 Turborepo + pnpm, `@virn/*` scope. Fresh Supastarter clone with the Propvana KEEP-list grafts.
 
+Full inventory (monorepo layout, path aliases, env, tooling) → [docs/STACK.md](STACK.md).
+
 ---
 
 ## 9. Open questions
