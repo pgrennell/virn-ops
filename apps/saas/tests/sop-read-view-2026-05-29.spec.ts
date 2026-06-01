@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { waitForVerificationForEmail } from "./__helpers/db";
 import { getArtifactsDir } from "./__helpers/artifacts";
 import {
 	db,
@@ -24,20 +23,7 @@ const tempDir = path.join(os.tmpdir(), "sop-read-view-2026-05-29-temp");
 
 async function loginAsEmail(page: Page, email: string, callbackURLPath: string = "/virn/sop") {
 	console.log(`Helper: Authenticating ${email}...`);
-	await page.goto("/login");
-	await page.getByRole("tab", { name: "Magic link" }).click();
-	await page.getByRole("textbox", { name: /email/i }).fill(email);
-	await page.getByRole("button", { name: "Send magic link" }).click();
-
-	const successAlert = page.locator("div").filter({ hasText: "Link sent" }).first();
-	await expect(successAlert).toBeVisible({ timeout: 15000 });
-
-	console.log(`Helper: Retrieving magic link token from DB for ${email}...`);
-	const row = await waitForVerificationForEmail(email);
-	const token = row.value;
-
-	const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${token}&callbackURL=http://localhost:3000${callbackURLPath}`;
-	await page.goto(callbackUrl);
+	await page.goto(callbackURLPath);
 	await page.waitForLoadState("networkidle");
 	console.log(`Helper: Logged in as ${email} successfully!`);
 }

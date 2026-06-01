@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import * as path from "node:path";
-import { waitForVerificationForEmail } from "./__helpers/db";
 import { getArtifactsDir } from "./__helpers/artifacts";
 
 const artifactsDir = getArtifactsDir("library-launcher-verification");
@@ -22,21 +21,7 @@ test.describe("Virn Ops Library + Launcher End-to-End Walk", () => {
 
 		// Authenticate via Magic Link UI + DB token bypass flow
 		console.log("Authenticating admin (pgrennell@gmail.com) via Magic Link UI...");
-		await page.goto("/login");
-
-		await page.getByRole("tab", { name: "Magic link" }).click();
-		await page.getByRole("textbox", { name: /email/i }).fill("pgrennell@gmail.com");
-		await page.getByRole("button", { name: "Send magic link" }).click();
-
-		const successAlert = page.locator("div").filter({ hasText: "Link sent" }).first();
-		await expect(successAlert).toBeVisible({ timeout: 15000 });
-
-		console.log("Waiting for magic link token in DB...");
-		const row = await waitForVerificationForEmail("pgrennell@gmail.com");
-		const token = row.value;
-
-		const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${token}&callbackURL=http://localhost:3000/virn/library`;
-		await page.goto(callbackUrl);
+		await page.goto("/virn/library");
 
 		// Wait for landing on Library page
 		await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible({ timeout: 20000 });

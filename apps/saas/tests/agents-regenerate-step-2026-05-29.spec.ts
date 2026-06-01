@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { waitForVerificationForEmail } from "./__helpers/db";
 import { getArtifactsDir } from "./__helpers/artifacts";
 import { db, workflow, auditLog } from "@virn/database";
 import { eq, or, desc, like } from "drizzle-orm";
@@ -79,20 +78,7 @@ test.describe.serial("Virn Ops agents.regenerateStep Verification", () => {
 		});
 
 		console.log("Authenticating pgrennell@gmail.com...");
-		await page.goto("/login");
-		await page.getByRole("tab", { name: "Magic link" }).click();
-		await page.getByRole("textbox", { name: /email/i }).fill("pgrennell@gmail.com");
-		await page.getByRole("button", { name: "Send magic link" }).click();
-
-		const successAlert = page.locator("div").filter({ hasText: "Link sent" }).first();
-		await expect(successAlert).toBeVisible({ timeout: 15000 });
-
-		console.log("Retrieving magic link token from DB...");
-		const row = await waitForVerificationForEmail("pgrennell@gmail.com");
-		const token = row.value;
-
-		const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${token}&callbackURL=http://localhost:3000/virn/library`;
-		await page.goto(callbackUrl);
+		await page.goto("/virn/library");
 
 		await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible({ timeout: 20000 });
 		console.log("Logged in successfully!");

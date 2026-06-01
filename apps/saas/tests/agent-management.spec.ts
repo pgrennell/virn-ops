@@ -78,21 +78,7 @@ test.describe("Virn Ops Agent Management settings UI E2E Walk", () => {
 
 		// --- 1. Authenticate as admin pgrennell@gmail.com ---
 		console.log("Step 1: Authenticating admin (pgrennell@gmail.com) via Magic Link UI...");
-		await page.goto("/login");
-
-		await page.getByRole("tab", { name: "Magic link" }).click();
-		await page.getByRole("textbox", { name: /email/i }).fill("pgrennell@gmail.com");
-		await page.getByRole("button", { name: "Send magic link" }).click();
-
-		const successAlert = page.locator("div").filter({ hasText: "Link sent" }).first();
-		await expect(successAlert).toBeVisible({ timeout: 15000 });
-
-		console.log("Waiting for magic link token in DB...");
-		const row = await waitForVerificationForEmail("pgrennell@gmail.com");
-		const token = row.value;
-
-		const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${token}&callbackURL=http://localhost:3000/virn/settings/agents`;
-		await page.goto(callbackUrl);
+		await page.goto("/virn/settings/agents");
 
 		// Verify we landed on /virn/settings/agents and header / empty state or list is visible
 		console.log("Verifying page render...");

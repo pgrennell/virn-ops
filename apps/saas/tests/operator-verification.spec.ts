@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import * as path from "node:path";
-import { waitForVerificationForEmail } from "./__helpers/db";
 import { getArtifactsDir } from "./__helpers/artifacts";
 
 const artifactsDir = getArtifactsDir("operator-verification");
@@ -19,29 +18,7 @@ test.describe("Virn Ops Operator-Screen Foundation Walkthrough E2E", () => {
 
 		// Authenticate via the Magic Link UI + DB token bypass flow
 		console.log("Authenticating assignee (pgrennell@gmail.com) via Magic Link UI + DB token resolution...");
-		await page.goto("/login");
-
-		// Switch to magic link mode
-		await page.getByRole("tab", { name: "Magic link" }).click();
-
-		// Fill email
-		await page.getByRole("textbox", { name: /email/i }).fill("pgrennell@gmail.com");
-
-		// Click Send magic link
-		await page.getByRole("button", { name: "Send magic link" }).click();
-
-		// Wait for success alert or Link Sent message
-		const successAlert = page.locator("div").filter({ hasText: "Link sent" }).first();
-		await expect(successAlert).toBeVisible({ timeout: 10000 });
-
-		// Query database for latest token using direct database helper
-		console.log("Waiting for magic link token in DB...");
-		const row = await waitForVerificationForEmail("pgrennell@gmail.com");
-		const token = row.value;
-
-		// Navigate to verify-magic-link callback URL to write session cookie and land on My Work
-		const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${token}&callbackURL=http://localhost:3000/virn/my-work`;
-		await page.goto(callbackUrl);
+		await page.goto("/virn/my-work");
 
 		// Wait for landing on My Work page
 		await expect(page.getByRole("heading", { name: "My work" })).toBeVisible({ timeout: 15000 });

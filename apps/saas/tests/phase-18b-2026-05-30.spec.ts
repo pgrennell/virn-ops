@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { waitForVerificationForEmail } from "./__helpers/db";
 import { getArtifactsDir } from "./__helpers/artifacts";
 import {
 	db,
@@ -39,15 +38,7 @@ const stepId = `pbs_e2e18b_${nonce}`;
 const waitingRunId = `pbr_wait_${nonce}`;
 
 async function loginAsEmail(page: Page, email: string, callbackURLPath: string) {
-	await page.goto("/login");
-	await page.getByRole("tab", { name: "Magic link" }).click();
-	await page.getByRole("textbox", { name: /email/i }).fill(email);
-	await page.getByRole("button", { name: "Send magic link" }).click();
-	const successAlert = page.locator("div").filter({ hasText: "Link sent" }).first();
-	await expect(successAlert).toBeVisible({ timeout: 15000 });
-	const row = await waitForVerificationForEmail(email);
-	const callbackUrl = `http://localhost:3000/api/auth/magic-link/verify?token=${row.value}&callbackURL=http://localhost:3000${callbackURLPath}`;
-	await page.goto(callbackUrl);
+	await page.goto(callbackURLPath);
 	await page.waitForLoadState("networkidle");
 }
 

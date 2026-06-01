@@ -38,11 +38,27 @@ export default defineConfig({
 		video: "off",
 	},
 	projects: [
-		{ name: "setup", testMatch: /.*\.setup\.ts/ },
+		{ name: "setup", testMatch: /.*\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
 		{
-			name: "chromium",
+			// The auth-contract specs (auth/ login flows, org/ create-switch + cross-org IDOR) test
+			// auth & isolation themselves: they create their own throwaway users and assert
+			// logged-out / non-member behaviour, so they must NOT inherit the seeded-admin session.
+			name: "logged-out",
+			testMatch: /tests[\\/](auth|org)[\\/].*\.spec\.ts/,
 			use: {
 				...devices["Desktop Chrome"],
+			},
+		},
+		{
+			// Every other spec (the phase walkthroughs) reuses the seeded-admin session captured by
+			// the setup project, instead of logging in inline. The inline per-spec magic-link logins
+			// raced in parallel (all sharing pgrennell@gmail.com) and stranded specs on /login.
+			name: "authenticated",
+			testIgnore: /tests[\\/](auth|org)[\\/].*\.spec\.ts/,
+			dependencies: ["setup"],
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: "test-results/.auth/admin.json",
 			},
 		},
 	],
