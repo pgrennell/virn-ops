@@ -5,6 +5,7 @@
 import type { Page } from "@playwright/test";
 
 import { waitForVerificationForEmail } from "./db";
+import { extractAuthUrl, waitForCapturedEmail } from "./mail";
 
 /**
  * Drive the signup form. Returns once the form has been submitted; the caller
@@ -87,10 +88,14 @@ export async function completeEmailVerification(
 	page: Page,
 	email: string,
 ): Promise<{ token: string }> {
-	const row = await waitForVerificationForEmail(email);
-	const verifyUrl = `/api/auth/verify-email?token=${encodeURIComponent(row.value)}`;
-	await page.goto(verifyUrl);
-	return { token: row.value };
+	// Email-verification tokens are SIGNED tokens embedded in the email URL -- better-auth does
+	// NOT write a `verification` row for them, so we read the verify URL from the captured email
+	// (MAIL_PROVIDER=capture) instead of the DB. The URL is the full better-auth verify-email
+	// link; navigating to it completes verification.
+	const captured = await waitForCapturedEmail(email);
+	const url = extractAuthUrl(captured);
+	await page.goto(url);
+	return { token: new URL(url).searchParams.get("token") ?? "" };
 }
 
 /**

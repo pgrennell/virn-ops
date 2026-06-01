@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
@@ -5,11 +6,27 @@ import dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
 
+// E2E mail capture: route the app's emails to the file-based capture provider so the auth
+// helpers can read the verify / magic-link / reset URL from the email itself (better-auth's
+// email-verification token is signed into the URL, not stored in a `verification` row). One
+// shared path between the playwright process (helpers read it) and the app server
+// (webServer.env), started from a clean file each run.
+const mailCaptureFile = path.resolve(__dirname, "test-results", "mail-capture.jsonl");
+fs.mkdirSync(path.dirname(mailCaptureFile), { recursive: true });
+fs.writeFileSync(mailCaptureFile, "");
+process.env.MAIL_CAPTURE_FILE = mailCaptureFile;
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
 	testDir: "./tests",
+	// Warm the auth routes once before the suite (next-dev compiles routes on first hit; the
+	// /api/auth graph is heavy). Keeps the first real test from eating the ~20s cold-compile.
+	globalSetup: "./tests/global-setup.ts",
+	// 60s (up from the 30s default): a cold dev compile + Neon round-trips can push a first-of-kind
+	// flow past 30s even after warming.
+	timeout: 60_000,
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
@@ -41,6 +58,9 @@ export default defineConfig({
 		command:
 			"pnpm --filter saas exec dotenv -e ../../.env.local -e ../../.env -- next dev --port 3000",
 		url: "http://localhost:3000",
+		// Route the app server's email sends to the file-based capture provider (read by the auth
+		// helpers). dotenv-cli doesn't override already-set env vars, so these win.
+		env: { MAIL_PROVIDER: "capture", MAIL_CAPTURE_FILE: mailCaptureFile },
 		reuseExistingServer: !process.env.CI,
 		stdout: "pipe",
 		stderr: "pipe",

@@ -5,12 +5,15 @@
 
 import type { SendEmailHandler } from "../types";
 
+import { send as captureSend } from "./capture";
 import { send as consoleSend } from "./console";
 import { send as plunkSend } from "./plunk";
 
 const PROVIDERS: Record<string, SendEmailHandler> = {
 	plunk: plunkSend,
 	console: consoleSend,
+	// `capture` writes sent emails to a file so e2e can read the auth link (see ./capture).
+	capture: captureSend,
 };
 
 export const send: SendEmailHandler = PROVIDERS[process.env.MAIL_PROVIDER ?? "plunk"] ?? plunkSend;
