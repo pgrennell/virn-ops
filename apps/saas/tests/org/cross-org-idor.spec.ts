@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
 	completeEmailVerification,
+	completeOnboardingViaUI,
 	getSessionViaApi,
 	logInWithPasswordViaUI,
 	signUpViaUI,
@@ -31,14 +32,17 @@ test.describe("cross-org IDOR denial (AUTH_CONTRACT.md §3.1, §4)", () => {
 				name: makeTestName("Owner"),
 			});
 			await completeEmailVerification(page, ownerEmail);
+			await completeOnboardingViaUI(page); // else org routes redirect to /onboarding
 
 			const orgName = makeTestOrgName("Confidential");
 			const created = await createOrganizationViaUI(page, { name: orgName });
 			ownerOrgSlug = created.slug;
 			expect(ownerOrgSlug).toBeTruthy();
 
-			// Sign owner out.
+			// Sign owner out. The sign-out POST alone doesn't reliably drop the Playwright context's
+			// cookies, so clear them for a deterministic logged-out precondition (see auth specs).
 			await page.request.post("/api/auth/sign-out").catch(() => {});
+			await page.context().clearCookies();
 			expect(await getSessionViaApi(page)).toBeNull();
 
 			// Intruder signs up separately.
@@ -48,7 +52,9 @@ test.describe("cross-org IDOR denial (AUTH_CONTRACT.md §3.1, §4)", () => {
 				name: makeTestName("Intruder"),
 			});
 			await completeEmailVerification(page, intruderEmail);
+			await completeOnboardingViaUI(page); // so the IDOR check -- not the onboarding gate -- is what blocks them
 			await page.request.post("/api/auth/sign-out").catch(() => {});
+			await page.context().clearCookies();
 			await logInWithPasswordViaUI(page, { email: intruderEmail, password: intruderPassword });
 			await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 10_000 });
 			expect((await getSessionViaApi(page))?.email).toBe(intruderEmail);

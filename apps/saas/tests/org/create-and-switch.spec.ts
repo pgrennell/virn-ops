@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
 	completeEmailVerification,
+	completeOnboardingViaUI,
 	getSessionViaApi,
 	signUpViaUI,
 } from "../__helpers/auth";
@@ -28,6 +29,7 @@ test.describe("organization create + switch (AUTH_CONTRACT.md §5.3)", () => {
 			});
 			await completeEmailVerification(page, email);
 			expect((await getSessionViaApi(page))?.email).toBe(email);
+			await completeOnboardingViaUI(page); // else org routes redirect to /onboarding
 
 			const firstOrgName = makeTestOrgName("Alpha");
 			const { slug: firstSlug } = await createOrganizationViaUI(page, { name: firstOrgName });

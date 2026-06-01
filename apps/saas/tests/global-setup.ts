@@ -23,6 +23,14 @@ async function globalSetup() {
 			name: "Warmup",
 		}),
 	});
+	// Compile the oRPC router graph (pulls in the pack installer + workflow engine) so the
+	// first org-create's starter-content install doesn't pay the cold-compile tax on top of
+	// its own DB writes. The unauthenticated body still triggers route compilation.
+	await warm("/api/rpc", {
+		method: "POST",
+		headers: { "content-type": "application/json", origin: base },
+		body: "{}",
+	});
 }
 
 export default globalSetup;

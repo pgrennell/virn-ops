@@ -98,6 +98,18 @@ export async function completeEmailVerification(
 }
 
 /**
+ * Complete the one-step user onboarding (account form) so `onboardingComplete` flips true. Must
+ * run while signed in (e.g. right after completeEmailVerification's auto-sign-in). Without this,
+ * the (main) layout's onboarding gate redirects every org route to /onboarding. The account
+ * step's name is prefilled from signup, so submitting is just clicking Continue.
+ */
+export async function completeOnboardingViaUI(page: Page): Promise<void> {
+	await page.goto("/onboarding");
+	await page.getByRole("button", { name: /continue/i }).click();
+	await page.waitForURL((url) => !url.pathname.startsWith("/onboarding"), { timeout: 15_000 });
+}
+
+/**
  * Complete the password reset flow. Reads the latest token, opens the reset
  * page with it, types the new password twice (the form requires confirmation),
  * and submits.

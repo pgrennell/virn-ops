@@ -16,10 +16,20 @@ export async function createOrganizationViaUI(
 	await page.goto("/new-organization");
 	await page.getByRole("textbox", { name: /organization name|name/i }).fill(params.name);
 	await page.getByRole("button", { name: /create|continue/i }).click();
-	// After creation, the user is routed into `/{orgSlug}/...`. Wait for the
-	// URL to settle on a non-`/new-organization` path.
+
+	// Phase 19: creation now routes through the enablement-mode picker
+	// (/new-organization/mode) before landing in the org. Leave the bare create page first
+	// (generous headroom -- the redirect awaits the starter-pack install), then, if we're on
+	// the picker, choose a profile and continue.
+	await page.waitForURL((url) => url.pathname !== "/new-organization", { timeout: 45_000 });
+	if (new URL(page.url()).pathname.startsWith("/new-organization/mode")) {
+		await page.getByRole("button", { name: /^Checklist/ }).click();
+		await page.getByRole("button", { name: "Continue" }).click();
+	}
+
+	// Now the user is routed into `/{orgSlug}/...`.
 	await page.waitForURL((url) => !url.pathname.startsWith("/new-organization"), {
-		timeout: 15_000,
+		timeout: 45_000,
 	});
 	const slug = page.url().match(/^https?:\/\/[^/]+\/([^/?#]+)/)?.[1];
 	if (!slug) {
