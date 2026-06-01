@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { getArtifactsDir } from "./__helpers/artifacts";
-import { db, organization, member, workflow, vendorCategory } from "@virn/database";
+import { db, organization, member, session, user, workflow, vendorCategory } from "@virn/database";
 import { eq } from "drizzle-orm";
 
 const specName = "phase-19-org-provisioning-2026-05-31";
@@ -224,6 +224,29 @@ test.describe.serial("Phase 19 Property-Ops Pack Provisioning E2E", () => {
 			} catch (err) {
 				console.error(`Failed to clean up organization ${orgId}:`, err);
 			}
+		}
+
+		// Re-pin the seeded admin's sessions to the canonical org. This spec creates+deletes orgs
+		// AS the admin via the shared storageState session, so without this the session's active org
+		// dangles on a just-deleted org and every later serial spec fails its first data load with
+		// "not a member of the active organization".
+		try {
+			const [adminUser] = await db
+				.select({ id: user.id })
+				.from(user)
+				.where(eq(user.email, "pgrennell@gmail.com"));
+			const [virnOrg] = await db
+				.select({ id: organization.id })
+				.from(organization)
+				.where(eq(organization.slug, "virn"));
+			if (adminUser && virnOrg) {
+				await db
+					.update(session)
+					.set({ activeOrganizationId: virnOrg.id })
+					.where(eq(session.userId, adminUser.id));
+			}
+		} catch (err) {
+			console.error("Failed to re-pin admin active org after cleanup:", err);
 		}
 
 		// Copy screenshots to final reviews folder
