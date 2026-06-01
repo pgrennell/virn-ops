@@ -11,9 +11,15 @@ import { deleteTestUserByEmail } from "../__helpers/db";
 import { makeTestEmail, makeTestName, makeTestPassword } from "../__helpers/test-users";
 
 test.describe("logout (AUTH_CONTRACT.md §5.4)", () => {
-	// FIXME: needs a fully-provisioned-user fixture. A brand-new signup lands on onboarding ->
-	// org creation and never reaches an app surface with the user menu, so logOutViaUI hangs.
-	// Re-enable once this uses a provisioned account (e.g. the seeded admin via magic-link).
+	// FIXME: needs a DEDICATED fully-provisioned user fixture. Two dead-ends so far:
+	//   1. A brand-new signup (below) lands on onboarding -> org creation and never reaches an app
+	//      surface with the user menu, so logOutViaUI hangs.
+	//   2. Reusing the seeded admin (via magic link) does reach the menu, but logging that account
+	//      out -- or even re-logging it in -- disturbs the shared storageState session the
+	//      authenticated project reuses (the next walkthrough fails with "not a member of the
+	//      active organization"). An account that gets signed out cannot also be the shared one.
+	// The fix is a second seeded, provisioned, NON-shared account (a DB seed change) reserved for
+	// this spec, so signing it out affects nothing else.
 	test.fixme("logout clears the session and redirects out of authenticated routes", async ({
 		page,
 	}) => {
