@@ -297,6 +297,36 @@ export async function createVendorCategoryIfMissing(
 	return { id: row.id, created: true };
 }
 
+/** Batch variant of {@link createVendorCategoryIfMissing}: one SELECT for the already-present
+ * slugs + one multi-row INSERT for the rest. Used by the pack installer so creating the 10
+ * starter categories costs ~2 round-trips instead of ~20. Idempotent by (org, slug). */
+export async function createVendorCategoriesIfMissing(input: {
+	organizationId: string;
+	categories: ReadonlyArray<{ slug: string; name: string; description?: string | null }>;
+}): Promise<{ created: number }> {
+	if (input.categories.length === 0) return { created: 0 };
+
+	const slugs = input.categories.map((c) => c.slug);
+	const existing = await db.query.vendorCategory.findMany({
+		where: (vc, { and: andOp, eq: eqOp, inArray: inArrayOp }) =>
+			andOp(eqOp(vc.organizationId, input.organizationId), inArrayOp(vc.slug, slugs)),
+		columns: { slug: true },
+	});
+	const existingSlugs = new Set(existing.map((e) => e.slug));
+	const toInsert = input.categories.filter((c) => !existingSlugs.has(c.slug));
+	if (toInsert.length === 0) return { created: 0 };
+
+	await db.insert(vendorCategory).values(
+		toInsert.map((c) => ({
+			organizationId: input.organizationId,
+			slug: c.slug,
+			name: c.name,
+			description: c.description ?? null,
+		})),
+	);
+	return { created: toInsert.length };
+}
+
 /** Verify that a vendor exists in the org (and isn't soft-deleted). Used by the contact
  * procedures to enforce parent ownership before any contact mutation lands. */
 async function vendorBelongsToOrg(organizationId: string, vendorId: string): Promise<boolean> {

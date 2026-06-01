@@ -7,7 +7,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@virn/database", () => ({
-	createVendorCategoryIfMissing: vi.fn(),
+	createVendorCategoriesIfMissing: vi.fn(),
+	getWorkflowBySlugForOrg: vi.fn(),
 	getPackInstallForOrg: vi.fn(),
 	getPropertyOpsPackVersion: vi.fn(),
 	insertField: vi.fn(),
@@ -28,7 +29,7 @@ vi.mock("@virn/database", () => ({
 vi.mock("@virn/database/queries/workflows", () => ({}));
 
 import {
-	createVendorCategoryIfMissing,
+	createVendorCategoriesIfMissing,
 	getPackInstallForOrg,
 	getPropertyOpsPackVersion,
 	insertPackInstall,
@@ -109,7 +110,7 @@ describe("installPropertyOpsPack -- idempotency gate", () => {
 		// No side effects: install ledger not appended, no audit written.
 		expect(insertPackInstall).not.toHaveBeenCalled();
 		expect(writeAuditAndActivity).not.toHaveBeenCalled();
-		expect(createVendorCategoryIfMissing).not.toHaveBeenCalled();
+		expect(createVendorCategoriesIfMissing).not.toHaveBeenCalled();
 		expect(insertWorkflowRole).not.toHaveBeenCalled();
 	});
 
@@ -124,11 +125,8 @@ describe("installPropertyOpsPack -- vendor-category + role idempotency within an
 		// Mock the platform pack + no prior install.
 		vi.mocked(getPropertyOpsPackVersion).mockResolvedValueOnce(PLATFORM_PACK as never);
 		vi.mocked(getPackInstallForOrg).mockResolvedValueOnce(null);
-		// Vendor-category upserts all return created=true (the manifest's 10 categories).
-		vi.mocked(createVendorCategoryIfMissing).mockResolvedValue({
-			id: "vc_x",
-			created: true,
-		} as never);
+		// The batched vendor-category upsert reports all 10 manifest categories created.
+		vi.mocked(createVendorCategoriesIfMissing).mockResolvedValue({ created: 10 } as never);
 		// listWorkflowRolesForOrg returns one pre-existing "Property Manager" role.
 		vi.mocked(listWorkflowRolesForOrg).mockResolvedValueOnce([
 			{
@@ -169,8 +167,7 @@ describe("installPropertyOpsPack -- vendor-category + role idempotency within an
 			.mock.calls.map((c) => c[0].name);
 		expect(insertedRoleNames).not.toContain("Property Manager");
 		expect(insertedRoleNames.sort()).toEqual(["Housekeeper", "Inspector", "Owner"]);
-		// All 10 vendor categories upserted (idempotency at the row level is the helper's
-		// job; the lib just calls it unconditionally).
-		expect(createVendorCategoryIfMissing).toHaveBeenCalledTimes(10);
+		// The 10 vendor categories are upserted in a single batched call.
+		expect(createVendorCategoriesIfMissing).toHaveBeenCalledTimes(1);
 	});
 });

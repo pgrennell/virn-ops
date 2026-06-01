@@ -20,9 +20,10 @@
 // "Already installed" state.
 
 import {
-	createVendorCategoryIfMissing,
+	createVendorCategoriesIfMissing,
 	getPackInstallForOrg,
 	getPropertyOpsPackVersion,
+	getWorkflowBySlugForOrg,
 	insertField,
 	insertPackInstall,
 	insertSection,
@@ -84,18 +85,13 @@ export async function installPropertyOpsPack(
 		};
 	}
 
-	// 3. Vendor categories (idempotent by org+slug -- createVendorCategoryIfMissing
-	//    returns the existing row's id without re-inserting).
-	let vendorCategoriesCreated = 0;
-	for (const cat of PROPERTY_OPS_VENDOR_CATEGORIES) {
-		const result = await createVendorCategoryIfMissing({
-			organizationId: ctx.organizationId,
-			slug: cat.slug,
-			name: cat.name,
-			description: cat.description,
-		});
-		if (result.created) vendorCategoriesCreated += 1;
-	}
+	// 3. Vendor categories (idempotent by org+slug). Batched -- one SELECT + one multi-row
+	//    INSERT rather than a select+insert per category -- so this stays off the slow path
+	//    that was blocking the org-creation redirect.
+	const { created: vendorCategoriesCreated } = await createVendorCategoriesIfMissing({
+		organizationId: ctx.organizationId,
+		categories: PROPERTY_OPS_VENDOR_CATEGORIES,
+	});
 
 	// 4. Workflow roles (idempotent by org+name).
 	const existingRoles = await listWorkflowRolesForOrg(ctx.organizationId);
@@ -168,6 +164,15 @@ async function installWorkflow(
 	wf: WorkflowSeed,
 	roleIdByManifestKey: Map<string, string>,
 ): Promise<{ workflowId: string; versionId: string; title: string }> {
+	// Resume-safety: if a prior install created this workflow but died before the pack_install
+	// gate was written, a retry would hit the org-scoped partial-unique slug and throw. Skip
+	// re-creating it. versionId is informational here (the install procedure's summary drops it),
+	// so an empty value on this rare resume path is fine.
+	const existingWorkflow = await getWorkflowBySlugForOrg(ctx.organizationId, wf.slug);
+	if (existingWorkflow) {
+		return { workflowId: existingWorkflow.id, versionId: "", title: existingWorkflow.title };
+	}
+
 	// Create the workflow + initial draft version. Pack-installed workflows persist
 	// the manifest slug so PM (and other cross-product callers) can launch by slug
 	// per Phase 11a step 3(a).
