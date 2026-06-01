@@ -41,11 +41,12 @@ export const installStarterContent = adminOrgProcedure
 			};
 		} catch (err) {
 			if (err instanceof Error && /not seeded at platform/i.test(err.message)) {
-				// The platform-seed tooling script hasn't been run yet. Distinct error so
-				// the admin (the only caller) sees actionable copy.
+				// The platform-seed tooling script hasn't been run yet. Distinct, customer-safe
+				// error -- the internal thrown error (install-property-ops.ts) keeps the exact
+				// seed command for ops/logs; the admin just gets a contact-support prompt.
 				throw new ORPCError("SERVICE_UNAVAILABLE", {
 					message:
-						"The property-ops starter content isn't available yet -- ask an operator to run the platform-seed script (`pnpm --filter @virn/scripts seed:property-ops-pack`).",
+						"The property-ops starter content isn't available yet. Contact support and we'll get it enabled.",
 					data: { code: "PACK_NOT_SEEDED" },
 				});
 			}

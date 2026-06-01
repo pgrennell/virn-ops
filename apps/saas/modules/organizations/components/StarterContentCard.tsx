@@ -73,8 +73,8 @@ export function StarterContentCard() {
 				<div className="text-xs text-foreground/60 max-w-md leading-relaxed">
 					{!packAvailable && (
 						<span className="text-amber-700 dark:text-amber-400">
-							Starter content not yet seeded at the platform level. An operator needs
-							to run <code className="font-mono text-[11px]">pnpm --filter @virn/scripts seed:property-ops-pack</code>.
+							Starter content isn't available for your account yet. Contact support and
+							we'll get it enabled.
 						</span>
 					)}
 					{packAvailable && installed && (
