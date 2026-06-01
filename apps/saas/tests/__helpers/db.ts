@@ -79,7 +79,10 @@ export async function waitForVerificationForEmail(
 	email: string,
 	options: { timeoutMs?: number; pollIntervalMs?: number } = {},
 ): Promise<{ value: string; identifier: string; createdAt: Date }> {
-	const { timeoutMs = 5_000, pollIntervalMs = 100 } = options;
+	// 15s (not 5s): a cold `next dev` server compiles the /api/auth route on the first request,
+	// and Neon adds round-trip latency, so the verification-row write can land a few seconds after
+	// the signup response. 5s was too tight for a cold run and caused flaky "no verification row".
+	const { timeoutMs = 15_000, pollIntervalMs = 100 } = options;
 	const deadline = Date.now() + timeoutMs;
 
 	while (Date.now() < deadline) {

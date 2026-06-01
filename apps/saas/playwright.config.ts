@@ -30,10 +30,20 @@ export default defineConfig({
 		},
 	],
 	webServer: {
-		command: "pnpm --filter saas run build && pnpm --filter saas run start",
+		// The app server MUST read the monorepo-root .env.local (where DATABASE_URL lives --
+		// apps/saas has no .env.local of its own) so it shares ONE database with the test helpers
+		// (tests/__helpers/db.ts reads root .env.local via @virn/database). We load it EXPLICITLY
+		// here via dotenv-cli instead of relying on env inheritance, so a cold run (CI or a clean
+		// local :3000) always boots a correctly-wired server. Without this a freshly-started server
+		// has no DATABASE_URL and every login-gated spec fails from cold. `next dev` keeps the cold
+		// start fast and matches the mode the specs were validated against (a prod-build e2e can be
+		// a separate job later). reuseExistingServer still lets a running dev server be reused.
+		command:
+			"pnpm --filter saas exec dotenv -e ../../.env.local -e ../../.env -- next dev --port 3000",
 		url: "http://localhost:3000",
 		reuseExistingServer: !process.env.CI,
 		stdout: "pipe",
+		stderr: "pipe",
 		timeout: 180 * 1000,
 	},
 });
