@@ -25,11 +25,11 @@ test.describe("password reset (AUTH_CONTRACT.md §5.1)", () => {
 				name: makeTestName(),
 			});
 			await completeEmailVerification(page, email);
-			await page.request.post("/api/auth/sign-out").catch(() => {});
+			await page.context().clearCookies(); // reliable logged-out precondition (verify/reset auto-sign-in; see login-password.spec.ts)
 
 			// Request the reset email.
 			await requestPasswordResetViaUI(page, email);
-			await expect(page.getByText(/check your email|sent|email/i)).toBeVisible({
+			await expect(page.getByText(/check your email|sent|email/i).first()).toBeVisible({
 				timeout: 10_000,
 			});
 
@@ -37,7 +37,7 @@ test.describe("password reset (AUTH_CONTRACT.md §5.1)", () => {
 			await completePasswordResetViaUI(page, email, newPassword);
 
 			// Old password should no longer work.
-			await page.request.post("/api/auth/sign-out").catch(() => {});
+			await page.context().clearCookies(); // reliable logged-out precondition (verify/reset auto-sign-in; see login-password.spec.ts)
 			await logInWithPasswordViaUI(page, { email, password: oldPassword });
 			await expect(page.getByRole("alert").or(page.getByText(/invalid|incorrect|wrong/i)))
 				.toBeVisible({ timeout: 5_000 });

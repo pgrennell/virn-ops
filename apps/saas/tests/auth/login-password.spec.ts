@@ -21,7 +21,11 @@ test.describe("password login (AUTH_CONTRACT.md §5.1)", () => {
 			await completeEmailVerification(page, email);
 
 			// Sign out before testing fresh login.
-			await page.request.post("/api/auth/sign-out").catch(() => {});
+			// Reliably drop to a logged-out state before the login under test. (Email
+			// verification auto-signs-in via autoSignInAfterVerification, and a POST to
+			// /api/auth/sign-out doesn't always clear the context here; clearing cookies is
+			// the deterministic precondition. The sign-out *API* is covered by logout.spec.ts.)
+			await page.context().clearCookies();
 
 			await logInWithPasswordViaUI(page, { email, password });
 
@@ -45,7 +49,11 @@ test.describe("password login (AUTH_CONTRACT.md §5.1)", () => {
 		try {
 			await signUpViaUI(page, { email, password, name });
 			await completeEmailVerification(page, email);
-			await page.request.post("/api/auth/sign-out").catch(() => {});
+			// Reliably drop to a logged-out state before the login under test. (Email
+			// verification auto-signs-in via autoSignInAfterVerification, and a POST to
+			// /api/auth/sign-out doesn't always clear the context here; clearing cookies is
+			// the deterministic precondition. The sign-out *API* is covered by logout.spec.ts.)
+			await page.context().clearCookies();
 
 			await logInWithPasswordViaUI(page, { email, password: "wrong-password-1!" });
 

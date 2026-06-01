@@ -19,7 +19,7 @@ test.describe("logout (AUTH_CONTRACT.md §5.4)", () => {
 			// Setup: signed-in, verified user.
 			await signUpViaUI(page, { email, password, name: makeTestName() });
 			await completeEmailVerification(page, email);
-			await page.request.post("/api/auth/sign-out").catch(() => {});
+			await page.context().clearCookies(); // reliable logged-out precondition before the fresh login (verify auto-signs-in)
 			await logInWithPasswordViaUI(page, { email, password });
 			await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 10_000 });
 

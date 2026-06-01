@@ -5,7 +5,7 @@
 import type { Page } from "@playwright/test";
 
 import { waitForVerificationForEmail } from "./db";
-import { extractAuthUrl, waitForCapturedEmail } from "./mail";
+import { waitForAuthUrl } from "./mail";
 
 /**
  * Drive the signup form. Returns once the form has been submitted; the caller
@@ -92,8 +92,7 @@ export async function completeEmailVerification(
 	// NOT write a `verification` row for them, so we read the verify URL from the captured email
 	// (MAIL_PROVIDER=capture) instead of the DB. The URL is the full better-auth verify-email
 	// link; navigating to it completes verification.
-	const captured = await waitForCapturedEmail(email);
-	const url = extractAuthUrl(captured);
+	const url = await waitForAuthUrl(email, /\/api\/auth\/verify-email/);
 	await page.goto(url);
 	return { token: new URL(url).searchParams.get("token") ?? "" };
 }
@@ -108,11 +107,17 @@ export async function completePasswordResetViaUI(
 	email: string,
 	newPassword: string,
 ): Promise<void> {
-	const row = await waitForVerificationForEmail(email);
-	await page.goto(`/reset-password?token=${encodeURIComponent(row.value)}`);
+	// Password-reset tokens (like email-verification) are signed into the email URL, not stored
+	// in the `verification` table -- read the reset link from the captured email.
+	const url = await waitForAuthUrl(email, /reset/i);
+	await page.goto(url);
 	const passwordInputs = page.locator('input[type="password"]');
 	await passwordInputs.first().fill(newPassword);
-	await passwordInputs.nth(1).fill(newPassword);
+	// Fill the confirm field only if the form has one (it currently doesn't; waiting on a
+	// non-existent second input is what made this hang).
+	if ((await passwordInputs.count()) > 1) {
+		await passwordInputs.nth(1).fill(newPassword);
+	}
 	await page.getByRole("button", { name: /reset|set.*password|save/i }).click();
 }
 
