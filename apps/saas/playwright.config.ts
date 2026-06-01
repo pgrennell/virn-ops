@@ -30,6 +30,12 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
+	// The authenticated phase-walkthroughs all act as the seeded admin in the SAME org and
+	// create/read fixed-name entities ("STR rental turnover SOP", etc.), so they trample each
+	// other when run concurrently -- they must run one at a time. A full reliable run therefore
+	// uses `pnpm e2e:ci`, which forces `--workers=1 --retries=1`. (This `workers` value only
+	// applies when CI is set; a bare `playwright test` stays parallel for fast iteration on a
+	// single isolated spec.)
 	workers: process.env.CI ? 1 : undefined,
 	reporter: [["html"]],
 	use: {
