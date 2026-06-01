@@ -14,6 +14,7 @@ import {
 } from "@virn/ui/components/form";
 import { Input } from "@virn/ui/components/input";
 import { toastError } from "@virn/ui/components/toast";
+import { orpcClient } from "@shared/lib/orpc-client";
 import { useRouter } from "@shared/hooks/router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
@@ -52,6 +53,17 @@ export function CreateOrganizationForm({ defaultName }: { defaultName?: string }
 			await queryClient.invalidateQueries({
 				queryKey: organizationListQueryKey,
 			});
+
+			// Phase 19: pre-install the property-ops starter content so the new org lands with
+			// content instead of an empty library. BEST-EFFORT + idempotent: a failure here
+			// (e.g. the platform pack isn't seeded) must NOT block org creation -- the admin can
+			// still install manually via Settings -> StarterContentCard. Nested try/catch so it
+			// does not fall into the outer catch (which would skip the redirect).
+			try {
+				await orpcClient.packs.installStarterContent({});
+			} catch (err) {
+				console.error("Starter-content pre-install failed (non-blocking):", err);
+			}
 
 			// Send the user through the mode picker (UX_SPEC §5.5). The picker calls
 			// applyEnablementProfile, then forwards to /${slug}. Already-configured orgs
