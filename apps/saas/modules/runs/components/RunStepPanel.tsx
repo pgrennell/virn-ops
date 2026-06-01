@@ -26,6 +26,8 @@ import { Textarea } from "@virn/ui/components/textarea";
 import { MessageSquare, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { Linkify } from "@shared/components/Linkify";
+
 import type { FieldSaveState, FieldType, RunStatus, RunStepStatus, RunViewMode, StepType } from "../types";
 import { RunFieldInput } from "./RunFieldInput";
 
@@ -182,7 +184,7 @@ export function RunStepPanel({
 			) : (
 				data.description && (
 					<p className="text-sm text-foreground/70 leading-relaxed mb-4 whitespace-pre-wrap">
-						{data.description}
+						<Linkify text={data.description} />
 					</p>
 				)
 			)}

@@ -35,6 +35,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, CheckCircle2, Eye, Lightbulb, Pencil, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 
+import { Linkify } from "@shared/components/Linkify";
 import { orpc } from "@shared/lib/orpc-query-utils";
 
 import { AuthoringPromptDialog } from "./AuthoringPromptDialog";
@@ -391,7 +392,7 @@ function ReadInner({
 				</div>
 				{workflow.description && (
 					<p className="text-sm text-foreground/70 whitespace-pre-wrap">
-						{workflow.description}
+						<Linkify text={workflow.description} />
 					</p>
 				)}
 			</header>
@@ -607,7 +608,7 @@ function SectionBlock({
 								</div>
 								{step.description && (
 									<p className="mt-1 text-sm text-foreground/70 whitespace-pre-wrap">
-										{step.description}
+										<Linkify text={step.description} />
 									</p>
 								)}
 								{stepFields.length > 0 && (
