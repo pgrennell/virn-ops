@@ -372,11 +372,11 @@ function EmptyState({ view, scopeWorkflow }: { view: ViewKey; scopeWorkflow: boo
 				: "No completed runs yet.";
 		}
 		if (view === "active") {
-			return scopeWorkflow
-				? "No active runs of this workflow."
-				: "No active runs across the org.";
+			return scopeWorkflow ? "No active runs of this workflow." : "No active runs right now.";
 		}
-		return scopeWorkflow ? "No runs of this workflow yet." : "No runs in this org yet.";
+		return scopeWorkflow
+			? "No runs of this workflow yet."
+			: "No runs yet. Launch a workflow from your Library to track it here.";
 	})();
 	return (
 		<div className="px-5 py-16 text-sm text-foreground/60 text-center">{copy}</div>

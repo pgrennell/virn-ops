@@ -29,7 +29,7 @@ export function LibraryEmptyState({
 			</h2>
 			<p className="text-sm text-foreground/60 max-w-sm mt-1.5">
 				{isAdminOrOwner
-					? "Author a procedure, SOP, policy, or form. The Builder opens with a blank draft you can publish when it's ready."
+					? "Author a turnover, inspection, or onboarding procedure — or an SOP, policy, or form. The Builder opens with a blank draft you can publish when it's ready."
 					: "An admin will author workflows here. They'll show up in this list once published."}
 			</p>
 			{isAdminOrOwner && (

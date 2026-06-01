@@ -229,7 +229,7 @@ function TasksList({
 		return (
 			<div className="rounded-lg border border-border bg-background p-8 text-center">
 				<CheckCircle2 className="size-5 mx-auto text-foreground/30 mb-2" />
-				<p className="text-sm text-foreground/60">Nothing on your plate.</p>
+				<p className="text-sm text-foreground/60">You're all caught up — no tasks need you right now.</p>
 			</div>
 		);
 	}
@@ -314,11 +314,8 @@ function ActiveRunsCard({
 				</Alert>
 			) : !query.data || query.data.length === 0 ? (
 				<div className="rounded-lg border border-border bg-background p-4 text-sm text-foreground/60">
-					No active runs. Try{" "}
-					<code className="text-[11px] bg-muted px-1 py-0.5 rounded">
-						pnpm --filter @virn/scripts seed:demo-workflow
-					</code>
-					.
+					No active runs yet. Launch a workflow from your Library to start
+					tracking turnovers, inspections, and other operations here.
 				</div>
 			) : (
 				<div className="gap-2 flex flex-col">

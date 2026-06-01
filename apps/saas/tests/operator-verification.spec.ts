@@ -30,7 +30,7 @@ test.describe("Virn Ops Operator-Screen Foundation Walkthrough E2E", () => {
 		console.log("Starting E2E Operator-Screen Walkthrough...");
 
 		// Wait for loading to finish
-		await expect(page.getByText("Nothing on your plate. Nice.")).toBeHidden({ timeout: 10000 });
+		await expect(page.getByText("You're all caught up.", { exact: false })).toBeHidden({ timeout: 10000 });
 
 		// --- 1. My Work renders ---
 		console.log("Verifying step 1: My Work renders...");

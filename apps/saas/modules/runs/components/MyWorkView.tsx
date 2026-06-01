@@ -139,7 +139,9 @@ function TodoList({
 	if (query.isLoading) return <ListSkeleton />;
 	if (query.isError) return <ErrorState message={query.error?.message ?? "Failed to load"} />;
 	if (!query.data || query.data.length === 0) {
-		return <EmptyState message="Nothing on your plate. Nice." />;
+		return (
+			<EmptyState message="You're all caught up. Tasks assigned to you across active runs show up here." />
+		);
 	}
 
 	return (
@@ -182,7 +184,7 @@ function CompletedList({
 	if (query.isLoading) return <ListSkeleton />;
 	if (query.isError) return <ErrorState message={query.error?.message ?? "Failed to load"} />;
 	if (!query.data || query.data.length === 0) {
-		return <EmptyState message="Nothing completed yet." />;
+		return <EmptyState message="No completed tasks yet." />;
 	}
 
 	// Completed dueAt-desc (most recent first), but the procedure orders by dueAt asc.
