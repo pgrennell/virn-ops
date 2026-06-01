@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 
 export function ColorModeToggle() {
 	const { setTheme, theme } = useTheme();
-	const [value, setValue] = useState<string>(theme ?? "system");
+	const [mounted, setMounted] = useState(false);
 	const t = useTranslations();
 
 	const colorModeOptions = [
@@ -32,17 +32,19 @@ export function ColorModeToggle() {
 		},
 	] as const;
 
+	// next-themes only knows the real theme after mount. Until then we render the same
+	// server-stable "system" state on both SSR and the first client render, so hydration
+	// doesn't see mismatched aria-pressed / active-indicator attributes; we reflect the real
+	// theme once mounted.
 	useEffect(() => {
-		if (theme) {
-			setValue(theme);
-		}
-	}, [theme]);
+		setMounted(true);
+	}, []);
 
+	const value = mounted ? (theme ?? "system") : "system";
 	const activeIndex = colorModeOptions.findIndex((option) => option.value === value);
 
 	const handleClick = (optionValue: string) => {
 		setTheme(optionValue);
-		setValue(optionValue);
 	};
 
 	return (
