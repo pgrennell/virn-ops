@@ -65,10 +65,21 @@ export function CreateOrganizationForm({ defaultName }: { defaultName?: string }
 				console.error("Starter-content pre-install failed (non-blocking):", err);
 			}
 
-			// Send the user through the mode picker (UX_SPEC §5.5). The picker calls
-			// applyEnablementProfile, then forwards to /${slug}. Already-configured orgs
-			// short-circuit to /${slug}/settings/configuration server-side.
-			router.replace("/new-organization/mode");
+			// Phase 19 (Option B): auto-apply the default enablement profile so a new org lands
+			// ready to operate, vertical-first -- no mode-picker interstitial. "sop" is the v1
+			// default: it turns on the full property-ops surface (recurring runs, kickoff forms,
+			// AI steps, guest participants for vendors/cleaners, governance, custom fields) minus
+			// only the advanced automation rules/webhooks. The picker now lives in Settings ->
+			// Configuration as a power-user surface. BEST-EFFORT + idempotent like the pack
+			// install above: a failure must NOT block the redirect (the admin can switch profiles
+			// in Settings). Nested try/catch so it doesn't fall into the outer catch.
+			try {
+				await orpcClient.config.applyProfile({ profile: "sop" });
+			} catch (err) {
+				console.error("Default-profile apply failed (non-blocking):", err);
+			}
+
+			router.replace(`/${newOrganization.slug}`);
 		} catch {
 			toastError(t("organizations.createForm.notifications.error"));
 		}

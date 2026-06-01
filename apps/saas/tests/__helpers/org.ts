@@ -17,10 +17,10 @@ export async function createOrganizationViaUI(
 	await page.getByRole("textbox", { name: /organization name|name/i }).fill(params.name);
 	await page.getByRole("button", { name: /create|continue/i }).click();
 
-	// Phase 19: creation now routes through the enablement-mode picker
-	// (/new-organization/mode) before landing in the org. Leave the bare create page first
-	// (generous headroom -- the redirect awaits the starter-pack install), then, if we're on
-	// the picker, choose a profile and continue.
+	// Phase 19 (Option B): creation auto-applies a default profile and lands straight in the org,
+	// so there's normally no mode-picker step. Leave the bare create page first (generous
+	// headroom -- the redirect awaits the starter-pack install + profile apply), then, defensively,
+	// drive the picker if a flow ever lands on it (e.g. a direct /new-organization/mode visit).
 	await page.waitForURL((url) => url.pathname !== "/new-organization", { timeout: 45_000 });
 	if (new URL(page.url()).pathname.startsWith("/new-organization/mode")) {
 		await page.getByRole("button", { name: /^Checklist/ }).click();
