@@ -1088,8 +1088,13 @@ renders as the timeline (per §6.5), not as a flowchart. Reuses `ai_authoring_pr
 
 ### Phase 19 — v1 polish + launch readiness
 
-- Rich step content (verify gap #10 — confirm video/images/tables/links work in
-  step instructions; fix if not).
+- Rich step content (gap #10) — **DEFERRED per D-045** (2026-05-31 audit). Step
+  instructions are plain text end-to-end (`step.description` is a plain `text` column;
+  Read/Run views render it as a plain string), so video/images/tables/links do not
+  render. "Fixing" it is a feature build, not a serialization patch: either a
+  sanitized-markdown interim (needs an XSS-sanitization test + a Playwright render
+  check) or a structured rich-content model (jsonb + editor + migration + backfill,
+  its own numbered phase). Gated on a content-model decision; not a v1 verify-task.
 - Empty-state copy across all v1 surfaces.
 - Onboarding flow refresh — vertical-first language, property-ops pack pre-installed
   for new orgs (the mode picker stays as a power-user surface but isn't the v1
