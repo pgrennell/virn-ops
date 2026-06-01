@@ -183,7 +183,8 @@ test.describe.serial("Phase 19 Property-Ops Pack Provisioning E2E", () => {
 		// 2. Expect redirect to /new-organization/mode
 		await page.waitForURL(/\/new-organization\/mode/, { timeout: 20000 });
 
-		// Continue
+		// Mode is a required, un-defaulted choice (Phase 19) -- pick one before Continue.
+		await page.getByRole("button", { name: "SOPs & policies" }).click();
 		await page.getByRole("button", { name: "Continue" }).click();
 
 		// Expect to land on the dashboard (slug based)

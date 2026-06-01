@@ -18,14 +18,16 @@ import { orpc } from "@shared/lib/orpc-query-utils";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
-const DEFAULT_PROFILE: EnablementProfile = "checklist";
-
 export function OnboardingModePicker({ orgSlug }: { orgSlug: string }) {
 	const router = useRouter();
-	const [profile, setProfile] = useState<EnablementProfile>(DEFAULT_PROFILE);
+	// No pre-selected default (Phase 19): the operator must explicitly choose a mode. `null`
+	// renders the ModePicker with nothing selected and gates the Continue button below, so a
+	// new org never gets a silently-defaulted profile.
+	const [profile, setProfile] = useState<EnablementProfile | null>(null);
 	const apply = useMutation(orpc.config.applyProfile.mutationOptions());
 
 	const onContinue = async () => {
+		if (!profile) return;
 		try {
 			await apply.mutateAsync({ profile });
 			router.replace(`/${orgSlug}`);
@@ -47,7 +49,7 @@ export function OnboardingModePicker({ orgSlug }: { orgSlug: string }) {
 
 			<ModePicker value={profile} onChange={setProfile} disabled={apply.isPending} />
 
-			{apply.isError && (
+			{apply.isError && profile && (
 				<Alert variant="error" className="mt-4">
 					<AlertDescription>
 						Couldn't apply {PROFILE_META[profile].name}: {apply.error.message}
@@ -60,6 +62,7 @@ export function OnboardingModePicker({ orgSlug }: { orgSlug: string }) {
 					type="button"
 					variant="primary"
 					onClick={onContinue}
+					disabled={!profile}
 					loading={apply.isPending}
 				>
 					Continue
