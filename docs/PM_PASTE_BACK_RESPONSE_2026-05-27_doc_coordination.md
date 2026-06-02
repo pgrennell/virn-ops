@@ -148,3 +148,9 @@ Beyond that, nothing PM-internal surfaced.
 
 No code or schema changes shipped from this loop. Build remains gated on Accounting M4 per
 §K of the original pivot entry.
+
+> Correction added 2026-06-01 (per PM D-PM-001): PM removed deep accounting (GL / chart of
+> accounts / milestones M1–M4) and moved it to a new sibling product, **Trustline**. "Accounting
+> M4" no longer exists as a named gate. Re-point this to **"gated on PM's operational financial
+> layer (per-property/unit P&L) shipping"** — the wedge still exists; it is simply no longer an
+> accounting milestone. See Ops DECISIONS.md D-047.

@@ -2190,3 +2190,126 @@ doing the next time these query files are edited.
 
 **Consequence for this sweep.** P1/P2 produced no test commits; the night's budget rolled into P3
 (the `@virn/api` lib-layer gaps), which is cleanly testable (those libs already mock `@virn/database`).
+
+---
+
+## 2026-06-01 — PM accounting-removal pivot (D-PM-001): Trustline split + cross-repo answers
+
+Inbound paste-back: `docs/PM_PASTE_BACK_2026-06-01_accounting_removal_to_ops.md` (virn-pm →
+virn-ops, PM decision **D-PM-001**). PM has removed all deep accounting from Virn PM and moved it
+to a new sibling product, **Trustline** (an AI-native, cross-PMS trust-accounting agent). This
+batch records the split on the Ops side, answers PM's three cross-repo questions (§3 of the
+paste-back), and corrects the now-stale "gated on Accounting M4" references that point at a
+milestone that no longer exists. The stale-reference corrections are applied in-place in the
+same commit (see the `> Correction added 2026-06-01 (per PM D-PM-001)` notes in
+`PM_PASTE_BACK_RESPONSE_2026-05-27_doc_coordination.md`,
+`PM_PASTE_BACK_RESPONSE_2026-05-27_stakeholder_stack.md`, and the inbound
+`PM_PASTE_BACK_2026-05-27_doc_coordination.md`).
+
+### D-047 — PM's deep accounting moved to Trustline; "Accounting M4" gate re-pointed to PM's operational financial layer
+
+**Context:** Several Ops cross-repo docs gated downstream sequencing on **"PM's Accounting M4"**
+— the per-property/unit P&L wedge — framed as the fourth of PM's accounting milestones M1–M4
+(e.g. *"Build remains gated on Accounting M4 per §K of the original pivot entry"*). PM D-PM-001
+removes the double-entry GL (`journal_entries` / `journal_lines` / `accounting_periods`), the
+chart of accounts, and milestones **M1–M4** from Virn PM, relocating that accounting-grade layer
+to **Trustline**. The "Accounting M4" milestone therefore no longer exists as a named gate.
+
+**Decision:** Acknowledge the split and re-point the stale gate. What PM *keeps* — and what Ops
+work that referenced "Accounting M4" was actually waiting on — is unchanged in substance: an
+operational financial layer (charges, payments / rent collection, work-order costs, full
+per-transaction attribution) plus a **cash-basis operational per-property/unit P&L** computed by
+rollup. That wedge still exists; it is simply no longer an "accounting milestone." Every Ops
+reference to *"gated on Accounting M4"* is corrected in-place to *"gated on PM's operational
+financial layer (per-property/unit P&L) shipping."* Every Ops reference to PM's GL / chart of
+accounts as a data source is noted as now living in **Trustline**.
+
+**Rationale:** The dependency was always on PM's per-property P&L being available, not on the
+double-entry machinery beneath it. PM is now a leaner system-of-record publishing to two AI
+surfaces — **Trustline for the books, Ops for process.** Correcting the label (not the
+dependency) keeps Ops sequencing docs truthful without re-litigating any settled cross-repo
+shape. Per the append-only convention, the original lines are preserved with in-place
+`> Correction` blockquotes rather than deleted.
+
+**Consequences:** The sibling architecture, the mutual-standalone principle (D-024), and the
+`runs.launch` + HMAC-webhook integration (D-025 / D-029) are all **unchanged** — explicitly not
+re-litigated. Trustline is now a third sibling; PM becomes a hub (PM↔Ops *and* PM↔Trustline).
+ADR-006 (agent-principal) and the paste-back protocol generalize to N partners; no Ops schema or
+code changes follow from D-PM-001. Any future Ops doc that needs to reference PM's financial
+data should say "PM's operational financial layer / operational P&L" for the operational rollup,
+and "Trustline" for accounting-grade books (GL, accrual, periods/close, trust subledgers,
+three-way reconciliation, compliance).
+
+### D-048 — Trustline needs a **PM-side** agent identity only; no Ops-side `agent` row for Trustline in v1 (answer to paste-back §3.1)
+
+**Context:** PM asks whether Trustline needs an **Ops-side** `agent` identity (the D-022 /
+ADR-006 machine-principal slot), or only a **PM-side** one. PM's stated assumption: PM-side only,
+for now. The data flow PM describes is **Trustline reads PM; Ops untouched** — Trustline consumes
+PM's operational financial data via a PMS-agnostic contract and never calls Ops directly.
+
+**Decision:** **Confirmed — PM-side only.** Ops mints **no** `agent` row for Trustline in v1. An
+Ops-side agent identity is warranted only if Trustline will ever authenticate to Ops's action
+surface directly (launch runs, read Ops run/cost data over oRPC or the MCP wrapper). In the
+described model it does neither — its only upstream is PM.
+
+**Rationale:** Per D-022, the org-scoped `agent` table is the home for *trusted sibling-product
+callers*, and a sibling gets an Ops-side identity precisely (and only) when it calls Ops. Minting
+a credentialed principal for a product that never authenticates to Ops would create an unused
+attack surface and a credential to rotate for no behavioral gain. The agent model already
+generalizes to N callers, so adding Trustline later is cheap and reversible.
+
+**Consequences:** **Trigger to revisit:** if Trustline ever needs to call Ops directly — e.g. a
+trust-accounting exception that dispatches an operational remediation run, or Trustline reading
+Ops run-cost data rather than receiving it via PM — mint an Ops-side `agent` row for Trustline
+exactly as D-022 prescribes (org-scoped, `credentialHash`, `actorKind='agent'`, capability
+grants). That is a **config action, not a schema change** — the Phase 8 agent schema already
+supports it. Until that trigger fires, Trustline is invisible to Ops.
+
+### D-049 — Work-order-cost / financial-attribution field keys: not added to the kickoff vocabulary now; deferred pending PM's concrete attribution field set (answer to paste-back §3.2)
+
+**Context:** PM's operational financial layer attributes work-order *costs* to property / unit /
+owner. PM asks (for the record, explicitly not v1-blocking) whether any work-order-cost or
+financial-attribution fields need adding to the kickoff field-key vocabulary — locked at Ops
+Phase 17, shape recorded in D-029 — so Ops-dispatched work returns cost data PM can attribute
+into its P&L.
+
+**Decision:** Acknowledged; **no change to the kickoff vocabulary now.** The D-029 launch payload
+carries inbound PM context into a run; cost data flows the *other* direction — back to PM via the
+`run.completed` webhook (D-025) — so the natural home for cost-attribution fields is the
+run-completion callback payload, not the kickoff snapshot. Defer the concrete field set until PM
+publishes it (expected: a cost amount + cost category alongside the property / unit / owner
+attribution keys PM already uses in its P&L).
+
+**Rationale:** Adding field keys speculatively, before PM's attribution contract is firm, risks
+locking in a vocabulary that doesn't match what PM's P&L rollup actually consumes. The widening
+is **additive and cheap** when it comes — it extends the kickoff/callback field-key vocabulary,
+not the run schema (the `run.entity_type` / `entity_id` pattern, D-043, already absorbs new
+context types without a migration on `run`). No v1 work is gated on this.
+
+**Consequences:** Flagged for the next field-key-vocabulary revision. When PM sends the concrete
+work-order-cost attribution fields, Ops widens the callback (and, if needed, kickoff) vocabulary
+to round-trip them, and mirrors the addition in D-029's documented payload shape. Until then,
+Ops-dispatched runs return their existing completion payload; PM attributes cost from its own
+work-order records.
+
+### D-050 — Shared-sign-in / white-label trigger re-evaluation (D-031 / D-032) acknowledged; no pull-forward today (answer to paste-back §3.3)
+
+**Context:** A third product (Trustline) raises the two-account-UX cost (D-031) and widens the
+white-label surface (D-032). PM asks whether the shared-sign-in / white-label triggers should be
+pulled forward, noting no action is needed today.
+
+**Decision:** **Acknowledged for the record; no change today.** D-031 (shared sign-in) and D-032
+(white-label) remain roadmap commitments, not v1. A third sibling strengthens the eventual case
+but does not, on its own, trip either trigger now — Trustline has no customer-facing UX surface
+that sits alongside Ops/PM yet (in the D-048 model it reads PM and is invisible to Ops).
+
+**Rationale:** The triggers were framed around *real, customer-visible* two-account friction and
+brand-sensitive surfaces. Trustline raises the ceiling on both but doesn't add a touchpoint today.
+Pulling roadmap items forward on a theoretical increment, with no v1 forcing function, would be
+premature.
+
+**Consequences:** Re-evaluate D-031 / D-032 when Trustline reaches a UX surface customers touch
+alongside Ops or PM (the point at which a third login / a third "Powered by" badge becomes a real
+objection). Any change must be **mirrored across all BRANDING.md copies** (shared across PM + Ops,
+and Trustline when it has one), per the D-031 / D-032 convention. No edit to BRANDING.md in this
+commit.

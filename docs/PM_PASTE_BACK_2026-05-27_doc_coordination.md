@@ -58,6 +58,11 @@ The PM session should NOT propose changes to any of the above.
 These are the doc-state items on PM's side that the Ops session believes are
 still open. Each is small; none are blocking PM's wedge (Accounting M4).
 
+> Correction added 2026-06-01 (per PM D-PM-001): this is an inbound PM record, preserved as
+> received. For accuracy: PM's wedge is now its **operational financial layer (per-property/unit
+> P&L)** — the deep-accounting milestones M1–M4 (GL / chart of accounts) moved to the new sibling
+> product **Trustline**. See Ops DECISIONS.md D-047.
+
 ### 3.1 Mirror D-035..D-038 into PM's `docs/DECISIONS.md`
 
 The cross-repo mirror convention (recorded in both repos' auto-memory) says any

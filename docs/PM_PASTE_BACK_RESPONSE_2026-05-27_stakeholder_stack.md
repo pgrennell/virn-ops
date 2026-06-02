@@ -77,6 +77,12 @@ it's an enrichment, not a blocker.
 | 14 | Unified Inbox v1 ships without Ops run-comment events; enriches when §3.1 lands | ✅ Accepted (additive design) |
 | 15 | Sequencing: Portal Engine → Unified Inbox → Scoped Inbox; all after Accounting M4 | ✅ Accepted |
 
+> Correction added 2026-06-01 (per PM D-PM-001): "after Accounting M4" → "after PM's operational
+> financial layer (per-property/unit P&L) ships." PM removed deep accounting (GL / chart of
+> accounts / M1–M4) into the new sibling product **Trustline**; the per-property P&L wedge these
+> three PRDs sequence behind still exists, just not as an accounting milestone. See Ops
+> DECISIONS.md D-047.
+
 **No decisions taken against Ops's recommendations.** Where PM exercised judgment beyond the
 brief (rows marked PM-judgment), the calls are flagged but not divergent.
 
@@ -220,6 +226,11 @@ v1 wedge is per-property P&L (Accounting M4), per PM DECISIONS.md §K. The three
 Stack PRDs ship after that wedge, alongside the BACKLOG "Virn Ops integration" bundle (outbound
 credentials + webhook receiver + first AI agent — the Service Request Router).
 
+> Correction added 2026-06-01 (per PM D-PM-001): the v1 wedge is now PM's **operational
+> financial layer (per-property/unit P&L)**, not "Accounting M4." PM removed the deep-accounting
+> milestones M1–M4 (GL / chart of accounts) into the sibling product **Trustline**; the
+> operational P&L these PRDs ship behind is retained. See Ops DECISIONS.md D-047.
+
 Practically: Ops can plan §3.1 (`run.comment_added`) for "any time before the Unified Inbox v2
 that surfaces it," and §3.2 / §3.3 for whenever fits Ops's roadmap. None are gating PM v1.
 
@@ -244,5 +255,10 @@ PM is waiting on:
 
 PM will not start build on any of the three PRDs until **Accounting M4 lands**. The conversation
 on cross-repo agreements above can happen at any time before then — earlier is better, because
+
+> Correction added 2026-06-01 (per PM D-PM-001): read "Accounting M4 lands" as **"PM's
+> operational financial layer (per-property/unit P&L) ships."** Deep accounting (GL / M1–M4) moved
+> to the sibling product **Trustline**; the operational P&L gate this references still holds. See
+> Ops DECISIONS.md D-047.
 the BACKLOG "Virn Ops integration: outbound credentials + webhook receiver" bundle codifies the
 inbound webhook receiver shape, and §3.1 lands naturally if accepted before that bundle ships.
