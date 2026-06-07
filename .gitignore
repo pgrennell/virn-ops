@@ -47,6 +47,8 @@ dist/
 # local debug / session artifacts (do not commit)
 /session-token.json
 /inspect.js
+.tokensave/
+.claude/context/
 
 # playwright
 test-results/
