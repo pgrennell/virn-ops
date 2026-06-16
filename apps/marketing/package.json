@@ -25,7 +25,7 @@
 		"@virn/utils": "workspace:*",
 		"js-cookie": "catalog:",
 		"lucide-react": "catalog:",
-		"next": "^16.2.6",
+		"next": "^16.2.9",
 		"next-intl": "catalog:",
 		"next-themes": "catalog:",
 		"react": "catalog:",
