@@ -75,7 +75,7 @@ catalog:
   oslo: ^1.2.1
   pg: ^8.20.0
   postcss: 8.5.14
-  prettier: 3.8.3
+  prettier: 3.8.4
   radix-ui: ^1.4.3
   react: 19.2.6
   react-cropper: ^2.3.3
@@ -97,6 +97,6 @@ catalog:
   ufo: ^1.6.4
   use-intl: ^4.11.2
   usehooks-ts: ^3.1.1
-  uuid: ^14.0.0
+  uuid: ^14.0.1
   vitest: ^4.1.6
   zod: ^4.4.3
