@@ -10,11 +10,11 @@
 	},
 	"dependencies": {
 		"react": "catalog:",
-		"react-email": "^6.1.4"
+		"react-email": "^6.6.5"
 	},
 	"devDependencies": {
 		"@virn/tsconfig": "workspace:*",
-		"@types/node": "^25.7.0",
-		"@types/react": "^19.2.14"
+		"@types/node": "^26.0.1",
+		"@types/react": "^19.2.17"
 	}
 }
