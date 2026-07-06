@@ -16,7 +16,7 @@
 		"safety-check:auth": "pnpm safety-check && pnpm --filter saas e2e:ci"
 	},
 	"dependencies": {
-		"oxlint-tsgolint": "^0.22.1"
+		"oxlint-tsgolint": "^0.24.0"
 	},
 	"devDependencies": {
 		"@virn/tsconfig": "workspace:*",
